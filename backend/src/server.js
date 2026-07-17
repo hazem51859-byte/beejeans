@@ -1,0 +1,109 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
+const morgan = require('morgan');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const authRoutes = require('./routes/auth.routes');
+const branchRoutes = require('./routes/branch.routes');
+const productRoutes = require('./routes/product.routes');
+const inventoryRoutes = require('./routes/inventory.routes');
+const shiftRoutes = require('./routes/shift.routes');
+const saleRoutes = require('./routes/sale.routes');
+const reportRoutes = require('./routes/report.routes');
+const userRoutes = require('./routes/user.routes');
+
+const errorHandler = require('./middleware/errorHandler');
+const { rateLimiter } = require('./middleware/rateLimiter');
+
+const app = express();
+const server = http.createServer(app);
+
+// Socket.io setup for real-time updates
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CORS_ORIGIN?.split(',') || '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+// Make io accessible in routes
+app.set('io', io);
+
+// Middleware
+app.use(helmet());
+app.use(compression());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN?.split(',') || '*',
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('dev'));
+
+// Rate limiting
+app.use('/api/', rateLimiter);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// API Routes
+const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
+
+app.use(`${API_PREFIX}/auth`, authRoutes);
+app.use(`${API_PREFIX}/branches`, branchRoutes);
+app.use(`${API_PREFIX}/products`, productRoutes);
+app.use(`${API_PREFIX}/inventory`, inventoryRoutes);
+app.use(`${API_PREFIX}/shifts`, shiftRoutes);
+app.use(`${API_PREFIX}/sales`, saleRoutes);
+app.use(`${API_PREFIX}/reports`, reportRoutes);
+app.use(`${API_PREFIX}/users`, userRoutes);
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
+
+// Error handling middleware
+app.use(errorHandler);
+
+// Socket.io events
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('join-branch', (branchId) => {
+    socket.join(`branch-${branchId}`);
+    console.log(`Socket ${socket.id} joined branch ${branchId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 API: http://localhost:${PORT}${API_PREFIX}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+module.exports = { app, io };

@@ -1,0 +1,318 @@
+// Prisma Schema for Multi-Branch POS System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================
+// User Management
+// =====================
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CASHIER
+}
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  email         String   @unique
+  password      String
+  fullName      String
+  phone         String?
+  role          UserRole @default(CASHIER)
+  isActive      Boolean  @default(true)
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  
+  shifts        Shift[]
+  sales         Sale[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([branchId])
+  @@index([username])
+  @@map("users")
+}
+
+// =====================
+// Branch Management
+// =====================
+
+model Branch {
+  id            String   @id @default(uuid())
+  name          String
+  code          String   @unique
+  address       String?
+  phone         String?
+  city          String?
+  isActive      Boolean  @default(true)
+  
+  users         User[]
+  inventory     Inventory[]
+  shifts        Shift[]
+  sales         Sale[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([code])
+  @@map("branches")
+}
+
+// =====================
+// Product Management
+// =====================
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+model Category {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  parentId      String?
+  parent        Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryHierarchy")
+  
+  products      Product[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("categories")
+}
+
+model Product {
+  id            String        @id @default(uuid())
+  sku           String        @unique
+  barcode       String?       @unique
+  name          String
+  description   String?
+  
+  categoryId    String
+  category      Category      @relation(fields: [categoryId], references: [id])
+  
+  costPrice     Decimal       @db.Decimal(10, 2)
+  sellingPrice  Decimal       @db.Decimal(10, 2)
+  
+  size          String?
+  color         String?
+  brand         String?
+  
+  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
+  
+  reorderLevel  Int           @default(10)
+  
+  status        ProductStatus @default(ACTIVE)
+  
+  imageUrl      String?
+  
+  inventory     Inventory[]
+  saleItems     SaleItem[]
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@index([sku])
+  @@index([barcode])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// =====================
+// Inventory Management
+// =====================
+
+model Inventory {
+  id            String   @id @default(uuid())
+  
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  
+  branchId      String
+  branch        Branch   @relation(fields: [branchId], references: [id])
+  
+  quantity      Int      @default(0)
+  minQuantity   Int      @default(10)
+  
+  lastRestockDate DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([productId, branchId])
+  @@index([branchId])
+  @@index([productId])
+  @@map("inventory")
+}
+
+// =====================
+// Shift Management
+// =====================
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model Shift {
+  id                String      @id @default(uuid())
+  shiftNumber       String
+  
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  
+  branchId          String
+  branch            Branch      @relation(fields: [branchId], references: [id])
+  
+  status            ShiftStatus @default(OPEN)
+  
+  openingBalance    Decimal     @db.Decimal(10, 2)
+  closingBalance    Decimal?    @db.Decimal(10, 2)
+  
+  expectedCash      Decimal?    @db.Decimal(10, 2)
+  actualCash        Decimal?    @db.Decimal(10, 2)
+  cashDifference    Decimal?    @db.Decimal(10, 2)
+  
+  totalSales        Decimal     @default(0) @db.Decimal(10, 2)
+  totalTransactions Int         @default(0)
+  
+  openedAt          DateTime    @default(now())
+  closedAt          DateTime?
+  
+  notes             String?
+  
+  sales             Sale[]
+  
+  @@index([userId])
+  @@index([branchId])
+  @@index([status])
+  @@map("shifts")
+}
+
+// =====================
+// Sales Management
+// =====================
+
+enum PaymentMethod {
+  CASH
+  CARD
+  CREDIT
+  MIXED
+}
+
+enum SaleStatus {
+  COMPLETED
+  PENDING
+  CANCELLED
+  REFUNDED
+}
+
+model Sale {
+  id                String        @id @default(uuid())
+  invoiceNumber     String        @unique
+  
+  branchId          String
+  branch            Branch        @relation(fields: [branchId], references: [id])
+  
+  shiftId           String
+  shift             Shift         @relation(fields: [shiftId], references: [id])
+  
+  cashierId         String
+  cashier           User          @relation(fields: [cashierId], references: [id])
+  
+  customerName      String?
+  customerPhone     String?
+  
+  subtotal          Decimal       @db.Decimal(10, 2)
+  taxAmount         Decimal       @default(0) @db.Decimal(10, 2)
+  discountAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  total             Decimal       @db.Decimal(10, 2)
+  
+  paymentMethod     PaymentMethod
+  amountPaid        Decimal       @db.Decimal(10, 2)
+  changeAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  
+  status            SaleStatus    @default(COMPLETED)
+  
+  notes             String?
+  
+  items             SaleItem[]
+  
+  syncedAt          DateTime?
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([branchId])
+  @@index([shiftId])
+  @@index([cashierId])
+  @@index([invoiceNumber])
+  @@index([createdAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id            String   @id @default(uuid())
+  
+  saleId        String
+  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  
+  quantity      Int
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  discount      Decimal  @default(0) @db.Decimal(10, 2)
+  taxRate       Decimal  @default(0) @db.Decimal(5, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  
+  @@index([saleId])
+  @@index([productId])
+  @@map("sale_items")
+}
+
+// =====================
+// Sync Management (للمزامنة مع الفروع)
+// =====================
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+model SyncLog {
+  id            String     @id @default(uuid())
+  
+  branchId      String
+  entityType    String     // 'sale', 'inventory', 'product', etc.
+  entityId      String
+  operation     String     // 'create', 'update', 'delete'
+  
+  data          Json
+  
+  status        SyncStatus @default(PENDING)
+  errorMessage  String?
+  
+  attempts      Int        @default(0)
+  
+  createdAt     DateTime   @default(now())
+  syncedAt      DateTime?
+  
+  @@index([branchId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sync_logs")
+}

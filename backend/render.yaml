@@ -1,0 +1,29 @@
+services:
+  # Backend API
+  - type: web
+    name: bee-jeans-backend
+    env: node
+    region: frankfurt
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bee-jeans-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "*"
+
+databases:
+  - name: bee-jeans-db
+    databaseName: bee_jeans_pos
+    user: bee_jeans_user
+    region: frankfurt

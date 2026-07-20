@@ -28,10 +28,20 @@ exports.getProducts = async (req, res, next) => {
     });
 
     const total = await prisma.product.count({ where });
+    
+    // إخفاء سعر الشراء عن الكاشير (فقط الأدمن يشوفه)
+    const userRole = req.user?.role;
+    const sanitizedProducts = products.map(product => {
+      if (userRole === 'CASHIER') {
+        const { costPrice, ...productWithoutCost } = product;
+        return productWithoutCost;
+      }
+      return product;
+    });
 
     res.json({
       success: true,
-      data: products,
+      data: sanitizedProducts,
       pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) }
     });
   } catch (error) {
@@ -55,8 +65,18 @@ exports.searchProducts = async (req, res, next) => {
       include: { category: true },
       take: 20
     });
+    
+    // إخفاء سعر الشراء عن الكاشير
+    const userRole = req.user?.role;
+    const sanitizedProducts = products.map(product => {
+      if (userRole === 'CASHIER') {
+        const { costPrice, ...productWithoutCost } = product;
+        return productWithoutCost;
+      }
+      return product;
+    });
 
-    res.json({ success: true, data: products });
+    res.json({ success: true, data: sanitizedProducts });
   } catch (error) {
     next(error);
   }
@@ -71,6 +91,13 @@ exports.getProductById = async (req, res, next) => {
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    
+    // إخفاء سعر الشراء عن الكاشير
+    const userRole = req.user?.role;
+    if (userRole === 'CASHIER') {
+      const { costPrice, ...productWithoutCost } = product;
+      return res.json({ success: true, data: productWithoutCost });
     }
 
     res.json({ success: true, data: product });

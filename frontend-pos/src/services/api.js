@@ -77,6 +77,15 @@ export const productAPI = {
   delete: (id) => api.delete(`/products/${id}`),
 };
 
+// Category API
+export const categoryAPI = {
+  getAll: () => api.get('/categories'),
+  getById: (id) => api.get(`/categories/${id}`),
+  create: (data) => api.post('/categories', data),
+  update: (id, data) => api.put(`/categories/${id}`, data),
+  delete: (id) => api.delete(`/categories/${id}`),
+};
+
 // Sale API
 export const saleAPI = {
   create: (data) => api.post('/sales', data),
@@ -131,6 +140,79 @@ export const userAPI = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
+};
+
+// Partner API
+export const partnerAPI = {
+  getAll: () => api.get('/partners'),
+  getById: (id) => api.get(`/partners/${id}`),
+  create: (data) => api.post('/partners', data),
+  update: (id, data) => api.put(`/partners/${id}`, data),
+  delete: (id) => api.delete(`/partners/${id}`),
+  getReport: (params) => api.get('/partners/report', { params }),
+};
+
+// Supplier API
+export const supplierAPI = {
+  getAll: () => api.get('/suppliers'),
+  getById: (id) => api.get(`/suppliers/${id}`),
+  create: (data) => api.post('/suppliers', data),
+  update: (id, data) => api.put(`/suppliers/${id}`, data),
+  delete: (id) => api.delete(`/suppliers/${id}`),
+  recordPayment: (id, data) => api.post(`/suppliers/${id}/payment`, data),
+};
+
+// Transfer API
+export const transferAPI = {
+  getAll: (params) => api.get('/transfers', { params }),
+  getById: (id) => api.get(`/transfers/${id}`),
+  create: (data) => api.post('/transfers', data),
+  update: (id, data) => api.put(`/transfers/${id}`, data),
+  receive: (id, data) => api.post(`/transfers/${id}/receive`, data),
+  confirm: (id) => api.post(`/transfers/${id}/confirm`),
+  cancel: (id) => api.post(`/transfers/${id}/cancel`),
+};
+
+// Expense API
+export const expenseAPI = {
+  getAll: (params) => api.get('/expenses', { params }),
+  getById: (id) => api.get(`/expenses/${id}`),
+  create: (data) => api.post('/expenses', data),
+  update: (id, data) => api.put(`/expenses/${id}`, data),
+  delete: (id) => api.delete(`/expenses/${id}`),
+  getSummary: (params) => api.get('/expenses/summary', { params }),
+};
+
+// Purchase API
+export const purchaseAPI = {
+  getAll: (params) => api.get('/purchases', { params }),
+  getById: (id) => api.get(`/purchases/${id}`),
+  create: (data) => api.post('/purchases', data),
+  updatePayment: (id, data) => api.put(`/purchases/${id}/payment`, data),
+  delete: (id) => api.delete(`/purchases/${id}`),
+  getSummary: (params) => api.get('/purchases/summary', { params }),
+};
+
+// Activity API
+export const activityAPI = {
+  getAll: (params) => api.get('/activity', { params }),
+  getByUser: (userId, params) => api.get(`/activity/user/${userId}`, { params }),
+  getByBranch: (branchId, params) => api.get(`/activity/branch/${branchId}`, { params }),
+};
+
+// Returns API
+export const returnsAPI = {
+  getAll: (params) => api.get('/returns', { params }),
+  getById: (id) => api.get(`/returns/${id}`),
+  getSummary: (params) => api.get('/returns/summary', { params }),
+};
+
+// Admin API
+export const adminAPI = {
+  getDashboard: () => api.get('/admin/dashboard'),
+  getActiveUsers: () => api.get('/admin/active-users'),
+  getOpenShifts: () => api.get('/admin/open-shifts'),
+  getBranchActivity: (branchId) => api.get(`/admin/branch-activity/${branchId}`),
 };
 
 export default api;

@@ -1,31 +1,82 @@
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Package } from 'lucide-react';
+import { AlertTriangle, Package, MapPin } from 'lucide-react';
 import { inventoryAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import api from '../services/api';
 
 export default function Inventory() {
   const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+  const [selectedBranchId, setSelectedBranchId] = useState(user?.branchId || '');
+
+  // Fetch branches list for ADMIN
+  const { data: branchesResponse } = useQuery({
+    queryKey: ['branches'],
+    queryFn: async () => {
+      const response = await api.get('/branches');
+      return response.data;
+    },
+    enabled: isAdmin,
+  });
+
+  const branches = branchesResponse?.data || [];
+
+  // Auto-select MAIN branch or first available branch for ADMIN if no branch is selected
+  useEffect(() => {
+    if (isAdmin && branches.length > 0 && !selectedBranchId) {
+      const main = branches.find(b => b.code === 'MAIN');
+      if (main) {
+        setSelectedBranchId(main.id);
+      } else {
+        setSelectedBranchId(branches[0].id);
+      }
+    }
+  }, [branches, selectedBranchId, isAdmin]);
+
+  // If selectedBranchId is still empty (e.g. non-admin has no branchId), use user's branchId
+  const branchToQuery = selectedBranchId || user?.branchId;
 
   const { data: inventoryData, isLoading } = useQuery({
-    queryKey: ['inventory', user?.branchId],
-    queryFn: () => inventoryAPI.getByBranch(user?.branchId),
-    enabled: !!user?.branchId,
+    queryKey: ['inventory', branchToQuery],
+    queryFn: () => inventoryAPI.getByBranch(branchToQuery),
+    enabled: !!branchToQuery,
   });
 
   const { data: lowStockData } = useQuery({
-    queryKey: ['low-stock', user?.branchId],
-    queryFn: () => inventoryAPI.getLowStock(user?.branchId),
-    enabled: !!user?.branchId,
+    queryKey: ['low-stock', branchToQuery],
+    queryFn: () => inventoryAPI.getLowStock(branchToQuery),
+    enabled: !!branchToQuery,
   });
 
   const inventory = inventoryData?.data?.data || [];
   const lowStock = lowStockData?.data?.data || [];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">المخزون</h1>
-        <p className="text-gray-600">إدارة مخزون الفرع</p>
+    <div className="space-y-6" dir="rtl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">المخزون</h1>
+          <p className="text-gray-600 mt-1">إدارة وفحص مخازن الفروع والمخزن الرئيسي</p>
+        </div>
+        
+        {isAdmin && branches.length > 0 && (
+          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm self-start">
+            <MapPin size={18} className="text-primary-600" />
+            <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">اختر المخزن:</label>
+            <select
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="bg-transparent border-none focus:ring-0 outline-none text-sm font-medium text-gray-800 cursor-pointer min-w-[200px]"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} {b.code === 'MAIN' ? '(المخزن الرئيسي)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Low Stock Alert */}
@@ -35,11 +86,13 @@ export default function Inventory() {
             <AlertTriangle className="text-yellow-600" size={24} />
             <h3 className="font-semibold text-yellow-800">تنبيه: منتجات منخفضة المخزون</h3>
           </div>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {lowStock.map((item) => (
-              <div key={item.id} className="flex justify-between items-center p-2 bg-white rounded">
-                <span>{item.product?.name}</span>
-                <span className="text-yellow-700 font-medium">{item.quantity} قطعة متبقية</span>
+              <div key={item.id} className="flex justify-between items-center p-3 bg-white border rounded shadow-sm">
+                <span className="font-medium text-gray-800">{item.product?.name}</span>
+                <span className="text-yellow-700 font-bold bg-yellow-100/50 px-2 py-0.5 rounded text-xs">
+                  {item.quantity} قطعة متبقية
+                </span>
               </div>
             ))}
           </div>
@@ -53,33 +106,32 @@ export default function Inventory() {
         ) : inventory.length === 0 ? (
           <div className="text-center py-12">
             <Package className="mx-auto text-gray-400 mb-4" size={64} />
-            <p className="text-gray-500">لا توجد منتجات في المخزون</p>
+            <p className="text-gray-500 font-medium">لا توجد منتجات في هذا المخزن حالياً</p>
           </div>
         ) : (
-          <table className="w-full">
+          <table className="w-full text-right text-sm">
             <thead>
-              <tr className="border-b">
-                <th className="text-right p-3 font-semibold">SKU</th>
-                <th className="text-right p-3 font-semibold">المنتج</th>
-                <th className="text-right p-3 font-semibold">الفئة</th>
-                <th className="text-right p-3 font-semibold">الكمية</th>
-                <th className="text-right p-3 font-semibold">الحد الأدنى</th>
-                <th className="text-right p-3 font-semibold">السعر</th>
-                <th className="text-right p-3 font-semibold">الحالة</th>
+              <tr className="border-b bg-gray-50 text-gray-600 font-bold">
+                <th className="p-3">المنتج</th>
+                <th className="p-3">اللون</th>
+                <th className="p-3">الكمية المتاحة</th>
+                <th className="p-3">الحد الأدنى</th>
+                {isAdmin && <th className="p-3">سعر الشراء</th>}
+                <th className="p-3">سعر البيع</th>
+                <th className="p-3 text-center">الحالة</th>
               </tr>
             </thead>
             <tbody>
               {inventory.map((item) => {
                 const isLowStock = item.quantity <= item.minQuantity;
-                const isOutOfStock = item.quantity === 0;
+                const isOutOfStock = item.quantity <= 0;
 
                 return (
-                  <tr key={item.id} className="border-b hover:bg-gray-50">
-                    <td className="p-3">{item.product?.sku}</td>
-                    <td className="p-3 font-medium">{item.product?.name}</td>
-                    <td className="p-3">{item.product?.category?.name}</td>
+                  <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="p-3 font-semibold text-gray-800">{item.product?.name}</td>
+                    <td className="p-3 text-gray-500">{item.product?.color || '-'}</td>
                     <td className="p-3">
-                      <span className={`font-bold ${
+                      <span className={`font-bold text-base ${
                         isOutOfStock ? 'text-red-600' :
                         isLowStock ? 'text-yellow-600' :
                         'text-green-600'
@@ -87,10 +139,26 @@ export default function Inventory() {
                         {item.quantity}
                       </span>
                     </td>
-                    <td className="p-3 text-gray-600">{item.minQuantity}</td>
-                    <td className="p-3">{item.product?.sellingPrice} جنيه</td>
+                    <td className="p-3 text-gray-500">{item.minQuantity}</td>
+                    {isAdmin && (
+                      <td className="p-3">
+                        <span className="font-medium text-orange-600">
+                          {item.product?.costPrice ? `${item.product.costPrice} ج.م` : '-'}
+                        </span>
+                      </td>
+                    )}
                     <td className="p-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
+                      <span className="font-medium text-green-600">
+                        {item.product?.category?.defaultSellingPrice 
+                          ? `${item.product.category.defaultSellingPrice} ج.م` 
+                          : item.product?.sellingPrice 
+                            ? `${item.product.sellingPrice} ج.م`
+                            : '-'
+                        }
+                      </span>
+                    </td>
+                    <td className="p-3 text-center">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                         isOutOfStock ? 'bg-red-100 text-red-800' :
                         isLowStock ? 'bg-yellow-100 text-yellow-800' :
                         'bg-green-100 text-green-800'

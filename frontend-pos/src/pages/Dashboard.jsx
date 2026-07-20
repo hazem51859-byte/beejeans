@@ -1,16 +1,25 @@
-import { useQuery } from '@tanstack/react-query';
-import { DollarSign, ShoppingBag, Package, TrendingUp } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DollarSign, ShoppingBag, Package, TrendingUp, XCircle } from 'lucide-react';
 import { reportAPI, shiftAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import dayjs from 'dayjs';
+import { toast } from 'react-hot-toast';
+import { useState } from 'react';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closingData, setClosingData] = useState({
+    actualCash: '',
+    notes: ''
+  });
 
-  // Get current shift
+  // Get current shift (only for non-admin users)
   const { data: shiftData } = useQuery({
     queryKey: ['current-shift'],
     queryFn: shiftAPI.getCurrent,
+    enabled: user?.role !== 'ADMIN', // Only fetch for CASHIER/MANAGER
   });
 
   // Get daily report
@@ -19,6 +28,28 @@ export default function Dashboard() {
     queryFn: () => reportAPI.getDaily(user?.branchId, { date: new Date() }),
     enabled: !!user?.branchId,
   });
+  
+  const closeShiftMutation = useMutation({
+    mutationFn: (data) => shiftAPI.close(shiftData?.data?.data?.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['current-shift']);
+      queryClient.invalidateQueries(['daily-report']);
+      setShowCloseModal(false);
+      setClosingData({ actualCash: '', notes: '' });
+      toast.success('تم إغلاق الشيفت بنجاح');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'حدث خطأ أثناء إغلاق الشيفت');
+    }
+  });
+  
+  const handleCloseShift = (e) => {
+    e.preventDefault();
+    closeShiftMutation.mutate({
+      actualCash: parseFloat(closingData.actualCash),
+      notes: closingData.notes
+    });
+  };
 
   const stats = [
     {
@@ -71,11 +102,20 @@ export default function Dashboard() {
                 بدأ في: {dayjs(shiftData.data.data.openedAt).format('DD/MM/YYYY - HH:mm')}
               </p>
             </div>
-            <div className="text-left">
-              <p className="text-sm text-green-700">الرصيد الافتتاحي</p>
-              <p className="text-2xl font-bold text-green-800">
-                {shiftData.data.data.openingBalance} جنيه
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="text-left">
+                <p className="text-sm text-green-700">الرصيد الافتتاحي</p>
+                <p className="text-2xl font-bold text-green-800">
+                  {shiftData.data.data.openingBalance} جنيه
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCloseModal(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-bold"
+              >
+                <XCircle size={20} />
+                إغلاق الشيفت
+              </button>
             </div>
           </div>
         </div>
@@ -141,7 +181,7 @@ export default function Dashboard() {
             <ShoppingBag className="mx-auto mb-2 text-primary-600" size={32} />
             <p className="font-medium">بيع جديد</p>
           </a>
-          <a href="/products" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
+          <a href="/my-products" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
             <Package className="mx-auto mb-2 text-primary-600" size={32} />
             <p className="font-medium">المنتجات</p>
           </a>
@@ -149,12 +189,71 @@ export default function Dashboard() {
             <Package className="mx-auto mb-2 text-primary-600" size={32} />
             <p className="font-medium">المخزون</p>
           </a>
-          <a href="/reports" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
+          <a href="/invoices" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
             <TrendingUp className="mx-auto mb-2 text-primary-600" size={32} />
-            <p className="font-medium">التقارير</p>
+            <p className="font-medium">الفواتير</p>
           </a>
         </div>
       </div>
+
+      {/* Close Shift Modal */}
+      {showCloseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">إغلاق الشيفت</h2>
+            <form onSubmit={handleCloseShift} className="space-y-4">
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">رقم الشيفت</p>
+                <p className="text-lg font-bold text-gray-800">{shiftData?.data?.data?.shiftNumber}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">الرصيد النقدي الفعلي *</label>
+                <input
+                  type="number"
+                  value={closingData.actualCash}
+                  onChange={(e) => setClosingData({ ...closingData, actualCash: e.target.value })}
+                  className="input-field"
+                  step="0.01"
+                  required
+                  placeholder="أدخل المبلغ النقدي الموجود"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  الرصيد الافتتاحي: {shiftData?.data?.data?.openingBalance} ج.م
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">ملاحظات</label>
+                <textarea
+                  value={closingData.notes}
+                  onChange={(e) => setClosingData({ ...closingData, notes: e.target.value })}
+                  className="input-field"
+                  rows="3"
+                  placeholder="أي ملاحظات على الشيفت..."
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  type="submit" 
+                  className="btn-primary flex-1"
+                  disabled={closeShiftMutation.isLoading}
+                >
+                  {closeShiftMutation.isLoading ? 'جاري الإغلاق...' : 'إغلاق الشيفت'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCloseModal(false)}
+                  className="px-6 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

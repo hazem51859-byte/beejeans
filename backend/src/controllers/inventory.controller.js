@@ -18,10 +18,23 @@ exports.getInventoryByBranch = async (req, res, next) => {
     });
 
     const total = await prisma.inventory.count({ where: { branchId } });
+    
+    // إخفاء سعر الشراء عن الكاشير
+    const userRole = req.user?.role;
+    const sanitizedInventory = inventory.map(inv => {
+      if (userRole === 'CASHIER' && inv.product) {
+        const { costPrice, ...productWithoutCost } = inv.product;
+        return {
+          ...inv,
+          product: productWithoutCost
+        };
+      }
+      return inv;
+    });
 
     res.json({
       success: true,
-      data: inventory,
+      data: sanitizedInventory,
       pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) }
     });
   } catch (error) {

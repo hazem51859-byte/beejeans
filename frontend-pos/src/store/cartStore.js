@@ -5,9 +5,20 @@ export const useCartStore = create((set, get) => ({
   
   addItem: (product) => {
     const items = get().items;
-    const existingItem = items.find(item => item.id === product.id);
+    // Use serialNumber as unique identifier instead of product.id
+    const uniqueKey = product.serialNumber || product.id;
+    const existingItem = items.find(item => (item.serialNumber || item.id) === uniqueKey);
+    
+    // استخدام سعر البيع من الصنف لو موجود، وإلا استخدام سعر المنتج
+    const sellingPrice = product.category?.defaultSellingPrice || product.sellingPrice;
     
     if (existingItem) {
+      // For serial-tracked items, don't increase quantity - each serial is unique
+      if (product.serialNumber) {
+        console.warn('Serial already in cart:', product.serialNumber);
+        return;
+      }
+      
       set({
         items: items.map(item =>
           item.id === product.id
@@ -17,14 +28,17 @@ export const useCartStore = create((set, get) => ({
       });
     } else {
       set({
-        items: [...items, { ...product, quantity: 1 }],
+        items: [...items, { ...product, sellingPrice, quantity: 1 }],
       });
     }
   },
   
-  removeItem: (productId) => {
+  removeItem: (uniqueKey) => {
     set({
-      items: get().items.filter(item => item.id !== productId),
+      items: get().items.filter(item => {
+        const itemKey = item.serialNumber || item.id;
+        return itemKey !== uniqueKey;
+      }),
     });
   },
   
@@ -54,34 +68,25 @@ export const useCartStore = create((set, get) => ({
   getTotal: () => {
     const items = get().items;
     return items.reduce((total, item) => {
-      const itemPrice = parseFloat(item.sellingPrice) * item.quantity;
-      const itemDiscount = parseFloat(item.discount || 0);
-      const itemTax = (itemPrice - itemDiscount) * (parseFloat(item.taxRate || 0) / 100);
-      return total + itemPrice - itemDiscount + itemTax;
+      const itemPrice = item.customPrice !== undefined ? item.customPrice : parseFloat(item.sellingPrice);
+      const itemTotal = itemPrice * item.quantity;
+      return total + itemTotal; // لا توجد خصومات
     }, 0);
   },
   
   getSubtotal: () => {
     const items = get().items;
     return items.reduce((total, item) => {
-      return total + parseFloat(item.sellingPrice) * item.quantity;
+      const itemPrice = item.customPrice !== undefined ? item.customPrice : parseFloat(item.sellingPrice);
+      return total + itemPrice * item.quantity;
     }, 0);
   },
   
   getTotalTax: () => {
-    const items = get().items;
-    return items.reduce((total, item) => {
-      const itemPrice = parseFloat(item.sellingPrice) * item.quantity;
-      const itemDiscount = parseFloat(item.discount || 0);
-      const itemTax = (itemPrice - itemDiscount) * (parseFloat(item.taxRate || 0) / 100);
-      return total + itemTax;
-    }, 0);
+    return 0; // لا توجد ضرائب
   },
   
   getTotalDiscount: () => {
-    const items = get().items;
-    return items.reduce((total, item) => {
-      return total + parseFloat(item.discount || 0);
-    }, 0);
+    return 0; // لا توجد خصومات
   },
 }));

@@ -10,14 +10,27 @@ const { Server } = require('socket.io');
 const authRoutes = require('./routes/auth.routes');
 const branchRoutes = require('./routes/branch.routes');
 const productRoutes = require('./routes/product.routes');
+const categoryRoutes = require('./routes/category.routes');
 const inventoryRoutes = require('./routes/inventory.routes');
 const shiftRoutes = require('./routes/shift.routes');
 const saleRoutes = require('./routes/sale.routes');
 const reportRoutes = require('./routes/report.routes');
 const userRoutes = require('./routes/user.routes');
-
+const partnerRoutes = require('./routes/partner.routes');
+const supplierRoutes = require('./routes/supplier.routes');
+const expenseRoutes = require('./routes/expense.routes');
+const purchaseRoutes = require('./routes/purchase.routes');
+const transferRoutes = require('./routes/transfer.routes');
+const returnsRoutes = require('./routes/returns.routes');
+const activityRoutes = require('./routes/activity.routes');
+const adminRoutes = require('./routes/admin.routes');
+const customerRoutes = require('./routes/customer.routes');
+const cashierRoutes = require('./routes/cashier.routes');
+const serialRoutes = require('./routes/serial.routes');
+const vaultRoutes = require('./routes/vault.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { rateLimiter } = require('./middleware/rateLimiter');
+const initMainBranch = require('./utils/initMainBranch');
 
 const app = express();
 const server = http.createServer(app);
@@ -58,11 +71,24 @@ const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
 app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/branches`, branchRoutes);
 app.use(`${API_PREFIX}/products`, productRoutes);
+app.use(`${API_PREFIX}/categories`, categoryRoutes);
 app.use(`${API_PREFIX}/inventory`, inventoryRoutes);
 app.use(`${API_PREFIX}/shifts`, shiftRoutes);
 app.use(`${API_PREFIX}/sales`, saleRoutes);
 app.use(`${API_PREFIX}/reports`, reportRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
+app.use(`${API_PREFIX}/partners`, partnerRoutes);
+app.use(`${API_PREFIX}/expenses`, expenseRoutes);
+app.use(`${API_PREFIX}/purchases`, purchaseRoutes);
+app.use(`${API_PREFIX}/transfers`, transferRoutes);
+app.use(`${API_PREFIX}/returns`, returnsRoutes);
+app.use(`${API_PREFIX}/activity`, activityRoutes);
+app.use(`${API_PREFIX}/admin`, adminRoutes);
+app.use(`${API_PREFIX}/suppliers`, supplierRoutes);
+app.use(`${API_PREFIX}/customers`, customerRoutes);
+app.use(`${API_PREFIX}/cashiers`, cashierRoutes);
+app.use(`${API_PREFIX}/serials`, serialRoutes);
+app.use(`${API_PREFIX}/vault`, vaultRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -91,8 +117,9 @@ io.on('connection', (socket) => {
 
 // Start server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  await initMainBranch();
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 API: http://localhost:${PORT}${API_PREFIX}`);
 });

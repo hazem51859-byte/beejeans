@@ -3,10 +3,11 @@ const { v4: uuidv4 } = require('uuid');
 
 /**
  * Open new shift
+ * الكاشير يفتح شيفت - الرصيد الافتتاحي = آخر رصيد في الدرج (من آخر شيفت)
  */
 exports.openShift = async (req, res, next) => {
   try {
-    const { branchId, openingBalance } = req.body;
+    const { branchId } = req.body;
     const userId = req.user.id;
 
     // Check if user already has an open shift
@@ -20,8 +21,49 @@ exports.openShift = async (req, res, next) => {
     if (existingShift) {
       return res.status(400).json({
         success: false,
-        message: 'You already have an open shift'
+        message: 'لديك شيفت مفتوح بالفعل'
       });
+    }
+
+    // Get last closed shift in this branch to get drawer balance
+    const lastShift = await prisma.shift.findFirst({
+      where: {
+        branchId,
+        status: 'CLOSED'
+      },
+      orderBy: {
+        closedAt: 'desc'
+      }
+    });
+
+    // Opening balance = last shift's closing balance (drawer balance)
+    // If no previous shift, check if manager prepared drawer (from vault transactions)
+    let openingBalance = 0;
+    
+    if (lastShift && lastShift.actualCash !== null && lastShift.actualCash !== undefined) {
+      // Use last shift's actual cash (what was left in drawer)
+      openingBalance = lastShift.actualCash;
+    } else {
+      // Check if manager prepared drawer recently
+      const drawerPrep = await prisma.vaultTransaction.findFirst({
+        where: {
+          branchId,
+          type: 'CASH_WITHDRAWAL',
+          description: {
+            contains: 'تجهيز درج'
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+      
+      if (drawerPrep) {
+        openingBalance = drawerPrep.amount;
+      } else {
+        // Default fallback - start with empty drawer
+        openingBalance = 0;
+      }
     }
 
     // Generate shift number
@@ -36,13 +78,13 @@ exports.openShift = async (req, res, next) => {
     });
     const shiftNumber = `${today}-${branchId.substring(0, 4)}-${(shiftCount + 1).toString().padStart(3, '0')}`;
 
-    // Create shift
+    // Create shift with calculated opening balance
     const shift = await prisma.shift.create({
       data: {
         shiftNumber,
         userId,
         branchId,
-        openingBalance: parseFloat(openingBalance),
+        openingBalance,
         status: 'OPEN'
       },
       include: {
@@ -65,11 +107,13 @@ exports.openShift = async (req, res, next) => {
 
     // Emit socket event
     const io = req.app.get('io');
-    io.to(`branch-${branchId}`).emit('shift-opened', shift);
+    if (io) {
+      io.to(`branch-${branchId}`).emit('shift-opened', shift);
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Shift opened successfully',
+      message: `تم فتح الشيفت برصيد افتتاحي ${openingBalance.toLocaleString('ar-EG')} ج.م`,
       data: shift
     });
   } catch (error) {
@@ -79,11 +123,12 @@ exports.openShift = async (req, res, next) => {
 
 /**
  * Close shift
+ * الكاشير يقفل الشيفت - النظام يحسب المبلغ المتوقع في الدرج أوتوماتيك
  */
 exports.closeShift = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { actualCash, notes } = req.body;
+    const { notes } = req.body;  // removed actualCash requirement
     const userId = req.user.id;
 
     // Get shift
@@ -128,7 +173,7 @@ exports.closeShift = async (req, res, next) => {
     const totalSales = salesData._sum.total || 0;
     const totalTransactions = salesData._count || 0;
 
-    // Calculate expected cash
+    // Calculate expected cash (opening balance + cash sales)
     const cashSales = await prisma.sale.aggregate({
       where: {
         shiftId: id,
@@ -141,20 +186,19 @@ exports.closeShift = async (req, res, next) => {
     });
 
     const expectedCash = parseFloat(shift.openingBalance) + parseFloat(cashSales._sum.amountPaid || 0);
-    const cashDifference = parseFloat(actualCash) - expectedCash;
 
-    // Close shift
+    // Close shift - actualCash = expectedCash (automatic calculation)
     const closedShift = await prisma.shift.update({
       where: { id },
       data: {
         status: 'CLOSED',
         closedAt: new Date(),
-        actualCash: parseFloat(actualCash),
+        actualCash: expectedCash,  // Set automatically
         expectedCash,
-        cashDifference,
+        cashDifference: 0,  // No difference since we're using expected
         totalSales,
         totalTransactions,
-        closingBalance: parseFloat(actualCash),
+        closingBalance: expectedCash,  // This is what should be in drawer
         notes
       },
       include: {
@@ -181,7 +225,7 @@ exports.closeShift = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Shift closed successfully',
+      message: `تم قفل الشيفت - المبلغ في الدرج: ${expectedCash.toLocaleString('ar-EG')} ج.م`,
       data: closedShift
     });
   } catch (error) {
@@ -327,6 +371,63 @@ exports.getShiftsByBranch = async (req, res, next) => {
         total,
         pages: Math.ceil(total / limit)
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get available cashiers for shift (Manager only)
+ * المانجر يشوف الكاشيرز المتاحين لفتح شيفتات لهم
+ */
+exports.getAvailableCashiers = async (req, res, next) => {
+  try {
+    const { branchId } = req.params;
+
+    // Only manager or admin can access
+    if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only managers can view available cashiers'
+      });
+    }
+
+    // Get all cashiers in this branch
+    const cashiers = await prisma.user.findMany({
+      where: {
+        branchId,
+        role: 'CASHIER',
+        isActive: true
+      },
+      select: {
+        id: true,
+        fullName: true,
+        username: true
+      }
+    });
+
+    // Check which cashiers have open shifts
+    const cashiersWithStatus = await Promise.all(
+      cashiers.map(async (cashier) => {
+        const openShift = await prisma.shift.findFirst({
+          where: {
+            userId: cashier.id,
+            status: 'OPEN'
+          }
+        });
+
+        return {
+          ...cashier,
+          hasOpenShift: !!openShift,
+          currentShift: openShift || null
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: cashiersWithStatus
     });
   } catch (error) {
     next(error);

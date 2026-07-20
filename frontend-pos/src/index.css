@@ -56,20 +56,240 @@ body {
   background: #555;
 }
 
-/* Print styles */
+/* Print Styles - Landscape Professional */
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 0.5cm;
+  }
+
+  /* Hide EVERYTHING except report content */
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
-  
-  .print-area, .print-area * {
-    visibility: visible;
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
-  
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+
+  /* Show only report content and its children */
+  #monthly-report-content,
+  #monthly-report-content * {
+    visibility: visible !important;
+  }
+
+  #monthly-report-content {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide UI elements */
+  nav,
+  aside,
+  header,
+  .sidebar,
+  button,
+  .print\\:hidden,
+  .no-print,
+  input:not([type="hidden"]),
+  select,
+  textarea,
+  [class*="sidebar"],
+  [class*="nav"],
+  [class*="menu"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Cards */
+  .card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    padding: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* Grid adjustments */
+  .grid {
+    gap: 0.5rem !important;
+  }
+
+  /* Tables */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9px !important;
+    page-break-inside: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+    background-color: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tbody tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  th, td {
+    padding: 4px 6px !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  /* Preserve background colors */
+  .bg-green-50, .bg-green-100 {
+    background-color: #f0fdf4 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bg-red-50, .bg-red-100 {
+    background-color: #fef2f2 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bg-blue-50, .bg-blue-100 {
+    background-color: #eff6ff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bg-yellow-50, .bg-yellow-100 {
+    background-color: #fefce8 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bg-purple-50, .bg-purple-100 {
+    background-color: #faf5ff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bg-orange-50, .bg-orange-100 {
+    background-color: #fff7ed !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .bg-gray-50, .bg-gray-100 {
+    background-color: #f9fafb !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Text colors */
+  .text-green-700, .text-green-800 {
+    color: #15803d !important;
+  }
+
+  .text-red-700, .text-red-800 {
+    color: #b91c1c !important;
+  }
+
+  .text-blue-700, .text-blue-800 {
+    color: #1d4ed8 !important;
+  }
+
+  .text-purple-700, .text-purple-800 {
+    color: #7e22ce !important;
+  }
+
+  .text-yellow-700, .text-yellow-800, .text-yellow-900 {
+    color: #a16207 !important;
+  }
+
+  .text-gray-700, .text-gray-800 {
+    color: #374151 !important;
+  }
+
+  /* Font sizes for landscape */
+  h1 {
+    font-size: 18px !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  h2 {
+    font-size: 14px !important;
+    margin-bottom: 0.3rem !important;
+  }
+
+  .text-2xl {
+    font-size: 16px !important;
+  }
+
+  .text-xl {
+    font-size: 14px !important;
+  }
+
+  .text-lg {
+    font-size: 12px !important;
+  }
+
+  .text-sm {
+    font-size: 9px !important;
+  }
+
+  .text-xs {
+    font-size: 8px !important;
+  }
+
+  /* Spacing adjustments */
+  .space-y-6 > * + * {
+    margin-top: 0.5rem !important;
+  }
+
+  .space-y-3 > * + * {
+    margin-top: 0.3rem !important;
+  }
+
+  .mb-6, .mt-6 {
+    margin-bottom: 0.5rem !important;
+    margin-top: 0.5rem !important;
+  }
+
+  .mb-4, .mt-4 {
+    margin-bottom: 0.3rem !important;
+    margin-top: 0.3rem !important;
+  }
+
+  .p-6 {
+    padding: 0.5rem !important;
+  }
+
+  .p-4 {
+    padding: 0.4rem !important;
+  }
+
+  .p-3 {
+    padding: 0.3rem !important;
+  }
+
+  /* Border styling */
+  .border-2 {
+    border-width: 1px !important;
+  }
+
+  /* Icons - make smaller */
+  svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  /* Ensure good contrast */
+  .border {
+    border-color: #d1d5db !important;
   }
 }
+

@@ -1,4 +1,4 @@
-// Prisma Schema for Multi-Branch POS System
+// Prisma Schema for Bee Jeans POS System - PostgreSQL Version
 
 generator client {
   provider = "prisma-client-js"
@@ -13,12 +13,6 @@ datasource db {
 // User Management
 // =====================
 
-enum UserRole {
-  ADMIN
-  MANAGER
-  CASHIER
-}
-
 model User {
   id            String   @id @default(uuid())
   username      String   @unique
@@ -26,13 +20,17 @@ model User {
   password      String
   fullName      String
   phone         String?
-  role          UserRole @default(CASHIER)
+  role          String   @default("CASHIER") // ADMIN, MANAGER, CASHIER
   isActive      Boolean  @default(true)
   branchId      String?
   branch        Branch?  @relation(fields: [branchId], references: [id])
   
   shifts        Shift[]
   sales         Sale[]
+  expenses      Expense[]
+  transfersSent     Transfer[]  @relation("TransferSentBy")
+  transfersReceived Transfer[]  @relation("TransferReceivedBy")
+  activityLogs      ActivityLog[]
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -50,20 +48,35 @@ model Branch {
   id            String   @id @default(uuid())
   name          String
   code          String   @unique
+  url           String   @unique // URL خاص بالفرع
   address       String?
   phone         String?
   city          String?
   isActive      Boolean  @default(true)
   
+  // Branch Vault (الخزينة)
+  vaultBalance      Float    @default(0) // رصيد الخزينة النقدي
+  cardVaultBalance  Float    @default(0) // رصيد الفيزا في الخزينة
+  
   users         User[]
   inventory     Inventory[]
   shifts        Shift[]
   sales         Sale[]
+  expenses      Expense[]
+  purchases     Purchase[]
+  transfersFrom Transfer[]  @relation("TransferFrom")
+  transfersTo   Transfer[]  @relation("TransferTo")
+  activityLogs  ActivityLog[]
+  productSerials ProductSerial[]
+  vaultTransactions VaultTransaction[]
+  moneyTransfersFrom MoneyTransfer[] @relation("MoneyTransferFrom")
+  moneyTransfersTo   MoneyTransfer[] @relation("MoneyTransferTo")
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
   @@index([code])
+  @@index([url])
   @@map("branches")
 }
 
@@ -71,21 +84,38 @@ model Branch {
 // Product Management
 // =====================
 
-enum ProductStatus {
-  ACTIVE
-  INACTIVE
-  OUT_OF_STOCK
-}
-
 model Category {
-  id            String   @id @default(uuid())
+  id            String              @id @default(uuid())
   name          String
   description   String?
   parentId      String?
-  parent        Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children      Category[] @relation("CategoryHierarchy")
+  parent        Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children      Category[]          @relation("CategoryHierarchy")
+  
+  // قالب التفاصيل (JSON string)
+  // مثال: {
+  //   "fields": [
+  //     {"name": "المقاس", "type": "select", "options": ["S", "M", "L", "XL"], "required": true},
+  //     {"name": "اللون", "type": "select", "options": ["أبيض", "أسود", "أزرق"], "required": true}
+  //   ],
+  //   "pricing": {
+  //     "costPrice": 150,
+  //     "sellingPrice": 250,
+  //     "taxRate": 14
+  //   }
+  // }
+  attributesTemplate String?
+  
+  defaultCostPrice    Float?
+  defaultSellingPrice Float?
+  attributes          String?
+  
+  // Serial tracking for category
+  serialStartNumber   Int?      // رقم البداية للسيريالات (مثلاً 1000)
+  lastSerialUsed      Int?      // آخر رقم سيريال تم استخدامه
   
   products      Product[]
+  transferItems TransferItem[]
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -96,38 +126,92 @@ model Category {
 model Product {
   id            String        @id @default(uuid())
   sku           String        @unique
-  barcode       String?       @unique
+  barcode       String?       @unique // السيريال المقروء من الريدر
   name          String
   description   String?
   
   categoryId    String
   category      Category      @relation(fields: [categoryId], references: [id])
   
-  costPrice     Decimal       @db.Decimal(10, 2)
-  sellingPrice  Decimal       @db.Decimal(10, 2)
+  // التفاصيل الإضافية حسب القالب (JSON string)
+  // مثال: {"المقاس": "L", "اللون": "أبيض", "النوع": "جينز"}
+  attributes    String?
+  
+  costPrice     Float         // سعر الشراء - يراه الأدمن فقط
+  sellingPrice  Float         // سعر البيع - يراه الجميع
   
   size          String?
   color         String?
   brand         String?
   
-  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
+  taxRate       Float         @default(0)
   
   reorderLevel  Int           @default(10)
   
-  status        ProductStatus @default(ACTIVE)
+  status        String        @default("ACTIVE") // ACTIVE, INACTIVE, OUT_OF_STOCK
   
   imageUrl      String?
   
+  // Serial tracking
+  serialNumber  String?       @unique // السيريال الفريد للمنتج
+  registeredBy  String?       // من سجل السيريال
+  registeredAt  DateTime?     // متى تم التسجيل
+  
   inventory     Inventory[]
   saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+  transferItems TransferItem[]
+  productSerials ProductSerial[]
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   
   @@index([sku])
   @@index([barcode])
+  @@index([serialNumber])
   @@index([categoryId])
   @@map("products")
+}
+
+// تسجيل السيريالات للمنتجات
+model ProductSerial {
+  id            String    @id @default(uuid())
+  
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  
+  serialNumber  String    @unique // السيريال الفريد
+  
+  branchId      String?
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+  
+  registeredBy  String    // User ID الذي سجل السيريال
+  registeredAt  DateTime  @default(now())
+  
+  status        String    @default("AVAILABLE") // AVAILABLE, SOLD, RETURNED, IN_TRANSIT
+  
+  soldAt        DateTime?
+  soldInSaleId  String?   // Sale ID إذا تم بيعه
+  
+  // Tracking
+  purchaseId    String?   // ربط بالشراء اللي جاء منه
+  purchase      Purchase? @relation(fields: [purchaseId], references: [id])
+  
+  transferId    String?   // ربط بالتوريد اللي راح فيه
+  transfer      Transfer? @relation(fields: [transferId], references: [id])
+  
+  notes         String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([productId])
+  @@index([serialNumber])
+  @@index([branchId])
+  @@index([status])
+  @@index([purchaseId])
+  @@index([transferId])
+  @@map("product_serials")
 }
 
 // =====================
@@ -161,11 +245,6 @@ model Inventory {
 // Shift Management
 // =====================
 
-enum ShiftStatus {
-  OPEN
-  CLOSED
-}
-
 model Shift {
   id                String      @id @default(uuid())
   shiftNumber       String
@@ -176,16 +255,16 @@ model Shift {
   branchId          String
   branch            Branch      @relation(fields: [branchId], references: [id])
   
-  status            ShiftStatus @default(OPEN)
+  status            String      @default("OPEN") // OPEN, CLOSED
   
-  openingBalance    Decimal     @db.Decimal(10, 2)
-  closingBalance    Decimal?    @db.Decimal(10, 2)
+  openingBalance    Float       // Changed from Decimal to Float
+  closingBalance    Float?      // Changed from Decimal to Float
   
-  expectedCash      Decimal?    @db.Decimal(10, 2)
-  actualCash        Decimal?    @db.Decimal(10, 2)
-  cashDifference    Decimal?    @db.Decimal(10, 2)
+  expectedCash      Float?      // Changed from Decimal to Float
+  actualCash        Float?      // Changed from Decimal to Float
+  cashDifference    Float?      // Changed from Decimal to Float
   
-  totalSales        Decimal     @default(0) @db.Decimal(10, 2)
+  totalSales        Float       @default(0) // Changed from Decimal to Float
   totalTransactions Int         @default(0)
   
   openedAt          DateTime    @default(now())
@@ -205,20 +284,6 @@ model Shift {
 // Sales Management
 // =====================
 
-enum PaymentMethod {
-  CASH
-  CARD
-  CREDIT
-  MIXED
-}
-
-enum SaleStatus {
-  COMPLETED
-  PENDING
-  CANCELLED
-  REFUNDED
-}
-
 model Sale {
   id                String        @id @default(uuid())
   invoiceNumber     String        @unique
@@ -226,25 +291,39 @@ model Sale {
   branchId          String
   branch            Branch        @relation(fields: [branchId], references: [id])
   
-  shiftId           String
-  shift             Shift         @relation(fields: [shiftId], references: [id])
+  shiftId           String?
+  shift             Shift?         @relation(fields: [shiftId], references: [id])
   
   cashierId         String
   cashier           User          @relation(fields: [cashierId], references: [id])
   
+  customerId        String?
+  customer          Customer?     @relation(fields: [customerId], references: [id])
+  
   customerName      String?
   customerPhone     String?
   
-  subtotal          Decimal       @db.Decimal(10, 2)
-  taxAmount         Decimal       @default(0) @db.Decimal(10, 2)
-  discountAmount    Decimal       @default(0) @db.Decimal(10, 2)
-  total             Decimal       @db.Decimal(10, 2)
+  subtotal          Float         // Changed from Decimal to Float
+  taxAmount         Float         @default(0) // Changed from Decimal to Float
+  discountAmount    Float         @default(0) // Changed from Decimal to Float
+  total             Float         // Changed from Decimal to Float
   
-  paymentMethod     PaymentMethod
-  amountPaid        Decimal       @db.Decimal(10, 2)
-  changeAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  paymentMethod     String        // CASH, CARD, CREDIT, MIXED
+  amountPaid        Float         // Changed from Decimal to Float
+  changeAmount      Float         @default(0) // Changed from Decimal to Float
   
-  status            SaleStatus    @default(COMPLETED)
+  // Card payment tracking
+  cardConfirmed         Boolean       @default(false) // تأكيد دفع الفيزا
+  cardAmount            Float         @default(0) // المبلغ المدفوع بالفيزا
+  cardDestinationBranch String?       // وجهة الفيزا: branchId أو null للمخزن الرئيسي
+  
+  status            String        @default("COMPLETED") // COMPLETED, PENDING, CANCELLED, REFUNDED
+  
+  // للإرجاعات
+  isReturn          Boolean       @default(false)
+  originalSaleId    String?       // رقم الفاتورة الأصلية لو كانت إرجاع
+  returnReason      String?       // سبب الإرجاع
+  refundAmount      Float         @default(0) // المبلغ المرتجع من هذه الفاتورة
   
   notes             String?
   
@@ -272,26 +351,221 @@ model SaleItem {
   productId     String
   product       Product  @relation(fields: [productId], references: [id])
   
+  serialNumber  String?  // السيريال المستخدم في البيع
+  size          String?  // المقاس المختار
+  
   quantity      Int
-  unitPrice     Decimal  @db.Decimal(10, 2)
-  discount      Decimal  @default(0) @db.Decimal(10, 2)
-  taxRate       Decimal  @default(0) @db.Decimal(5, 2)
-  total         Decimal  @db.Decimal(10, 2)
+  unitPrice     Float    // Changed from Decimal to Float
+  discount      Float    @default(0) // Changed from Decimal to Float
+  taxRate       Float    @default(0) // Changed from Decimal to Float
+  total         Float    // Changed from Decimal to Float
+  
+  status        String   @default("SOLD") // SOLD, RETURNED
+  isReturned    Boolean  @default(false) // هل تم إرجاع هذا المنتج
   
   @@index([saleId])
   @@index([productId])
+  @@index([serialNumber])
   @@map("sale_items")
 }
 
 // =====================
-// Sync Management (للمزامنة مع الفروع)
+// Partners Management
 // =====================
 
-enum SyncStatus {
-  PENDING
-  SYNCED
-  FAILED
+model Partner {
+  id                String              @id @default(uuid())
+  name              String
+  email             String?             @unique
+  phone             String?
+  
+  capitalPaid       Float               // رأس المال المدفوع
+  sharePercentage   Float               // نسبة الشراكة (%)
+  
+  joinDate          DateTime            @default(now())
+  isActive          Boolean             @default(true)
+  
+  notes             String?
+  
+  transactions      PartnerTransaction[]
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@map("partners")
 }
+
+// Partner Transactions (معاملات الشركاء - دفعات، سحوبات، توزيع أرباح)
+model PartnerTransaction {
+  id                String      @id @default(uuid())
+  
+  partnerId         String
+  partner           Partner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  
+  type              String      // CAPITAL, WITHDRAWAL, PROFIT_DISTRIBUTION, LOSS_DISTRIBUTION
+  amount            Float
+  description       String?
+  
+  transactionDate   DateTime    @default(now())
+  
+  createdAt         DateTime    @default(now())
+  
+  @@index([partnerId])
+  @@index([transactionDate])
+  @@map("partner_transactions")
+}
+
+// =====================
+// Purchases Management (المشتريات - البضاعة)
+// =====================
+
+// Suppliers (الموردين)
+model Supplier {
+  id              String      @id @default(uuid())
+  name            String
+  phone           String?
+  email           String?
+  address         String?
+  
+  // الحسابات
+  totalPurchases  Float       @default(0) // إجمالي المشتريات
+  totalPaid       Float       @default(0) // إجمالي المدفوع
+  balance         Float       @default(0) // الرصيد (المتبقي/الزائد)
+  
+  notes           String?
+  isActive        Boolean     @default(true)
+  
+  purchases       Purchase[]
+  payments        SupplierPayment[]
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@map("suppliers")
+}
+
+// Supplier Payments (دفعات الموردين)
+model SupplierPayment {
+  id              String      @id @default(uuid())
+  
+  supplierId      String
+  supplier        Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  purchaseId      String?     // ربط الدفعة بفاتورة محددة (اختياري)
+  purchase        Purchase?   @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  
+  amount          Float
+  paymentMethod   String      // CASH, BANK_TRANSFER, CHECK
+  paymentDate     DateTime    @default(now())
+  
+  referenceNumber String?     // رقم الشيك/التحويل
+  notes           String?
+  
+  createdBy       String
+  
+  createdAt       DateTime    @default(now())
+  
+  @@index([supplierId])
+  @@index([purchaseId])
+  @@index([paymentDate])
+  @@map("supplier_payments")
+}
+
+model Purchase {
+  id                String          @id @default(uuid())
+  invoiceNumber     String          @unique
+  
+  supplierId        String
+  supplier          Supplier        @relation(fields: [supplierId], references: [id])
+  
+  supplierPhone     String?
+  
+  branchId          String?
+  branch            Branch?         @relation(fields: [branchId], references: [id])
+  
+  totalAmount       Float
+  paidAmount        Float           @default(0)
+  remainingAmount   Float           @default(0)
+  
+  paymentStatus     String          @default("PENDING") // PAID, PARTIAL, PENDING
+  
+  purchaseDate      DateTime        @default(now())
+  
+  notes             String?
+  
+  // Serial tracking for products
+  startSerial       String?         // رقم السيريال الأول
+  endSerial         String?         // رقم السيريال الأخير
+  
+  items             PurchaseItem[]
+  productSerials    ProductSerial[]
+  payments          SupplierPayment[] // الدفعات المرتبطة بهذه الفاتورة
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([supplierId])
+  @@index([branchId])
+  @@index([invoiceNumber])
+  @@index([purchaseDate])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id                String      @id @default(uuid())
+  
+  purchaseId        String
+  purchase          Purchase    @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  
+  productId         String?
+  product           Product?    @relation(fields: [productId], references: [id])
+  
+  productName       String
+  quantity          Int
+  unitPrice         Float
+  total             Float
+  
+  createdAt         DateTime    @default(now())
+  
+  @@index([purchaseId])
+  @@index([productId])
+  @@map("purchase_items")
+}
+
+// =====================
+// Expenses Management (المصروفات)
+// =====================
+
+model Expense {
+  id                String      @id @default(uuid())
+  
+  category          String      // RENT, SALARY, ELECTRICITY, WATER, PURCHASES, OTHER
+  description       String
+  amount            Float
+  
+  expenseDate       DateTime    @default(now())
+  
+  branchId          String?
+  branch            Branch?     @relation(fields: [branchId], references: [id])
+  
+  receiptNumber     String?
+  notes             String?
+  
+  createdBy         String
+  createdByUser     User        @relation(fields: [createdBy], references: [id])
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([category])
+  @@index([branchId])
+  @@index([expenseDate])
+  @@map("expenses")
+}
+
+// =====================
+// Sync Management
+// =====================
 
 model SyncLog {
   id            String     @id @default(uuid())
@@ -301,9 +575,9 @@ model SyncLog {
   entityId      String
   operation     String     // 'create', 'update', 'delete'
   
-  data          Json
+  data          String     // Changed from Json to String (will store JSON as string)
   
-  status        SyncStatus @default(PENDING)
+  status        String     @default("PENDING") // PENDING, SYNCED, FAILED
   errorMessage  String?
   
   attempts      Int        @default(0)
@@ -315,4 +589,239 @@ model SyncLog {
   @@index([status])
   @@index([createdAt])
   @@map("sync_logs")
+}
+
+// =====================
+// Transfer Management (نظام التوريدات بين الفروع)
+// =====================
+
+model Transfer {
+  id                String          @id @default(uuid())
+  transferNumber    String          @unique
+  
+  fromBranchId      String?
+  fromBranch        Branch?         @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  
+  toBranchId        String
+  toBranch          Branch          @relation("TransferTo", fields: [toBranchId], references: [id])
+  
+  status            String          @default("PENDING") // PENDING, IN_TRANSIT, DELIVERED, CANCELLED
+  
+  items             TransferItem[]
+  productSerials    ProductSerial[]
+  
+  notes             String?
+  
+  // من أرسل (عادة Admin)
+  sentBy            String
+  sentByUser        User            @relation("TransferSentBy", fields: [sentBy], references: [id])
+  sentAt            DateTime        @default(now())
+  
+  // من استلم (Cashier في الفرع)
+  receivedBy        String?
+  receivedByUser    User?           @relation("TransferReceivedBy", fields: [receivedBy], references: [id])
+  receivedAt        DateTime?
+  
+  receiverNotes     String?         // ملاحظات المستلم
+  hasDiscrepancy    Boolean         @default(false) // هل يوجد فروق؟
+  discrepancyType   String?         // SHORTAGE (نقص) أو EXCESS (زيادة)
+  discrepancyNotes  String?         // تفاصيل الفروقات
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([status])
+  @@index([transferNumber])
+  @@map("transfers")
+}
+
+model TransferItem {
+  id                String      @id @default(uuid())
+  
+  transferId        String
+  transfer          Transfer    @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  
+  productId         String?     // null إذا كان منتج جديد
+  product           Product?    @relation(fields: [productId], references: [id])
+  
+  categoryId        String      // الصنف المطلوب
+  category          Category    @relation(fields: [categoryId], references: [id])
+  
+  // التفاصيل المطلوبة من الأدمن
+  attributes        String      // JSON: {"المقاس": "L", "اللون": "أبيض"}
+  quantityRequested Int         // الكمية المطلوبة
+  
+  // تفاصيل الإرسال (من الفرع المرسل)
+  quantitySent      Int?        // الكمية المرسلة فعلياً
+  sentBarcodes      String?     // JSON array: ["123456", "123457", ...] - الباركودات المرسلة
+  unitPrice         Float       @default(0) // سعر التكلفة للوحدة وقت التحويل
+  
+  // تفاصيل الاستلام (من الفرع المستقبل)
+  quantityReceived  Int?        // الكمية المستلمة فعلياً
+  barcodes          String?     // JSON array: ["123456", "123457", ...] - الباركودات المستلمة
+  
+  status            String      @default("PENDING") // PENDING, PARTIAL_SENT, SENT, PARTIAL, RECEIVED
+  notes             String?     // ملاحظات على الصنف
+  
+  // الفروقات على مستوى الصنف
+  hasItemDiscrepancy Boolean     @default(false) // هل فيه فرق في هذا الصنف؟
+  itemDiscrepancyNote String?    // ملاحظة الفرق (مثلاً: "قطعة مفقودة" أو "قطعتين زيادة")
+  
+  createdAt         DateTime    @default(now())
+  
+  @@index([transferId])
+  @@index([productId])
+  @@index([categoryId])
+  @@map("transfer_items")
+}
+
+// =====================
+// Activity Log (تتبع نشاط المستخدمين)
+// =====================
+
+model ActivityLog {
+  id              String      @id @default(uuid())
+  
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  
+  action          String      // LOGIN, LOGOUT, SHIFT_OPEN, SHIFT_CLOSE, SALE, RETURN, TRANSFER_RECEIVE, etc.
+  entity          String?     // sale, product, transfer, etc.
+  entityId        String?
+  
+  description     String      // وصف النشاط
+  metadata        String?     // JSON string للبيانات الإضافية
+  
+  ipAddress       String?
+  userAgent       String?
+  
+  branchId        String?
+  branch          Branch?     @relation(fields: [branchId], references: [id])
+  
+  createdAt       DateTime    @default(now())
+  
+  @@index([userId])
+  @@index([branchId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// =====================
+// Customers Management (العملاء)
+// =====================
+
+model Customer {
+  id              String            @id @default(uuid())
+  name            String
+  phone           String?           @unique
+  address         String?
+  notes           String?
+  isActive        Boolean           @default(true)
+  
+  sales           Sale[]
+  payments        CustomerPayment[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@map("customers")
+}
+
+model CustomerPayment {
+  id              String            @id @default(uuid())
+  
+  customerId      String
+  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  amount          Float
+  paymentMethod   String            // CASH, BANK_TRANSFER, CHECK
+  paymentDate     DateTime          @default(now())
+  
+  referenceNumber String?
+  notes           String?
+  
+  createdBy       String
+  
+  createdAt       DateTime          @default(now())
+  
+  @@index([customerId])
+  @@index([paymentDate])
+  @@map("customer_payments")
+}
+
+// =====================
+// Vault Management (نظام الخزينة)
+// =====================
+
+model VaultTransaction {
+  id                String      @id @default(uuid())
+  
+  branchId          String?
+  branch            Branch?     @relation(fields: [branchId], references: [id])
+  
+  type              String      // CARD_PAYMENT, CASH_DEPOSIT, CASH_WITHDRAWAL, DRAWER_TRANSFER, OPENING_BALANCE, MONEY_TRANSFER_IN, MONEY_TRANSFER_OUT
+  amount            Float
+  
+  // For card payments
+  saleId            String?     // إذا كانت من عملية بيع بالفيزا
+  invoiceNumber     String?
+  
+  // For drawer transfers
+  shiftId           String?     // إذا كانت تحويل من/إلى الدرج
+  
+  // For money transfers
+  moneyTransferId   String?     // إذا كانت تحويل أموال بين فروع
+  
+  description       String
+  notes             String?
+  
+  createdBy         String      // User ID
+  createdAt         DateTime    @default(now())
+  
+  balanceBefore     Float       // الرصيد قبل العملية
+  balanceAfter      Float       // الرصيد بعد العملية
+  
+  @@index([branchId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([saleId])
+  @@index([moneyTransferId])
+  @@map("vault_transactions")
+}
+
+// =====================
+// Money Transfers (تحويلات الأموال بين الفروع والمصنع)
+// =====================
+
+model MoneyTransfer {
+  id                String      @id @default(uuid())
+  
+  fromBranchId      String
+  fromBranch        Branch      @relation("MoneyTransferFrom", fields: [fromBranchId], references: [id])
+  
+  toBranchId        String
+  toBranch          Branch      @relation("MoneyTransferTo", fields: [toBranchId], references: [id])
+  
+  amount            Float
+  
+  status            String      @default("PENDING") // PENDING, CONFIRMED, CANCELLED
+  
+  // Tracking
+  sentBy            String      // Manager who sent
+  sentAt            DateTime    @default(now())
+  
+  confirmedBy       String?     // Admin/Manager who confirmed
+  confirmedAt       DateTime?
+  
+  notes             String?
+  reason            String?     // سبب التحويل
+  
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([status])
+  @@index([sentAt])
+  @@map("money_transfers")
 }

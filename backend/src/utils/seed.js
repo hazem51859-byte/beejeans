@@ -26,21 +26,56 @@ async function seed() {
     console.log('Creating branches...');
     const branch1 = await prisma.branch.create({
       data: {
-        name: 'فرع المعادي',
-        code: 'MAD',
-        address: 'شارع 9، المعادي، القاهرة',
-        phone: '0223456789',
+        name: 'شبرا 1',
+        code: 'SHOBRA1',
+        url: 'https://pos.beejeans.com/SHOBRA1',
+        address: 'شبرا 1',
+        phone: '01000000001',
         city: 'القاهرة'
       }
     });
 
     const branch2 = await prisma.branch.create({
       data: {
-        name: 'فرع مدينة نصر',
-        code: 'NSR',
-        address: 'مدينة نصر، القاهرة',
-        phone: '0224567890',
+        name: 'شبرا النص',
+        code: 'SHOBRA_NOSS',
+        url: 'https://pos.beejeans.com/SHOBRA_NOSS',
+        address: 'شبرا النص',
+        phone: '01000000002',
         city: 'القاهرة'
+      }
+    });
+
+    const branch3 = await prisma.branch.create({
+      data: {
+        name: 'شبرا الكبير',
+        code: 'SHOBRA_KABIR',
+        url: 'https://pos.beejeans.com/SHOBRA_KABIR',
+        address: 'شبرا الكبير',
+        phone: '01000000003',
+        city: 'القاهرة'
+      }
+    });
+
+    const branch4 = await prisma.branch.create({
+      data: {
+        name: 'امبابه الكبير',
+        code: 'IMBABA_KABIR',
+        url: 'https://pos.beejeans.com/IMBABA_KABIR',
+        address: 'امبابه الكبير',
+        phone: '01000000004',
+        city: 'الجيزة'
+      }
+    });
+
+    const branch5 = await prisma.branch.create({
+      data: {
+        name: 'امبابه الصغير',
+        code: 'IMBABA_SAGHIR',
+        url: 'https://pos.beejeans.com/IMBABA_SAGHIR',
+        address: 'امبابه الصغير',
+        phone: '01000000005',
+        city: 'الجيزة'
       }
     });
 
@@ -64,7 +99,7 @@ async function seed() {
         username: 'manager1',
         email: 'manager1@pos.com',
         password: await bcrypt.hash('manager123', 10),
-        fullName: 'مدير فرع المعادي',
+        fullName: 'مدير شبرا 1',
         phone: '01234567891',
         role: 'MANAGER',
         branchId: branch1.id
@@ -76,7 +111,7 @@ async function seed() {
         username: 'cashier1',
         email: 'cashier1@pos.com',
         password: await bcrypt.hash('cashier123', 10),
-        fullName: 'كاشير 1 - المعادي',
+        fullName: 'كاشير 1 - شبرا 1',
         phone: '01234567892',
         role: 'CASHIER',
         branchId: branch1.id
@@ -88,7 +123,7 @@ async function seed() {
         username: 'cashier2',
         email: 'cashier2@pos.com',
         password: await bcrypt.hash('cashier123', 10),
-        fullName: 'كاشير 1 - مدينة نصر',
+        fullName: 'كاشير 1 - شبرا النص',
         phone: '01234567893',
         role: 'CASHIER',
         branchId: branch2.id
@@ -108,7 +143,7 @@ async function seed() {
         size: 'L',
         color: 'أبيض',
         brand: 'Classic',
-        taxRate: 14
+        taxRate: 0
       },
       {
         sku: 'MEN-PANTS-001',
@@ -120,7 +155,7 @@ async function seed() {
         size: '32',
         color: 'أزرق',
         brand: 'Denim Co',
-        taxRate: 14
+        taxRate: 0
       },
       {
         sku: 'WOM-DRESS-001',
@@ -132,7 +167,7 @@ async function seed() {
         size: 'M',
         color: 'أحمر',
         brand: 'Elegance',
-        taxRate: 14
+        taxRate: 0
       },
       {
         sku: 'WOM-BLOUSE-001',
@@ -144,7 +179,7 @@ async function seed() {
         size: 'L',
         color: 'وردي',
         brand: 'Fashion',
-        taxRate: 14
+        taxRate: 0
       },
       {
         sku: 'KID-TSHIRT-001',
@@ -156,7 +191,7 @@ async function seed() {
         size: '8-10',
         color: 'متعدد الألوان',
         brand: 'Kids Fun',
-        taxRate: 14
+        taxRate: 0
       }
     ];
 
@@ -183,6 +218,15 @@ async function seed() {
           minQuantity: 10
         }
       });
+
+      await prisma.inventory.create({
+        data: {
+          productId: product.id,
+          branchId: branch3.id,
+          quantity: Math.floor(Math.random() * 50) + 20,
+          minQuantity: 10
+        }
+      });
     }
 
     console.log('✅ Database seeded successfully!');
@@ -191,13 +235,13 @@ async function seed() {
     console.log('Admin:');
     console.log('  Username: admin');
     console.log('  Password: admin123');
-    console.log('\nManager (فرع المعادي):');
+    console.log('\nManager (شبرا 1):');
     console.log('  Username: manager1');
     console.log('  Password: manager123');
-    console.log('\nCashier (فرع المعادي):');
+    console.log('\nCashier (شبرا 1):');
     console.log('  Username: cashier1');
     console.log('  Password: cashier123');
-    console.log('\nCashier (فرع مدينة نصر):');
+    console.log('\nCashier (شبرا النص):');
     console.log('  Username: cashier2');
     console.log('  Password: cashier123');
     console.log('-----------------------------------\n');

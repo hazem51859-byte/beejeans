@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { DoorOpen, DoorClosed, User, Lock, Store } from 'lucide-react';
 import { shiftAPI, authAPI } from '../services/api';
@@ -8,10 +8,9 @@ import dayjs from 'dayjs';
 
 export default function Settings() {
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('shift');
-  const [openingBalance, setOpeningBalance] = useState('');
   const [closingData, setClosingData] = useState({
-    actualCash: '',
     notes: '',
   });
   const [passwordData, setPasswordData] = useState({
@@ -31,9 +30,9 @@ export default function Settings() {
   // Open shift mutation
   const openShiftMutation = useMutation({
     mutationFn: shiftAPI.open,
-    onSuccess: () => {
-      toast.success('تم فتح الشيفت بنجاح');
-      setOpeningBalance('');
+    onSuccess: (response) => {
+      const openingBalance = response?.data?.data?.openingBalance || 0;
+      toast.success(`تم فتح الشيفت برصيد ${openingBalance.toLocaleString('ar-EG')} ج.م`);
       refetchShift();
     },
     onError: (error) => {
@@ -44,9 +43,11 @@ export default function Settings() {
   // Close shift mutation
   const closeShiftMutation = useMutation({
     mutationFn: ({ id, data }) => shiftAPI.close(id, data),
-    onSuccess: () => {
-      toast.success('تم إغلاق الشيفت بنجاح');
-      setClosingData({ actualCash: '', notes: '' });
+    onSuccess: (response) => {
+      const message = response?.data?.message || 'تم إغلاق الشيفت بنجاح';
+      toast.success(message);
+      setClosingData({ notes: '' });
+      queryClient.invalidateQueries(['current-shift']); // Force refresh
       refetchShift();
     },
     onError: (error) => {
@@ -67,31 +68,23 @@ export default function Settings() {
   });
 
   const handleOpenShift = () => {
-    if (!openingBalance || parseFloat(openingBalance) < 0) {
-      toast.error('الرجاء إدخال رصيد افتتاحي صحيح');
+    if (!window.confirm('هل أنت متأكد من فتح شيفت جديد؟')) {
       return;
     }
 
     openShiftMutation.mutate({
-      branchId: user.branchId,
-      openingBalance: parseFloat(openingBalance),
+      branchId: user.branchId
     });
   };
 
   const handleCloseShift = () => {
-    if (!closingData.actualCash || parseFloat(closingData.actualCash) < 0) {
-      toast.error('الرجاء إدخال الرصيد النقدي الفعلي');
-      return;
-    }
-
-    if (!window.confirm('هل أنت متأكد من إغلاق الشيفت؟ لا يمكن التراجع عن هذا الإجراء')) {
+    if (!window.confirm('هل أنت متأكد من إغلاق الشيفت؟ سيتم حساب المبلغ في الدرج تلقائياً')) {
       return;
     }
 
     closeShiftMutation.mutate({
       id: currentShift.id,
       data: {
-        actualCash: parseFloat(closingData.actualCash),
         notes: closingData.notes,
       },
     });
@@ -199,20 +192,12 @@ export default function Settings() {
                 </h3>
 
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      الرصيد النقدي الفعلي *
-                    </label>
-                    <input
-                      type="number"
-                      value={closingData.actualCash}
-                      onChange={(e) => setClosingData({ ...closingData, actualCash: e.target.value })}
-                      className="input-field"
-                      placeholder="0.00"
-                      step="0.01"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      قم بعد النقود في الكاشير وأدخل المبلغ الفعلي
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 font-medium">
+                      ℹ️ سيتم حساب المبلغ في الدرج تلقائياً:
+                    </p>
+                    <p className="text-sm text-blue-700 mt-2">
+                      الرصيد الافتتاحي ({currentShift.openingBalance} ج.م) + المبيعات النقدية
                     </p>
                   </div>
 
@@ -250,21 +235,12 @@ export default function Settings() {
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    الرصيد الافتتاحي *
-                  </label>
-                  <input
-                    type="number"
-                    value={openingBalance}
-                    onChange={(e) => setOpeningBalance(e.target.value)}
-                    className="input-field"
-                    placeholder="0.00"
-                    step="0.01"
-                    autoFocus
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    المبلغ النقدي الموجود في الكاشير عند بداية الشيفت
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    💡 <strong>ملاحظة:</strong> الرصيد الافتتاحي سيكون تلقائياً = آخر رصيد في الدرج
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    إذا كان هذا أول شيفت اليوم، سيستخدم الرصيد الذي جهزه المانجر من الخزينة
                   </p>
                 </div>
 
@@ -273,7 +249,7 @@ export default function Settings() {
                   disabled={openShiftMutation.isPending}
                   className="btn-primary w-full disabled:opacity-50"
                 >
-                  {openShiftMutation.isPending ? 'جاري الفتح...' : 'فتح الشيفت'}
+                  {openShiftMutation.isPending ? 'جاري الفتح...' : 'فتح شيفت جديد'}
                 </button>
               </div>
             </div>

@@ -12,7 +12,9 @@ router.post('/',
   authorize('ADMIN', 'MANAGER'),
   [
     body('username').notEmpty().withMessage('Username is required'),
-    body('email').isEmail().withMessage('Valid email is required'),
+    body('email')
+      .optional({ nullable: true, checkFalsy: true })
+      .isEmail().withMessage('Valid email is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
     body('fullName').notEmpty().withMessage('Full name is required'),
     body('role').isIn(['ADMIN', 'MANAGER', 'CASHIER']).withMessage('Invalid role')

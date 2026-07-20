@@ -11,28 +11,36 @@ router.use(authenticate);
 
 /**
  * @route   POST /api/v1/shifts/open
- * @desc    Open new shift
+ * @desc    Open new shift (with default opening balance)
  * @access  Private (CASHIER, MANAGER)
  */
 router.post('/open',
   authorize('CASHIER', 'MANAGER', 'ADMIN'),
   [
-    body('branchId').notEmpty().withMessage('Branch ID is required'),
-    body('openingBalance').isNumeric().withMessage('Opening balance must be a number')
+    body('branchId').notEmpty().withMessage('Branch ID is required')
   ],
   validate,
   shiftController.openShift
 );
 
 /**
+ * @route   GET /api/v1/shifts/branch/:branchId/cashiers
+ * @desc    Get available cashiers for shift
+ * @access  Private (MANAGER, ADMIN)
+ */
+router.get('/branch/:branchId/cashiers',
+  authorize('MANAGER', 'ADMIN'),
+  shiftController.getAvailableCashiers
+);
+
+/**
  * @route   POST /api/v1/shifts/:id/close
- * @desc    Close shift
+ * @desc    Close shift (automatic calculation)
  * @access  Private (CASHIER, MANAGER)
  */
 router.post('/:id/close',
   authorize('CASHIER', 'MANAGER', 'ADMIN'),
   [
-    body('actualCash').isNumeric().withMessage('Actual cash must be a number'),
     body('notes').optional().isString()
   ],
   validate,

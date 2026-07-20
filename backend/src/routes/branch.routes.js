@@ -6,6 +6,11 @@ const validate = require('../middleware/validator');
 
 const router = express.Router();
 
+// GET branches - Public (no auth needed for login pages)
+router.get('/', branchController.getBranches);
+router.get('/:id', branchController.getBranchById);
+
+// All other routes require authentication
 router.use(authenticate);
 
 router.post('/',
@@ -17,9 +22,6 @@ router.post('/',
   validate,
   branchController.createBranch
 );
-
-router.get('/', branchController.getBranches);
-router.get('/:id', branchController.getBranchById);
 
 router.put('/:id',
   authorize('ADMIN'),

@@ -107,7 +107,9 @@ const checkBranchAccess = (req, res, next) => {
 };
 
 module.exports = {
+  authenticateToken: authenticate,
   authenticate,
+  authorizeRoles: authorize,
   authorize,
   checkBranchAccess
 };

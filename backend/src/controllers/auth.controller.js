@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/database');
+const { logActivity, ActivityActions } = require('../utils/activityLogger');
 
 /**
  * Generate JWT tokens
@@ -26,7 +27,7 @@ const generateTokens = (userId) => {
  */
 exports.login = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, branchCode } = req.body;
 
     // Find user
     const user = await prisma.user.findUnique({
@@ -36,7 +37,8 @@ exports.login = async (req, res, next) => {
           select: {
             id: true,
             name: true,
-            code: true
+            code: true,
+            url: true
           }
         }
       }
@@ -57,6 +59,16 @@ exports.login = async (req, res, next) => {
       });
     }
 
+    // Verify branch code (if user is not admin)
+    if (user.role !== 'ADMIN' && branchCode) {
+      if (!user.branch || user.branch.code !== branchCode) {
+        return res.status(403).json({
+          success: false,
+          message: 'You are not authorized to access this branch'
+        });
+      }
+    }
+
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
@@ -69,6 +81,16 @@ exports.login = async (req, res, next) => {
 
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user.id);
+
+    // Log activity
+    await logActivity({
+      userId: user.id,
+      action: ActivityActions.LOGIN,
+      description: `${user.fullName} logged in`,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent'),
+      branchId: user.branchId
+    });
 
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
@@ -158,6 +180,7 @@ exports.getCurrentUser = async (req, res, next) => {
             id: true,
             name: true,
             code: true,
+            url: true,
             address: true,
             city: true
           }

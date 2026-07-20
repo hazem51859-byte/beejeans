@@ -131,44 +131,63 @@ exports.getTopProducts = async (req, res, next) => {
     const { branchId } = req.params;
     const { limit = 10, startDate, endDate } = req.query;
 
-    const where = {};
+    // Build where clause for sale
+    const saleWhere = {};
+    // If branchId is 'all', don't filter by branch (admin sees all branches)
+    if (branchId && branchId !== 'all') {
+      saleWhere.branchId = branchId;
+    }
     if (startDate || endDate) {
-      where.sale = {
-        createdAt: {}
-      };
-      if (startDate) where.sale.createdAt.gte = new Date(startDate);
-      if (endDate) where.sale.createdAt.lte = new Date(endDate);
+      saleWhere.createdAt = {};
+      if (startDate) saleWhere.createdAt.gte = new Date(startDate);
+      if (endDate) saleWhere.createdAt.lte = new Date(endDate);
     }
-    if (branchId) {
-      where.sale = { ...where.sale, branchId };
-    }
+    saleWhere.status = 'COMPLETED';
 
-    const topProducts = await prisma.saleItem.groupBy({
-      by: ['productId'],
-      where,
-      _sum: { quantity: true, total: true },
-      _count: true,
-      orderBy: { _sum: { total: 'desc' } },
-      take: parseInt(limit)
+    // Get all sale items with filters
+    const saleItems = await prisma.saleItem.findMany({
+      where: {
+        sale: saleWhere
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            color: true,
+            sellingPrice: true
+          }
+        }
+      }
     });
 
-    // Get product details
-    const productsWithDetails = await Promise.all(
-      topProducts.map(async (item) => {
-        const product = await prisma.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, name: true, sku: true, sellingPrice: true }
-        });
-        return {
-          ...product,
-          totalQuantity: item._sum.quantity,
-          totalRevenue: item._sum.total,
-          salesCount: item._count
+    // Group by product and calculate totals
+    const productMap = {};
+    saleItems.forEach(item => {
+      if (!item.product) return;
+      
+      const productId = item.productId;
+      if (!productMap[productId]) {
+        productMap[productId] = {
+          ...item.product,
+          totalQuantity: 0,
+          totalRevenue: 0,
+          salesCount: 0
         };
-      })
-    );
+      }
+      
+      productMap[productId].totalQuantity += item.quantity;
+      productMap[productId].totalRevenue += item.total;
+      productMap[productId].salesCount += 1;
+    });
 
-    res.json({ success: true, data: productsWithDetails });
+    // Convert to array and sort
+    const topProducts = Object.values(productMap)
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .slice(0, parseInt(limit));
+
+    res.json({ success: true, data: topProducts });
   } catch (error) {
     next(error);
   }
@@ -208,6 +227,127 @@ exports.getInventoryStatus = async (req, res, next) => {
         lowStockItems: lowStock,
         outOfStockItems: outOfStock
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/**
+ * Get branch transfers report (for monthly report)
+ */
+exports.getBranchTransfersReport = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const start = startDate ? new Date(startDate) : dayjs().startOf('month').toDate();
+    const end = endDate ? new Date(endDate) : dayjs().endOf('month').toDate();
+
+    // Get all active branches except main warehouse
+    const branches = await prisma.branch.findMany({
+      where: {
+        isActive: true,
+        code: { not: 'MAIN' }
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        vaultBalance: true,
+        cardVaultBalance: true
+      }
+    });
+
+    const branchReports = await Promise.all(
+      branches.map(async (branch) => {
+        // Get transfers TO this branch (any time, not just in period)
+        const transfersReceived = await prisma.transfer.findMany({
+          where: {
+            toBranchId: branch.id,
+            status: { in: ['DELIVERED', 'RECEIVED', 'COMPLETED'] }
+          },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    costPrice: true,
+                    name: true
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Calculate total transferred value (cost price)
+        const totalTransferred = transfersReceived.reduce((sum, transfer) => {
+          const transferValue = transfer.items.reduce((itemSum, item) => {
+            // استخدم unitPrice من TransferItem (السعر المسجل وقت التحويل)
+            // أو costPrice من المنتج إذا كان موجود
+            const price = parseFloat(item.unitPrice || item.product?.costPrice || 0);
+            // استخدم الكمية المستلمة أو المرسلة أو المطلوبة
+            const quantity = parseInt(item.quantityReceived || item.quantitySent || item.quantityRequested || 0);
+            return itemSum + (price * quantity);
+          }, 0);
+          return sum + transferValue;
+        }, 0);
+
+        // Get sales from this branch in the period
+        const sales = await prisma.sale.findMany({
+          where: {
+            branchId: branch.id,
+            status: 'COMPLETED',
+            createdAt: {
+              gte: start,
+              lte: end
+            }
+          },
+          include: {
+            items: {
+              include: {
+                product: true
+              }
+            }
+          }
+        });
+
+        // Calculate revenue and profit
+        const salesCount = sales.length;
+        const revenue = sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+        
+        // Calculate cost and profit
+        const costOfSales = sales.reduce((sum, sale) => {
+          return sum + (sale.items?.reduce((itemSum, item) => {
+            const costPrice = parseFloat(item.product?.costPrice || 0);
+            const quantity = parseInt(item.quantity || 0);
+            return itemSum + (costPrice * quantity);
+          }, 0) || 0);
+        }, 0);
+        
+        const profit = revenue - costOfSales;
+
+        return {
+          branch: {
+            id: branch.id,
+            name: branch.name,
+            code: branch.code
+          },
+          totalTransferred, // قيمة البضاعة المحولة
+          salesCount,       // عدد الفواتير
+          revenue,          // الإيرادات (قيمة المبيعات)
+          costOfSales,      // تكلفة المبيعات
+          profit,           // المكسب
+          vaultBalance: branch.vaultBalance + (branch.cardVaultBalance || 0) // رصيد الخزنة الحالي
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: branchReports
     });
   } catch (error) {
     next(error);

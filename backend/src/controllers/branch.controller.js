@@ -1,8 +1,20 @@
 const prisma = require('../config/database');
+const { logActivity, ActivityActions } = require('../utils/activityLogger');
 
 exports.createBranch = async (req, res, next) => {
   try {
     const branch = await prisma.branch.create({ data: req.body });
+    
+    // Log activity
+    await logActivity({
+      userId: req.user.id,
+      action: ActivityActions.BRANCH_CREATE,
+      entity: 'branch',
+      entityId: branch.id,
+      description: `Branch created: ${branch.name}`,
+      metadata: { branchCode: branch.code }
+    });
+    
     res.status(201).json({ success: true, data: branch });
   } catch (error) {
     next(error);

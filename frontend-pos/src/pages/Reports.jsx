@@ -13,20 +13,23 @@ export default function Reports() {
   });
 
   const { data: salesSummary } = useQuery({
-    queryKey: ['sales-summary', dateRange],
+    queryKey: ['sales-summary', dateRange, user?.role],
     queryFn: () => reportAPI.getSalesSummary({
-      branchId: user?.branchId,
+      branchId: user?.role === 'ADMIN' ? undefined : user?.branchId,
       ...dateRange,
     }),
   });
 
   const { data: topProducts } = useQuery({
     queryKey: ['top-products', user?.branchId, dateRange],
-    queryFn: () => reportAPI.getTopProducts(user?.branchId, {
-      limit: 10,
-      ...dateRange,
-    }),
-    enabled: !!user?.branchId,
+    queryFn: () => reportAPI.getTopProducts(
+      user?.role === 'ADMIN' ? 'all' : user?.branchId, 
+      {
+        limit: 10,
+        ...dateRange,
+      }
+    ),
+    enabled: !!user?.branchId || user?.role === 'ADMIN',
   });
 
   const summary = salesSummary?.data?.data;
@@ -67,7 +70,7 @@ export default function Reports() {
 
       {/* Summary Stats */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card">
             <p className="text-sm text-gray-600">إجمالي المبيعات</p>
             <p className="text-2xl font-bold text-primary-600 mt-2">
@@ -84,12 +87,6 @@ export default function Reports() {
             <p className="text-sm text-gray-600">متوسط قيمة البيع</p>
             <p className="text-2xl font-bold text-gray-800 mt-2">
               {summary.averageSale?.toFixed(2)} جنيه
-            </p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600">إجمالي الضريبة</p>
-            <p className="text-2xl font-bold text-gray-800 mt-2">
-              {summary.totalTax?.toFixed(2)} جنيه
             </p>
           </div>
         </div>
@@ -110,7 +107,11 @@ export default function Reports() {
                   </div>
                   <div>
                     <p className="font-medium">{product.name}</p>
-                    <p className="text-sm text-gray-500">{product.sku}</p>
+                    {product.color && (
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                        🎨 {product.color}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-left">

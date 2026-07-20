@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مسح البيانات المحفوظة</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .success {
+            background: #48bb78;
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            margin-top: 20px;
+            display: none;
+        }
+        .links {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #eee;
+        }
+        .links a {
+            display: block;
+            padding: 12px;
+            margin: 10px 0;
+            background: #f7fafc;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .links a:hover {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🧹 مسح البيانات المحفوظة</h1>
+        <p>اضغط على الزر للمسح الكامل لجميع البيانات المحفوظة في المتصفح</p>
+        
+        <button onclick="clearStorage()">مسح كل البيانات</button>
+        
+        <div class="success" id="success">
+            ✅ تم مسح كل البيانات بنجاح!
+        </div>
+
+        <div class="links">
+            <h3 style="color: #333; margin-bottom: 15px;">الانتقال إلى:</h3>
+            <a href="/admin-login">🔐 صفحة الأدمن</a>
+            <a href="/branch/SHOBRA1">🏪 فرع شبرا 1</a>
+            <a href="/branch/SHOBRA_NOSS">🏪 فرع شبرا النص</a>
+            <a href="/branch/SHOBRA_KABIR">🏪 فرع شبرا الكبير</a>
+            <a href="/branch/IMBABA_KABIR">🏪 فرع امبابه الكبير</a>
+            <a href="/branch/IMBABA_SAGHIR">🏪 فرع امبابه الصغير</a>
+        </div>
+    </div>
+
+    <script>
+        function clearStorage() {
+            // مسح localStorage
+            localStorage.clear();
+            
+            // مسح sessionStorage
+            sessionStorage.clear();
+            
+            // مسح cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            
+            // إظهار رسالة النجاح
+            document.getElementById('success').style.display = 'block';
+            
+            // إعادة تحميل الصفحة بعد ثانية
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

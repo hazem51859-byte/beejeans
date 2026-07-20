@@ -50,8 +50,8 @@ app.set('io', io);
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || '*',
-  credentials: true
+  origin: process.env.CORS_ORIGIN === '*' ? '*' : (process.env.CORS_ORIGIN?.split(',') || '*'),
+  credentials: process.env.CORS_ORIGIN !== '*'
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

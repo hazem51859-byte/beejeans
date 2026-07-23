@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const transferController = require('../controllers/transfer.controller.v2');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize} = require('../middleware/auth');
 
 // All routes require authentication
 router.use(authenticate);

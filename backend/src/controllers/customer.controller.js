@@ -384,7 +384,7 @@ exports.createCustomerSale = async (req, res) => {
 exports.recordCustomerPayment = async (req, res) => {
   try {
     const { id: customerId } = req.params;
-    const { amount, paymentMethod = 'CASH', referenceNumber, notes } = req.body;
+    const { amount, paymentMethod = 'CASH', referenceNumber, notes, invoiceAllocations } = req.body;
     const createdBy = req.user.id;
     
     const customer = await prisma.customer.findUnique({
@@ -397,26 +397,111 @@ exports.recordCustomerPayment = async (req, res) => {
       });
     }
     
-    const payment = await prisma.customerPayment.create({
-      data: {
-        customerId,
-        amount: parseFloat(amount),
-        paymentMethod,
-        referenceNumber: referenceNumber || null,
-        notes: notes || null,
-        createdBy
-      }
-    });
+    // إذا كان في توزيع على الفواتير، نستخدمه
+    if (invoiceAllocations && invoiceAllocations.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        // تسجيل الدفعة الرئيسية
+        const payment = await tx.customerPayment.create({
+          data: {
+            customerId,
+            amount: parseFloat(amount),
+            paymentMethod,
+            referenceNumber: referenceNumber || null,
+            notes: notes || null,
+            createdBy
+          }
+        });
+        
+        // توزيع المبلغ على الفواتير
+        for (const allocation of invoiceAllocations) {
+          const sale = await tx.sale.findUnique({
+            where: { id: allocation.saleId }
+          });
+          
+          if (!sale) continue;
+          
+          // تحديث المبلغ المدفوع في الفاتورة
+          await tx.sale.update({
+            where: { id: allocation.saleId },
+            data: {
+              amountPaid: sale.amountPaid + parseFloat(allocation.amount)
+            }
+          });
+        }
+      });
+    } else {
+      // الطريقة القديمة: دفعة عامة بدون توزيع
+      await prisma.customerPayment.create({
+        data: {
+          customerId,
+          amount: parseFloat(amount),
+          paymentMethod,
+          referenceNumber: referenceNumber || null,
+          notes: notes || null,
+          createdBy
+        }
+      });
+    }
     
     res.status(201).json({
       success: true,
-      data: payment
+      message: 'تم تسجيل الدفعة بنجاح'
     });
   } catch (error) {
     console.error('Error recording customer payment:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to record customer payment'
+    });
+  }
+};
+
+
+// Get single customer invoice for printing
+exports.getCustomerInvoice = async (req, res) => {
+  try {
+    const { saleId } = req.params;
+    
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        },
+        customer: true,
+        cashier: {
+          select: {
+            name: true,
+            username: true
+          }
+        },
+        branch: {
+          select: {
+            name: true,
+            code: true
+          }
+        }
+      }
+    });
+    
+    if (!sale) {
+      return res.status(404).json({
+        success: false,
+        error: 'Invoice not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: sale
+    });
+  } catch (error) {
+    console.error('Error fetching customer invoice:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch invoice'
     });
   }
 };

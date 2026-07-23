@@ -1,18 +1,42 @@
 const express = require('express');
 const router = express.Router();
 const returnsController = require('../controllers/returns.controller');
-const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
-// All routes require authentication
-router.use(authenticateToken);
+// جميع المسارات تحتاج authentication
+router.use(authenticate);
 
-// Get returns summary (Admin/Manager only)
-router.get('/summary', authorizeRoles('ADMIN', 'MANAGER'), returnsController.getReturnsSummary);
+// إنشاء مرتجع جديد (CASHIER, MANAGER, ADMIN)
+router.post(
+  '/',
+  checkPermission(['CREATE_SALE']), // نفس صلاحية البيع
+  returnsController.createReturn
+);
 
-// Get all returns (Admin/Manager only)
-router.get('/', authorizeRoles('ADMIN', 'MANAGER'), returnsController.getAllReturns);
+// الحصول على جميع المرتجعات
+router.get(
+  '/',
+  returnsController.getAllReturns
+);
 
-// Get return by ID (Admin/Manager only)
-router.get('/:id', authorizeRoles('ADMIN', 'MANAGER'), returnsController.getReturnById);
+// الحصول على إحصائيات المرتجعات
+router.get(
+  '/stats',
+  returnsController.getReturnsStats
+);
+
+// الحصول على مرتجع واحد
+router.get(
+  '/:id',
+  returnsController.getReturnById
+);
+
+// مراجعة المانجر
+router.post(
+  '/:id/manager-review',
+  checkPermission(['MANAGE_RETURNS']),
+  returnsController.managerReview
+);
 
 module.exports = router;

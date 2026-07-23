@@ -282,7 +282,9 @@ exports.createSale = async (req, res, next) => {
         unitPrice,
         discount: 0, // لا توجد خصومات
         taxRate: 0,  // لا توجد ضرائب
-        total: itemTotal
+        total: itemTotal,
+        size: item.size || null,
+        color: item.color || null
       });
     }
 

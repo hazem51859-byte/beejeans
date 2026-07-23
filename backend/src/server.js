@@ -28,6 +28,8 @@ const customerRoutes = require('./routes/customer.routes');
 const cashierRoutes = require('./routes/cashier.routes');
 const serialRoutes = require('./routes/serial.routes');
 const vaultRoutes = require('./routes/vault.routes');
+const fabricRoutes = require('./routes/fabric.routes');
+const manufacturingRoutes = require('./routes/manufacturing.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { rateLimiter } = require('./middleware/rateLimiter');
 const initMainBranch = require('./utils/initMainBranch');
@@ -89,6 +91,8 @@ app.use(`${API_PREFIX}/customers`, customerRoutes);
 app.use(`${API_PREFIX}/cashiers`, cashierRoutes);
 app.use(`${API_PREFIX}/serials`, serialRoutes);
 app.use(`${API_PREFIX}/vault`, vaultRoutes);
+app.use(`${API_PREFIX}/fabric`, fabricRoutes);
+app.use(`${API_PREFIX}/production`, manufacturingRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

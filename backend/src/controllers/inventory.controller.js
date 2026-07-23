@@ -19,17 +19,62 @@ exports.getInventoryByBranch = async (req, res, next) => {
 
     const total = await prisma.inventory.count({ where: { branchId } });
     
-    // إخفاء سعر الشراء عن الكاشير
-    const userRole = req.user?.role;
-    const sanitizedInventory = inventory.map(inv => {
-      if (userRole === 'CASHIER' && inv.product) {
-        const { costPrice, ...productWithoutCost } = inv.product;
-        return {
-          ...inv,
-          product: productWithoutCost
+    // حساب الكميات المنتظرة (في التوريدات المعلقة أو في الطريق)
+    const pendingTransfers = await prisma.transferItem.findMany({
+      where: {
+        transfer: {
+          fromBranchId: branchId,
+          status: {
+            in: ['PENDING', 'IN_TRANSIT']
+          }
+        }
+      },
+      include: {
+        product: true,
+        transfer: {
+          include: {
+            toBranch: true
+          }
+        }
+      }
+    });
+    
+    // تجميع الكميات المنتظرة حسب المنتج
+    const pendingByProduct = {};
+    pendingTransfers.forEach(item => {
+      if (!pendingByProduct[item.productId]) {
+        pendingByProduct[item.productId] = {
+          quantity: 0,
+          transfers: []
         };
       }
-      return inv;
+      pendingByProduct[item.productId].quantity += item.quantityRequested;
+      pendingByProduct[item.productId].transfers.push({
+        transferNumber: item.transfer.transferNumber,
+        toBranch: item.transfer.toBranch?.name,
+        quantity: item.quantityRequested
+      });
+    });
+    
+    // إخفاء سعر الشراء عن الكاشير وإضافة الكميات المنتظرة
+    const userRole = req.user?.role;
+    const sanitizedInventory = inventory.map(inv => {
+      const pendingData = pendingByProduct[inv.productId] || { quantity: 0, transfers: [] };
+      const availableQuantity = inv.quantity - pendingData.quantity;
+      
+      let productData = inv.product;
+      if (userRole === 'CASHIER' && inv.product) {
+        const { costPrice, ...productWithoutCost } = inv.product;
+        productData = productWithoutCost;
+      }
+      
+      return {
+        ...inv,
+        product: productData,
+        pendingQuantity: pendingData.quantity,
+        availableQuantity: Math.max(0, availableQuantity),
+        pendingTransfers: pendingData.transfers
+      };
     });
 
     res.json({

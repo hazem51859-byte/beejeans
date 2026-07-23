@@ -70,3 +70,22 @@ exports.checkProductEditAccess = (req, res, next) => {
     error: 'فقط المدير يمكنه تعديل المنتجات'
   });
 };
+
+// Check if user has specific role
+exports.checkPermission = (allowedRoles) => {
+  return (req, res, next) => {
+    const user = req.user;
+    
+    // Convert single role to array
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+    
+    if (roles.includes(user.role)) {
+      return next();
+    }
+    
+    return res.status(403).json({
+      success: false,
+      message: 'غير مصرح لك بالوصول'
+    });
+  };
+};

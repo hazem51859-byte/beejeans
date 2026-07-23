@@ -9,24 +9,34 @@ exports.getDailyReport = async (req, res, next) => {
     const startOfDay = dayjs(date).startOf('day').toDate();
     const endOfDay = dayjs(date).endOf('day').toDate();
 
+    // Build where clause - if branchId is null or 'null', get all branches
+    const where = {
+      createdAt: { gte: startOfDay, lte: endOfDay },
+      status: 'COMPLETED'
+    };
+    
+    // Only filter by branch if branchId is provided and not 'null' string
+    if (branchId && branchId !== 'null') {
+      where.branchId = branchId;
+    }
+
+    // حساب المبيعات - نستخدم amountPaid مش total عشان فواتير العملاء
     const sales = await prisma.sale.aggregate({
-      where: {
-        branchId,
-        createdAt: { gte: startOfDay, lte: endOfDay },
-        status: 'COMPLETED'
+      where,
+      _sum: { 
+        amountPaid: true,  // المبلغ المدفوع فعلياً
+        total: true,       // الإجمالي الكلي
+        taxAmount: true, 
+        discountAmount: true 
       },
-      _sum: { total: true, taxAmount: true, discountAmount: true },
       _count: true
     });
 
+    // Payment breakdown بس للمبالغ المدفوعة
     const paymentBreakdown = await prisma.sale.groupBy({
       by: ['paymentMethod'],
-      where: {
-        branchId,
-        createdAt: { gte: startOfDay, lte: endOfDay },
-        status: 'COMPLETED'
-      },
-      _sum: { total: true },
+      where,
+      _sum: { amountPaid: true },  // المدفوع فقط
       _count: true
     });
 
@@ -34,7 +44,8 @@ exports.getDailyReport = async (req, res, next) => {
       success: true,
       data: {
         date,
-        totalSales: sales._sum.total || 0,
+        totalSales: sales._sum.amountPaid || 0,  // المدفوع فعلياً
+        totalRevenue: sales._sum.total || 0,     // الإجمالي للمعلومات
         totalTax: sales._sum.taxAmount || 0,
         totalDiscount: sales._sum.discountAmount || 0,
         transactionCount: sales._count,
@@ -285,11 +296,10 @@ exports.getBranchTransfersReport = async (req, res, next) => {
         // Calculate total transferred value (cost price)
         const totalTransferred = transfersReceived.reduce((sum, transfer) => {
           const transferValue = transfer.items.reduce((itemSum, item) => {
-            // استخدم unitPrice من TransferItem (السعر المسجل وقت التحويل)
-            // أو costPrice من المنتج إذا كان موجود
-            const price = parseFloat(item.unitPrice || item.product?.costPrice || 0);
-            // استخدم الكمية المستلمة أو المرسلة أو المطلوبة
-            const quantity = parseInt(item.quantityReceived || item.quantitySent || item.quantityRequested || 0);
+            // استخدم costPrice من المنتج
+            const price = parseFloat(item.product?.costPrice || 0);
+            // استخدم الكمية المستلمة أو المطلوبة
+            const quantity = parseInt(item.quantityReceived || item.quantityRequested || 0);
             return itemSum + (price * quantity);
           }, 0);
           return sum + transferValue;
@@ -316,7 +326,10 @@ exports.getBranchTransfersReport = async (req, res, next) => {
 
         // Calculate revenue and profit
         const salesCount = sales.length;
-        const revenue = sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+        
+        // Revenue = المبلغ المدفوع فقط (مش الإجمالي)
+        const revenue = sales.reduce((sum, sale) => sum + (sale.amountPaid || 0), 0);
+        const totalSalesValue = sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
         
         // Calculate cost and profit
         const costOfSales = sales.reduce((sum, sale) => {
@@ -337,7 +350,8 @@ exports.getBranchTransfersReport = async (req, res, next) => {
           },
           totalTransferred, // قيمة البضاعة المحولة
           salesCount,       // عدد الفواتير
-          revenue,          // الإيرادات (قيمة المبيعات)
+          revenue,          // الإيرادات (المبلغ المدفوع فقط)
+          totalSalesValue,  // إجمالي المبيعات (للمعلومات)
           costOfSales,      // تكلفة المبيعات
           profit,           // المكسب
           vaultBalance: branch.vaultBalance + (branch.cardVaultBalance || 0) // رصيد الخزنة الحالي

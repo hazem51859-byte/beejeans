@@ -2,8 +2,14 @@ const prisma = require('../config/database');
 
 exports.createProduct = async (req, res, next) => {
   try {
+    // Remove categoryId if it's empty or null
+    const data = { ...req.body };
+    if (!data.categoryId) {
+      delete data.categoryId;
+    }
+    
     const product = await prisma.product.create({
-      data: req.body,
+      data,
       include: { category: true }
     });
     res.status(201).json({ success: true, data: product });
@@ -108,9 +114,15 @@ exports.getProductById = async (req, res, next) => {
 
 exports.updateProduct = async (req, res, next) => {
   try {
+    // Remove categoryId if it's empty or null
+    const data = { ...req.body };
+    if (!data.categoryId) {
+      delete data.categoryId;
+    }
+    
     const product = await prisma.product.update({
       where: { id: req.params.id },
-      data: req.body,
+      data,
       include: { category: true }
     });
     res.json({ success: true, data: product });

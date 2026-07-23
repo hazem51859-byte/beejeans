@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "postgresql://postgres:Zoma.54559@localhost:5432/bee_jeans_pos?schema=public"
 }
 
 // =====================
@@ -31,6 +31,8 @@ model User {
   transfersSent     Transfer[]  @relation("TransferSentBy")
   transfersReceived Transfer[]  @relation("TransferReceivedBy")
   activityLogs      ActivityLog[]
+  returnsCreated    Return[]      @relation("ReturnCreator")
+  returnsManagerReviewed Return[] @relation("ReturnManagerReviewer")
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -71,6 +73,7 @@ model Branch {
   vaultTransactions VaultTransaction[]
   moneyTransfersFrom MoneyTransfer[] @relation("MoneyTransferFrom")
   moneyTransfersTo   MoneyTransfer[] @relation("MoneyTransferTo")
+  returns           Return[]
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -115,7 +118,6 @@ model Category {
   lastSerialUsed      Int?      // آخر رقم سيريال تم استخدامه
   
   products      Product[]
-  transferItems TransferItem[]
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -125,20 +127,29 @@ model Category {
 
 model Product {
   id            String        @id @default(uuid())
-  sku           String        @unique
-  barcode       String?       @unique // السيريال المقروء من الريدر
+  sku           String        @unique // كود المنتج الثابت للباركود
+  barcode       String?       @unique // الباركود (نفس الـ SKU لكل القطع من نفس النوع)
   name          String
   description   String?
   
-  categoryId    String
-  category      Category      @relation(fields: [categoryId], references: [id])
+  categoryId    String?
+  category      Category?     @relation(fields: [categoryId], references: [id])
   
   // التفاصيل الإضافية حسب القالب (JSON string)
   // مثال: {"المقاس": "L", "اللون": "أبيض", "النوع": "جينز"}
   attributes    String?
   
-  costPrice     Float         // سعر الشراء - يراه الأدمن فقط
-  sellingPrice  Float         // سعر البيع - يراه الجميع
+  costPrice     Float         @default(0) // سعر التكلفة - يتحسب تلقائياً (قماش + تصنيع + غسيل)
+  sellingPrice  Float         @default(0) // سعر البيع - قابل للتعديل
+  
+  // تفاصيل التكلفة (للشفافية)
+  fabricCost        Float?    @default(0) // تكلفة القماش للقطعة
+  fabricMetersUsed  Float?    @default(0) // إجمالي الأمتار المستخدمة لكل القطع المنتجة
+  manufacturingCost Float?    @default(0) // تكلفة التصنيع للقطعة
+  washingCost       Float?    @default(0) // تكلفة الغسيل للقطعة
+  
+  // Tracking للدورة الإنتاجية
+  totalPiecesProduced Int     @default(0) // إجمالي القطع المنتجة
   
   size          String?
   color         String?
@@ -148,28 +159,25 @@ model Product {
   
   reorderLevel  Int           @default(10)
   
-  status        String        @default("ACTIVE") // ACTIVE, INACTIVE, OUT_OF_STOCK
+  status        String        @default("DRAFT") // DRAFT, ACTIVE, INACTIVE
   
   imageUrl      String?
-  
-  // Serial tracking
-  serialNumber  String?       @unique // السيريال الفريد للمنتج
-  registeredBy  String?       // من سجل السيريال
-  registeredAt  DateTime?     // متى تم التسجيل
   
   inventory     Inventory[]
   saleItems     SaleItem[]
   purchaseItems PurchaseItem[]
   transferItems TransferItem[]
   productSerials ProductSerial[]
+  manufacturingOrders ManufacturingOrder[]
+  returnItems   ReturnItem[]
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   
   @@index([sku])
   @@index([barcode])
-  @@index([serialNumber])
   @@index([categoryId])
+  @@index([status])
   @@map("products")
 }
 
@@ -328,6 +336,7 @@ model Sale {
   notes             String?
   
   items             SaleItem[]
+  returns           Return[]
   
   syncedAt          DateTime?
   
@@ -353,6 +362,7 @@ model SaleItem {
   
   serialNumber  String?  // السيريال المستخدم في البيع
   size          String?  // المقاس المختار
+  color         String?  // اللون المختار
   
   quantity      Int
   unitPrice     Float    // Changed from Decimal to Float
@@ -427,6 +437,9 @@ model Supplier {
   email           String?
   address         String?
   
+  // نوع المورد
+  type            String      // FABRIC (قماش), MANUFACTURING (تصنيع), WASHING (غسيل)
+  
   // الحسابات
   totalPurchases  Float       @default(0) // إجمالي المشتريات
   totalPaid       Float       @default(0) // إجمالي المدفوع
@@ -437,10 +450,14 @@ model Supplier {
   
   purchases       Purchase[]
   payments        SupplierPayment[]
+  fabricPurchases FabricPurchase[]
+  manufacturingOrders ManufacturingOrder[]
+  washingOrders   WashingOrder[]
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   
+  @@index([type])
   @@map("suppliers")
 }
 
@@ -643,37 +660,24 @@ model TransferItem {
   transferId        String
   transfer          Transfer    @relation(fields: [transferId], references: [id], onDelete: Cascade)
   
-  productId         String?     // null إذا كان منتج جديد
-  product           Product?    @relation(fields: [productId], references: [id])
+  productId         String      // المنتج من Product Master
+  product           Product     @relation(fields: [productId], references: [id])
   
-  categoryId        String      // الصنف المطلوب
-  category          Category    @relation(fields: [categoryId], references: [id])
-  
-  // التفاصيل المطلوبة من الأدمن
-  attributes        String      // JSON: {"المقاس": "L", "اللون": "أبيض"}
+  // الكميات
   quantityRequested Int         // الكمية المطلوبة
-  
-  // تفاصيل الإرسال (من الفرع المرسل)
-  quantitySent      Int?        // الكمية المرسلة فعلياً
-  sentBarcodes      String?     // JSON array: ["123456", "123457", ...] - الباركودات المرسلة
-  unitPrice         Float       @default(0) // سعر التكلفة للوحدة وقت التحويل
-  
-  // تفاصيل الاستلام (من الفرع المستقبل)
   quantityReceived  Int?        // الكمية المستلمة فعلياً
-  barcodes          String?     // JSON array: ["123456", "123457", ...] - الباركودات المستلمة
   
-  status            String      @default("PENDING") // PENDING, PARTIAL_SENT, SENT, PARTIAL, RECEIVED
-  notes             String?     // ملاحظات على الصنف
+  // حالة العنصر
+  status            String      @default("PENDING") // PENDING, DELIVERED, CANCELLED
   
-  // الفروقات على مستوى الصنف
-  hasItemDiscrepancy Boolean     @default(false) // هل فيه فرق في هذا الصنف؟
-  itemDiscrepancyNote String?    // ملاحظة الفرق (مثلاً: "قطعة مفقودة" أو "قطعتين زيادة")
+  // ملاحظات
+  notes             String?
   
   createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   
   @@index([transferId])
   @@index([productId])
-  @@index([categoryId])
   @@map("transfer_items")
 }
 
@@ -824,4 +828,274 @@ model MoneyTransfer {
   @@index([status])
   @@index([sentAt])
   @@map("money_transfers")
+}
+
+// =====================
+// Fabric Management (إدارة القماش)
+// =====================
+
+// أنواع الخامات
+model FabricType {
+  id              String              @id @default(uuid())
+  name            String              @unique // اسم الخامة (مثلاً: قطن، جينز، بوليستر)
+  pricePerMeter   Float               // سعر المتر
+  description     String?
+  isActive        Boolean             @default(true)
+  
+  fabricPurchases FabricPurchase[]
+  fabricStock     FabricStock[]
+  manufacturingOrders ManufacturingOrder[]
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  
+  @@map("fabric_types")
+}
+
+// مشتريات القماش من الموردين
+model FabricPurchase {
+  id              String      @id @default(uuid())
+  invoiceNumber   String      @unique
+  
+  supplierId      String
+  supplier        Supplier    @relation(fields: [supplierId], references: [id])
+  
+  fabricTypeId    String
+  fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id])
+  
+  meters          Float       // عدد الأمتار المشتراة
+  pricePerMeter   Float       // سعر المتر وقت الشراء
+  totalCost       Float       // التكلفة الإجمالية (محسوبة تلقائياً)
+  
+  paidAmount      Float       @default(0)
+  remainingAmount Float       @default(0)
+  paymentStatus   String      @default("PENDING") // PAID, PARTIAL, PENDING
+  
+  purchaseDate    DateTime    @default(now())
+  notes           String?
+  
+  createdBy       String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([supplierId])
+  @@index([fabricTypeId])
+  @@index([invoiceNumber])
+  @@index([purchaseDate])
+  @@map("fabric_purchases")
+}
+
+// مخزن القماش
+model FabricStock {
+  id              String      @id @default(uuid())
+  
+  fabricTypeId    String
+  fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id])
+  
+  availableMeters Float       // عدد الأمتار المتاحة
+  reservedMeters  Float       @default(0) // الأمتار المحجوزة للتصنيع
+  
+  // Tracking
+  totalPurchased  Float       @default(0) // إجمالي ما تم شراؤه
+  totalUsed       Float       @default(0) // إجمالي ما تم استخدامه
+  
+  lastUpdated     DateTime    @updatedAt
+  createdAt       DateTime    @default(now())
+  
+  @@unique([fabricTypeId])
+  @@map("fabric_stock")
+}
+
+// أوامر التصنيع (إرسال القماش للمورد للتصنيع)
+model ManufacturingOrder {
+  id                  String      @id @default(uuid())
+  orderNumber         String      @unique
+  
+  supplierId          String
+  supplier            Supplier    @relation(fields: [supplierId], references: [id])
+  
+  fabricTypeId        String
+  fabricType          FabricType  @relation(fields: [fabricTypeId], references: [id])
+  
+  // الصنف المطلوب تصنيعه
+  productId           String?
+  product             Product?    @relation(fields: [productId], references: [id])
+  
+  metersUsed          Float       // عدد الأمتار المستخدمة
+  fabricCostPerMeter  Float       // تكلفة المتر من القماش
+  
+  status              String      @default("SENT") // SENT, IN_PRODUCTION, COMPLETED
+  
+  // عند الإرسال
+  sentDate            DateTime    @default(now())
+  sentBy              String
+  
+  // عند الاستلام
+  piecesReceived      Int?        // عدد القطع المستلمة
+  manufacturingCostPerPiece Float? // تكلفة التصنيع للقطعة
+  totalManufacturingCost    Float? // إجمالي تكلفة التصنيع
+  
+  paidAmount          Float       @default(0)
+  remainingAmount     Float       @default(0)
+  paymentStatus       String      @default("PENDING")
+  
+  receivedDate        DateTime?
+  receivedBy          String?
+  
+  notes               String?
+  
+  washingOrders       WashingOrder[]
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  @@index([supplierId])
+  @@index([fabricTypeId])
+  @@index([productId])
+  @@index([status])
+  @@index([orderNumber])
+  @@map("manufacturing_orders")
+}
+
+// أوامر الغسيل (إرسال القطع المصنعة للغسيل)
+model WashingOrder {
+  id                      String              @id @default(uuid())
+  orderNumber             String              @unique
+  
+  supplierId              String
+  supplier                Supplier            @relation(fields: [supplierId], references: [id])
+  
+  manufacturingOrderId    String?
+  manufacturingOrder      ManufacturingOrder? @relation(fields: [manufacturingOrderId], references: [id])
+  
+  piecesSent              Int                 // عدد القطع المرسلة
+  
+  status                  String              @default("SENT") // SENT, IN_WASHING, COMPLETED
+  
+  // عند الإرسال
+  sentDate                DateTime            @default(now())
+  sentBy                  String
+  
+  // عند الاستلام
+  piecesReceived          Int?                // عدد القطع المستلمة
+  washingCostPerPiece     Float?              // تكلفة الغسيل للقطعة
+  totalWashingCost        Float?              // إجمالي تكلفة الغسيل
+  
+  paidAmount              Float               @default(0)
+  remainingAmount         Float               @default(0)
+  paymentStatus           String              @default("PENDING")
+  
+  receivedDate            DateTime?
+  receivedBy              String?
+  
+  // ربط بالمنتج النهائي
+  productId               String?             // المنتج النهائي بعد اكتمال الدورة
+  
+  notes                   String?
+  
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  
+  @@index([supplierId])
+  @@index([manufacturingOrderId])
+  @@index([status])
+  @@index([orderNumber])
+  @@map("washing_orders")
+}
+
+
+// =====================
+// Returns Management (نظام المرتجعات)
+// =====================
+
+model Return {
+  id                String        @id @default(uuid())
+  returnNumber      String        @unique // RET-YYYYMMDD-XXXXX
+  
+  // بيانات الفاتورة الأصلية
+  saleId            String
+  sale              Sale          @relation(fields: [saleId], references: [id])
+  
+  branchId          String
+  branch            Branch        @relation(fields: [branchId], references: [id])
+  
+  // بيانات العميل
+  customerName      String?
+  customerPhone     String?
+  
+  // الأصناف المرتجعة
+  items             ReturnItem[]
+  
+  // المبلغ الإجمالي (سعر البيع)
+  totalSaleAmount   Float
+  // المبلغ الإجمالي (سعر التكلفة)
+  totalCostAmount   Float
+  
+  refundMethod      String        // CASH, CARD, EXCHANGE (نقدي/فيزا/استبدال)
+  
+  // السبب
+  returnReason      String        // عيب تصنيع/مقاس غير مناسب/لون غير مناسب/أخرى
+  notes             String?
+  
+  // حالة المرتجع
+  status            String        @default("PENDING_MANAGER") 
+  // PENDING_MANAGER → SENT_TO_LOCAL/SENT_TO_MAIN → COMPLETED
+  
+  // قرار المانجر (وجهة المرتجع)
+  managerDecision   String?       // SEND_TO_LOCAL, SEND_TO_MAIN
+  managerNotes      String?
+  reviewedByManagerId String?
+  reviewedByManager User?         @relation("ReturnManagerReviewer", fields: [reviewedByManagerId], references: [id])
+  managerReviewAt   DateTime?
+  
+  // تم إرجاعه للمخزون
+  returnedToInventory Boolean     @default(false)
+  returnedToInventoryAt DateTime?
+  
+  // من قام بإنشاء المرتجع (الكاشير)
+  createdById       String
+  createdBy         User          @relation("ReturnCreator", fields: [createdById], references: [id])
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([saleId])
+  @@index([branchId])
+  @@index([status])
+  @@index([returnNumber])
+  @@index([createdById])
+  @@map("returns")
+}
+
+model ReturnItem {
+  id                String        @id @default(uuid())
+  
+  returnId          String
+  return            Return        @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  
+  productId         String
+  product           Product       @relation(fields: [productId], references: [id])
+  
+  quantity          Int
+  size              String?
+  
+  // السعر
+  unitSalePrice     Float         // سعر البيع
+  unitCostPrice     Float         // سعر التكلفة
+  totalSalePrice    Float         // إجمالي سعر البيع
+  totalCostPrice    Float         // إجمالي سعر التكلفة
+  
+  // سبب الإرجاع لكل منتج
+  returnReason      String        // عيب تصنيع/مقاس غير مناسب/لون غير مناسب/أخرى
+  
+  // حالة المنتج
+  condition         String        @default("GOOD") // GOOD, DAMAGED, DEFECTIVE
+  conditionNotes    String?
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([returnId])
+  @@index([productId])
+  @@map("return_items")
 }

@@ -6,6 +6,9 @@ const { authenticate, authorize } = require('../middleware/auth');
 // All routes require authentication
 router.use(authenticate);
 
+// Get single invoice for printing - MUST be before /:id route
+router.get('/invoices/:saleId', customerController.getCustomerInvoice);
+
 // Customer CRUD
 router.get('/', customerController.getAllCustomers);
 router.get('/:id', customerController.getCustomerById);
@@ -14,7 +17,7 @@ router.put('/:id', authorize('ADMIN', 'MANAGER'), customerController.updateCusto
 router.delete('/:id', authorize('ADMIN'), customerController.deleteCustomer);
 
 // Direct customer sales and payments
-router.post('/:id/sale', authorize('ADMIN', 'MANAGER'), customerController.createCustomerSale);
-router.post('/:id/payment', authorize('ADMIN', 'MANAGER'), customerController.recordCustomerPayment);
+router.post('/:id/sales', authorize('ADMIN', 'MANAGER'), customerController.createCustomerSale);
+router.post('/:id/payments', authorize('ADMIN', 'MANAGER'), customerController.recordCustomerPayment);
 
 module.exports = router;

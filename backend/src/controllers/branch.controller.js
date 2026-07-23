@@ -3,7 +3,43 @@ const { logActivity, ActivityActions } = require('../utils/activityLogger');
 
 exports.createBranch = async (req, res, next) => {
   try {
-    const branch = await prisma.branch.create({ data: req.body });
+    const { name, address, city, phone } = req.body;
+    
+    // Generate unique code from branch name
+    const baseCode = name
+      .replace(/\s+/g, '-')
+      .replace(/[^\u0600-\u06FFa-zA-Z0-9-]/g, '')
+      .toUpperCase()
+      .substring(0, 10);
+    
+    // Generate unique URL
+    const baseUrl = name
+      .replace(/\s+/g, '-')
+      .replace(/[^\u0600-\u06FFa-zA-Z0-9-]/g, '')
+      .toLowerCase();
+    
+    // Ensure uniqueness
+    let code = baseCode;
+    let url = baseUrl;
+    let counter = 1;
+    
+    while (await prisma.branch.findFirst({ where: { OR: [{ code }, { url }] } })) {
+      code = `${baseCode}-${counter}`;
+      url = `${baseUrl}-${counter}`;
+      counter++;
+    }
+    
+    const branch = await prisma.branch.create({
+      data: {
+        name,
+        code,
+        url,
+        address,
+        city,
+        phone,
+        isActive: true
+      }
+    });
     
     // Log activity
     await logActivity({
@@ -12,7 +48,7 @@ exports.createBranch = async (req, res, next) => {
       entity: 'branch',
       entityId: branch.id,
       description: `Branch created: ${branch.name}`,
-      metadata: { branchCode: branch.code }
+      metadata: { branchCode: branch.code, branchUrl: branch.url }
     });
     
     res.status(201).json({ success: true, data: branch });

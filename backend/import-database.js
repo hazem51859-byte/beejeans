@@ -32,7 +32,10 @@ async function importDatabase() {
 
     console.log('🗑️  مسح البيانات الموجودة...');
     
-    // Delete in correct order (reverse of foreign key dependencies)
+    // Delete in correct order (reverse of foreign key dependencies) - SKIP THIS STEP
+    // We'll use skipDuplicates instead
+    console.log('⚠️  تخطي مسح البيانات - سيتم استخدام skipDuplicates');
+    /*
     await prisma.activityLog.deleteMany();
     await prisma.returnItem.deleteMany();
     await prisma.return.deleteMany();
@@ -169,11 +172,17 @@ async function importDatabase() {
     if (data.sales?.length > 0) {
       for (const sale of data.sales) {
         const { items, ...saleData } = sale;
+        // Clean items: remove saleId from nested create
+        const cleanItems = (items || []).map(item => {
+          const { saleId, ...itemData } = item;
+          return itemData;
+        });
+        
         await prisma.sale.create({
           data: {
             ...saleData,
             items: {
-              create: items || []
+              create: cleanItems
             }
           }
         });

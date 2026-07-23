@@ -1,0 +1,60 @@
+═══════════════════════════════════════════════
+   حل مشكلة GitHub Repository Not Found
+═══════════════════════════════════════════════
+
+🔴 المشكلة:
+   remote: Repository not found
+
+🔧 الحل:
+
+1️⃣ إنشاء Repository جديد على GitHub:
+   
+   أ) افتح: https://github.com/new
+   
+   ب) املأ:
+      - Repository name: bee-jeans-pos
+      - Private أو Public (حسب رغبتك)
+      - لا تضف README أو .gitignore
+   
+   ج) اضغط "Create repository"
+   
+   د) انسخ الـ URL من الصفحة:
+      https://github.com/YOUR_USERNAME/bee-jeans-pos.git
+
+2️⃣ تحديث الـ Remote في مشروعك:
+   
+   cd C:\Users\hazem.LAB2-33\AppData\Local\Programs\Abdelrahman
+   
+   git remote set-url origin https://github.com/YOUR_USERNAME/bee-jeans-pos.git
+   
+   (استبدل YOUR_USERNAME باسم حسابك على GitHub)
+
+3️⃣ رفع الكود:
+   
+   git push -u origin main
+   
+   (لو طلب تسجيل دخول، استخدم Personal Access Token)
+
+4️⃣ ربط بـ Railway:
+   
+   أ) افتح Railway Dashboard
+   ب) اذهب لمشروعك الموجود
+   ج) في Backend Service → Settings
+   د) في "Source" section، غيّر الـ repository للجديد
+
+═══════════════════════════════════════════════
+
+💡 بديل سريع (إذا كنت مستعجل):
+
+استخدم Railway CLI مباشرة بدون GitHub:
+
+   npm install -g @railway/cli
+   railway login
+   railway link
+   railway up
+
+═══════════════════════════════════════════════
+
+📞 للمساعدة: راجع UPDATE-RAILWAY.md
+
+═══════════════════════════════════════════════

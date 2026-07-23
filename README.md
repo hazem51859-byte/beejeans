@@ -2,6 +2,27 @@
 
 نظام متكامل لإدارة نقاط البيع والمخازن للمحلات التجارية، مصمم خصيصاً لمحلات الملابس والمنتجات بنظام السيريال.
 
+---
+
+## 🚂 تحديث المشروع على Railway
+
+### ⚡ طريقة سريعة:
+```cmd
+deploy-to-railway.bat
+```
+
+### 📚 أدلة التحديث:
+- 📘 **[UPDATE-RAILWAY.md](UPDATE-RAILWAY.md)** - دليل التحديث الكامل مع استيراد البيانات
+- 📗 **[RAILWAY-DEPLOYMENT.md](RAILWAY-DEPLOYMENT.md)** - دليل النشر من الصفر
+- 📄 **[QUICK-UPDATE.txt](QUICK-UPDATE.txt)** - خطوات سريعة مختصرة
+
+### 🔄 خطوات التحديث السريعة:
+1. **تصدير البيانات**: `cd backend && node export-database.js`
+2. **رفع التعديلات**: `git add . && git commit -m "Update" && git push`
+3. **استيراد البيانات**: `railway run node import-database.js backup/file.json`
+
+---
+
 ## 📋 المحتويات
 
 - [نظرة عامة](#نظرة-عامة)

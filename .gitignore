@@ -21,6 +21,8 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+backup/
+**/backup/*.json
 
 # IDE
 .vscode/

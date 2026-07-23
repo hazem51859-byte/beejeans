@@ -204,6 +204,9 @@ export const activityAPI = {
 export const returnsAPI = {
   getAll: (params) => api.get('/returns', { params }),
   getById: (id) => api.get(`/returns/${id}`),
+  create: (data) => api.post('/returns', data),
+  managerReview: (id, data) => api.post(`/returns/${id}/manager-review`, data),
+  getStats: (params) => api.get('/returns/stats', { params }),
   getSummary: (params) => api.get('/returns/summary', { params }),
 };
 

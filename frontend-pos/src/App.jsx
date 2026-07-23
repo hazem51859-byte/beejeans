@@ -7,7 +7,6 @@ import BranchLogin from './pages/BranchLogin';
 import TestPage from './pages/TestPage';
 import Dashboard from './pages/Dashboard';
 import POS from './pages/POS';
-import Products from './pages/Products';
 import Inventory from './pages/Inventory';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -15,7 +14,6 @@ import ShiftManagement from './pages/ShiftManagement';
 import Branches from './pages/Branches';
 import Partners from './pages/Partners';
 import Suppliers from './pages/Suppliers';
-import Categories from './pages/Categories';
 import Users from './pages/Users';
 import Transfers from './pages/Transfers';
 import MonthlyReport from './pages/MonthlyReport';
@@ -26,8 +24,15 @@ import Expenses from './pages/Expenses';
 import CashierPerformance from './pages/CashierPerformance';
 import MyProducts from './pages/MyProducts';
 import VaultManagement from './pages/VaultManagement';
-import AdminProducts from './pages/AdminProducts';
 import ReturnsManagement from './pages/ReturnsManagement';
+import CreateReturn from './pages/CreateReturn';
+import CustomerInvoicePrint from './pages/CustomerInvoicePrint';
+import FabricTypes from './pages/FabricTypes';
+import FabricWarehouse from './pages/FabricWarehouse';
+import ProductMaster from './pages/ProductMaster';
+import Manufacturing from './pages/Manufacturing';
+import WashingOrders from './pages/WashingOrders';
+import ProductionDashboard from './pages/ProductionDashboard';
 
 
 function ProtectedRoute({ children }) {
@@ -64,6 +69,9 @@ function App() {
       <Route path="/test" element={<TestPage />} />
       <Route path="/branch/:branchCode/test" element={<TestPage />} />
       
+      {/* Print Routes - No Layout */}
+      <Route path="/print/customer-invoice/:invoiceId" element={<CustomerInvoicePrint />} />
+      
       {/* Public Login Routes */}
       <Route 
         path="/admin-login" 
@@ -98,20 +106,25 @@ function App() {
         <Route path="vault" element={<VaultManagement />} />
         <Route path="shift-management" element={<ShiftManagement />} />
         <Route path="returns-management" element={<ReturnsManagement />} />
+        <Route path="create-return" element={<CreateReturn />} />
         
         {/* Admin Only Routes */}
         {isAdmin && (
           <>
             <Route path="branches" element={<Branches />} />
             <Route path="users" element={<Users />} />
-            <Route path="categories" element={<Categories />} />
             <Route path="suppliers" element={<Suppliers />} />
             <Route path="partners" element={<Partners />} />
             <Route path="monthly-report" element={<MonthlyReport />} />
             <Route path="customers" element={<Customers />} />
             <Route path="expenses" element={<Expenses />} />
             <Route path="cashier-performance" element={<CashierPerformance />} />
-            <Route path="admin-products" element={<AdminProducts />} />
+            <Route path="fabric-types" element={<FabricTypes />} />
+            <Route path="fabric-warehouse" element={<FabricWarehouse />} />
+            <Route path="product-master" element={<ProductMaster />} />
+            <Route path="manufacturing" element={<Manufacturing />} />
+            <Route path="washing-orders" element={<WashingOrders />} />
+            <Route path="production-dashboard" element={<ProductionDashboard />} />
           </>
         )}
       </Route>

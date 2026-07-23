@@ -81,7 +81,6 @@ export default function Users() {
     const data = {
       ...formData,
       branchId: formData.branchId || null,
-      email: formData.email || null,  // convert empty string to null
     };
 
     // Remove password if empty during update
@@ -245,13 +244,14 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">البريد الإلكتروني</label>
+                <label className="block text-sm font-medium mb-2">البريد الإلكتروني *</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="input-field"
                   placeholder="email@example.com"
+                  required
                 />
               </div>
 

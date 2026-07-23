@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Package, MapPin } from 'lucide-react';
 import { inventoryAPI } from '../services/api';
@@ -114,7 +114,9 @@ export default function Inventory() {
               <tr className="border-b bg-gray-50 text-gray-600 font-bold">
                 <th className="p-3">المنتج</th>
                 <th className="p-3">اللون</th>
-                <th className="p-3">الكمية المتاحة</th>
+                <th className="p-3">الكمية الكلية</th>
+                <th className="p-3">منتظرة الاستلام</th>
+                <th className="p-3">متاحة فعلياً</th>
                 <th className="p-3">الحد الأدنى</th>
                 {isAdmin && <th className="p-3">سعر الشراء</th>}
                 <th className="p-3">سعر البيع</th>
@@ -123,20 +125,47 @@ export default function Inventory() {
             </thead>
             <tbody>
               {inventory.map((item) => {
-                const isLowStock = item.quantity <= item.minQuantity;
-                const isOutOfStock = item.quantity <= 0;
+                const pendingQty = item.pendingQuantity || 0;
+                const availableQty = item.availableQuantity !== undefined ? item.availableQuantity : item.quantity;
+                const isLowStock = availableQty <= item.minQuantity;
+                const isOutOfStock = availableQty <= 0;
 
                 return (
                   <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="p-3 font-semibold text-gray-800">{item.product?.name}</td>
+                    <td className="p-3">
+                      <div className="font-semibold text-gray-800">{item.product?.name}</div>
+                      {pendingQty > 0 && item.pendingTransfers && item.pendingTransfers.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {item.pendingTransfers.map((t, idx) => (
+                            <div key={idx} className="text-orange-600">
+                              → {t.quantity} قطعة لـ {t.toBranch} ({t.transferNumber})
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="p-3 text-gray-500">{item.product?.color || '-'}</td>
+                    <td className="p-3">
+                      <span className="font-bold text-base text-gray-700">
+                        {item.quantity}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      {pendingQty > 0 ? (
+                        <span className="font-bold text-base text-orange-600">
+                          {pendingQty}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
                     <td className="p-3">
                       <span className={`font-bold text-base ${
                         isOutOfStock ? 'text-red-600' :
                         isLowStock ? 'text-yellow-600' :
                         'text-green-600'
                       }`}>
-                        {item.quantity}
+                        {availableQty}
                       </span>
                     </td>
                     <td className="p-3 text-gray-500">{item.minQuantity}</td>

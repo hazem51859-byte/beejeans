@@ -63,12 +63,21 @@ export default function Layout() {
     // Admin and Manager
     { name: 'الخزينة', path: '/vault', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
     { name: 'إدارة الشيفتات', path: '/shift-management', icon: Clock, roles: ['MANAGER'] },
-    { name: 'إدارة المرتجعات', path: '/returns-management', icon: RotateCcw, roles: ['MANAGER'] },
-    { name: 'المنتجات والسيريالات', path: '/admin-products', icon: Package, roles: ['ADMIN'] },
+    { name: 'المرتجعات', path: '/returns-management', icon: RotateCcw, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
+    
+    // Admin Only - Production System
+    { name: '--- إدارة الإنتاج ---', path: '#production-header', icon: Package, roles: ['ADMIN'], isHeader: true },
+    { name: 'لوحة الإنتاج', path: '/production-dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+    { name: 'الأصناف (Master)', path: '/product-master', icon: Package, roles: ['ADMIN'] },
+    { name: 'أنواع الخامات', path: '/fabric-types', icon: Package, roles: ['ADMIN'] },
+    { name: 'مخزن القماش', path: '/fabric-warehouse', icon: Warehouse, roles: ['ADMIN'] },
+    { name: 'أوامر التصنيع', path: '/manufacturing', icon: Truck, roles: ['ADMIN'] },
+    { name: 'أوامر الغسيل', path: '/washing-orders', icon: RotateCcw, roles: ['ADMIN'] },
+    
+    { name: '--- الإدارة العامة ---', path: '#admin-header', icon: Settings, roles: ['ADMIN'], isHeader: true },
     { name: 'الفروع', path: '/branches', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'المستخدمين', path: '/users', icon: User, roles: ['ADMIN'] },
     { name: 'تقييم الكاشيرات', path: '/cashier-performance', icon: Award, roles: ['ADMIN'] },
-    { name: 'الأصناف', path: '/categories', icon: Package, roles: ['ADMIN'] },
     { name: 'الموردين', path: '/suppliers', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'المصروفات', path: '/expenses', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'العملاء', path: '/customers', icon: User, roles: ['ADMIN'] },
@@ -121,6 +130,15 @@ export default function Layout() {
           {/* Scrollable Navigation */}
           <nav className="p-4 space-y-2 overflow-y-auto flex-1">
             {filteredNavigation.map((item) => {
+              // Header items (non-clickable section titles)
+              if (item.isHeader) {
+                return (
+                  <div key={item.path} className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    {item.name}
+                  </div>
+                );
+              }
+
               const Icon = item.icon;
               const active = isActive(item.path);
               
@@ -134,7 +152,7 @@ export default function Layout() {
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  <Icon size={20} />
+                  {Icon && <Icon size={20} />}
                   <span className="font-medium">{item.name}</span>
                 </Link>
               );
@@ -154,9 +172,38 @@ export default function Layout() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto pb-20">
-          <div className="p-6">
+        <main className="flex-1 overflow-auto">
+          <div className="p-6 pb-16">
             <Outlet />
+          </div>
+          
+          {/* Fixed Footer - ZoTech */}
+          <div className="fixed bottom-0 right-64 left-0 bg-gradient-to-r from-gray-900 to-gray-800 text-white py-3 px-6 shadow-lg border-t border-gray-700 z-40" dir="rtl">
+            <div className="flex items-center justify-center gap-8 text-sm">
+              <div className="text-gray-400 text-xs">
+                © 2026 جميع الحقوق محفوظة
+              </div>
+              
+              <div className="h-4 w-px bg-gray-600"></div>
+              
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                </svg>
+                <a href="tel:01139395961" className="hover:text-blue-400 transition-colors font-medium">
+                  01139395961
+                </a>
+              </div>
+              
+              <div className="h-4 w-px bg-gray-600"></div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-gray-300">تصميم وتطوير</span>
+                <div className="bg-blue-600 px-3 py-1 rounded-full font-bold text-xs">
+                  ZoTech
+                </div>
+              </div>
+            </div>
           </div>
         </main>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { Search, ShoppingCart, Trash2 } from 'lucide-react';
@@ -19,7 +19,9 @@ export default function POS() {
   const [currentShift, setCurrentShift] = useState(null);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [searchingBySerial, setSearchingBySerial] = useState(false);
+  const [showSizeDetails, setShowSizeDetails] = useState(false);
+  const [selectedItemForDetails, setSelectedItemForDetails] = useState(null);
+  const [itemSizes, setItemSizes] = useState([]);
 
   // Get current shift (only for non-admin users)
   const { data: shiftData } = useQuery({
@@ -35,61 +37,70 @@ export default function POS() {
     }
   }, [shiftData]);
 
-  // Search products or by serial
-  const { data: productsData, isLoading } = useQuery({
-    queryKey: ['products-search', searchQuery],
+  // Get all available products for the branch
+  const { data: productsData, isLoading: loadingProducts } = useQuery({
+    queryKey: ['branch-products', user?.branchId],
     queryFn: async () => {
-      // Try searching by serial first if query looks like a serial (numbers only)
-      if (searchQuery.length >= 3 && /^\d+$/.test(searchQuery)) {
-        try {
-          const token = localStorage.getItem('token');
-          const serialResponse = await fetch(`${import.meta.env.VITE_API_URL}/serials/search/${searchQuery}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (serialResponse.ok) {
-            const data = await serialResponse.json();
-            if (data.success && data.data) {
-              setSearchingBySerial(true);
-              // Auto-add to cart if serial found
-              const product = data.data;
-              
-              // Check if serial already in cart
-              const existingItem = items.find(item => item.serialNumber === product.serialNumber);
-              if (existingItem) {
-                toast.error('هذا السيريال موجود في السلة بالفعل');
-                setSearchQuery('');
-                return { data: { data: [] } };
-              }
-              
-              // Add product with serial automatically
-              const itemWithSerial = {
-                ...product,
-                serialNumber: product.serialNumber,
-                quantity: 1 // Always 1 per serial
-              };
-              
-              addItem(itemWithSerial);
-              setSearchQuery('');
-              toast.success(`تم إضافة ${product.name} - السيريال: ${product.serialNumber}`);
-              
-              // Return empty to not show in results
-              return { data: { data: [] } };
-            }
-          }
-        } catch (err) {
-          console.log('Serial search failed, trying product search...', err);
-        }
-      }
-      
-      // Fallback to product name search
-      setSearchingBySerial(false);
-      return productAPI.search(searchQuery);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/inventory/branch/${user?.branchId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      // Transform inventory to product format
+      return { 
+        data: { 
+          data: (data.data || []).map(inv => ({
+            ...inv.product,
+            availableQty: inv.quantity
+          }))
+        } 
+      };
     },
-    enabled: searchQuery.length > 0,
+    enabled: !!user?.branchId,
   });
+
+  // Get branch inventory to show available quantities
+  const { data: inventoryData } = useQuery({
+    queryKey: ['branch-inventory', user?.branchId],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/inventory/branch/${user?.branchId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return response.json();
+    },
+    enabled: !!user?.branchId,
+  });
+
+  const inventory = inventoryData?.data || [];
+  const products = productsData?.data?.data || [];
+  
+  // Auto-add product when exact barcode/SKU match is found
+  useEffect(() => {
+    if (searchQuery.length > 0 && products.length > 0 && !loadingProducts) {
+      // Check for exact barcode or SKU match
+      const exactMatch = products.find(p => 
+        p.barcode === searchQuery || 
+        p.sku === searchQuery ||
+        p.sku?.toLowerCase() === searchQuery.toLowerCase()
+      );
+      
+      if (exactMatch) {
+        // Auto-add the product
+        handleAddProduct(exactMatch);
+        // Note: handleAddProduct already clears searchQuery
+      }
+    }
+  }, [searchQuery]); // Only depend on searchQuery to avoid loops
+  
+  // Filter products based on search
+  const filteredProducts = searchQuery.length >= 2
+    ? products.filter(p => 
+        p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.barcode?.includes(searchQuery)
+      )
+    : [];
 
   // Create sale mutation
   const createSaleMutation = useMutation({
@@ -112,29 +123,117 @@ export default function POS() {
   });
 
   const handleAddProduct = (product) => {
-    // Each product must have a unique serial number
-    if (!product.serialNumber) {
-      toast.error('هذا المنتج يحتاج إلى سيريال');
+    // Check available quantity in inventory
+    const availableQty = product.availableQty || 0;
+    
+    if (availableQty <= 0) {
+      toast.error('هذا المنتج غير متوفر في المخزون');
       return;
     }
     
-    // Check if serial already in cart
-    const existingItem = items.find(item => item.serialNumber === product.serialNumber);
-    if (existingItem) {
-      toast.error('هذا السيريال موجود في السلة بالفعل');
+    // Check total quantity in cart (all sizes)
+    const totalQtyInCart = items
+      .filter(item => item.id === product.id)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    
+    if (totalQtyInCart >= availableQty) {
+      toast.error(`الكمية المتاحة: ${availableQty} فقط`);
       return;
     }
     
-    // Add product with serial, quantity is always 1
-    const itemWithSerial = {
+    // Always add as new item - let user choose size independently
+    const uniqueId = `${product.id}_${Date.now()}_${Math.random()}`;
+    addItem({
       ...product,
-      serialNumber: product.serialNumber,
-      quantity: 1 // Always 1 per serial
-    };
+      cartItemId: uniqueId,
+      quantity: 1,
+      selectedSize: '' // Will be selected after adding
+    });
     
-    addItem(itemWithSerial);
     setSearchQuery('');
-    toast.success(`تم إضافة ${product.name} - السيريال: ${product.serialNumber}`);
+    toast.success(`تم إضافة ${product.name}`);
+  };
+
+  const openSizeDetails = (item) => {
+    const uniqueKey = item.cartItemId || item.id;
+    setSelectedItemForDetails(uniqueKey);
+    
+    // Initialize sizes array with current quantity
+    const sizes = Array(item.quantity).fill('').map((_, index) => ({
+      index,
+      size: item.selectedSize || ''
+    }));
+    setItemSizes(sizes);
+    setShowSizeDetails(true);
+  };
+
+  const saveSizeDetails = () => {
+    if (!selectedItemForDetails) return;
+    
+    // Check all sizes are selected
+    const allSelected = itemSizes.every(s => s.size);
+    if (!allSelected) {
+      toast.error('اختر المقاس لجميع القطع');
+      return;
+    }
+    
+    // Group by size
+    const sizeGroups = {};
+    itemSizes.forEach(item => {
+      if (!sizeGroups[item.size]) {
+        sizeGroups[item.size] = 0;
+      }
+      sizeGroups[item.size]++;
+    });
+    
+    // Remove current item and add new items by size
+    const currentItem = items.find(i => (i.cartItemId || i.id) === selectedItemForDetails);
+    const otherItems = items.filter(i => (i.cartItemId || i.id) !== selectedItemForDetails);
+    
+    const newItems = Object.entries(sizeGroups).map(([size, quantity]) => {
+      // Check if this size already exists in other items
+      const existingItem = otherItems.find(i => 
+        i.id === currentItem.id && i.selectedSize === size
+      );
+      
+      if (existingItem) {
+        // Merge with existing
+        return {
+          ...existingItem,
+          quantity: existingItem.quantity + quantity
+        };
+      } else {
+        // Create new item
+        return {
+          ...currentItem,
+          cartItemId: `${currentItem.id}_${Date.now()}_${Math.random()}`,
+          selectedSize: size,
+          quantity: quantity
+        };
+      }
+    });
+    
+    // Merge new items with other items, avoiding duplicates
+    const finalItems = [...otherItems];
+    newItems.forEach(newItem => {
+      const existing = finalItems.find(i => 
+        i.id === newItem.id && 
+        i.selectedSize === newItem.selectedSize &&
+        (i.cartItemId || i.id) !== newItem.cartItemId
+      );
+      
+      if (existing) {
+        existing.quantity += newItem.quantity;
+      } else {
+        finalItems.push(newItem);
+      }
+    });
+    
+    useCartStore.setState({ items: finalItems });
+    setShowSizeDetails(false);
+    setSelectedItemForDetails(null);
+    setItemSizes([]);
+    toast.success('تم تحديث المقاسات');
   };
 
   const handleCompleteSale = () => {
@@ -176,8 +275,8 @@ export default function POS() {
           productId: item.id,
           quantity: item.quantity,
           unitPrice: itemPrice,
-          ...(item.serialNumber && { serialNumber: item.serialNumber }),
-          ...(item.selectedSize && { size: item.selectedSize })
+          ...(item.selectedSize && { size: item.selectedSize }),
+          ...(item.color && { color: item.color })
         };
       }),
       paymentMethod,
@@ -299,7 +398,7 @@ export default function POS() {
                   <td>
                     ${item.product.name}
                     ${item.size ? `<br/><small style="color: #666;">📏 المقاس: ${item.size}</small>` : ''}
-                    ${item.product.color ? `<br/><small style="color: #666;">🎨 اللون: ${item.product.color}</small>` : ''}
+                    ${item.color ? `<br/><small style="color: #666;">🎨 اللون: ${item.color}</small>` : (item.product.color ? `<br/><small style="color: #666;">🎨 اللون: ${item.product.color}</small>` : '')}
                     ${item.serialNumber ? `<br/><small style="color: #999;">S/N: ${item.serialNumber}</small>` : ''}
                   </td>
                   <td style="text-align: center;">${item.quantity}</td>
@@ -367,13 +466,51 @@ export default function POS() {
             <Search className="absolute right-3 top-3 text-gray-400" size={20} />
             <input
               type="text"
-              placeholder="امسح السيريال أو ابحث عن منتج..."
+              placeholder="ابحث عن منتج بالاسم أو الكود..."
               className="input-field pr-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
             />
           </div>
+          
+          {/* Products Search Results */}
+          {searchQuery.length >= 2 && (
+            <div className="mt-4 max-h-60 overflow-y-auto">
+              {loadingProducts ? (
+                <div className="text-center py-4 text-gray-500">جاري البحث...</div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">لا توجد نتائج</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {filteredProducts.map(product => (
+                    <button
+                      key={product.id}
+                      onClick={() => handleAddProduct(product)}
+                      className="text-right p-3 border rounded-lg hover:bg-primary-50 hover:border-primary-500 transition-colors"
+                    >
+                      <div className="font-semibold">{product.name}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {product.sku} {product.color && `• ${product.color}`}
+                      </div>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-sm font-bold text-green-600">
+                          {product.sellingPrice?.toFixed(2) || 0} ج.م
+                        </span>
+                        <span className={`text-xs font-medium ${
+                          product.availableQty > 10 ? 'text-green-600' :
+                          product.availableQty > 0 ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>
+                          متاح: {product.availableQty || 0}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Cart Items - Main Display Area */}
@@ -398,7 +535,11 @@ export default function POS() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((item) => {
                 const itemPrice = item.customPrice !== undefined ? item.customPrice : (item.category?.defaultSellingPrice || item.sellingPrice);
-                const uniqueKey = item.serialNumber || item.id;
+                const uniqueKey = item.cartItemId || item.id; // Use cartItemId for unique identification
+                
+                // Get available quantity from inventory
+                const inventoryItem = inventory.find(inv => inv.productId === item.id);
+                const availableQty = inventoryItem?.quantity || 0;
                 
                 // Parse attributes if they exist
                 let attributes = {};
@@ -419,6 +560,11 @@ export default function POS() {
                         <h3 className="font-bold text-lg">{item.name}</h3>
                         {/* Display color and size */}
                         <div className="flex flex-wrap gap-2 mt-1">
+                          {item.sku && (
+                            <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded font-mono">
+                              {item.sku}
+                            </span>
+                          )}
                           {item.color && (
                             <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded font-medium">
                               🎨 {item.color}
@@ -440,36 +586,59 @@ export default function POS() {
                               value={item.selectedSize || ''}
                               onChange={(e) => {
                                 const selectedSize = e.target.value;
-                                const updatedItems = items.map(i => {
-                                  const iKey = i.serialNumber || i.id;
-                                  return iKey === uniqueKey ? { ...i, selectedSize } : i;
-                                });
-                                useCartStore.setState({ items: updatedItems });
+                                
+                                // Check if same product with same size already exists
+                                const existingWithSameSize = items.find(i => 
+                                  i.id === item.id && 
+                                  i.selectedSize === selectedSize && 
+                                  (i.cartItemId || i.id) !== uniqueKey
+                                );
+                                
+                                if (existingWithSameSize && selectedSize) {
+                                  // Merge: combine quantities and remove current item
+                                  const newQuantity = existingWithSameSize.quantity + item.quantity;
+                                  const updatedItems = items
+                                    .filter(i => (i.cartItemId || i.id) !== uniqueKey)
+                                    .map(i => {
+                                      const iKey = i.cartItemId || i.id;
+                                      const existingKey = existingWithSameSize.cartItemId || existingWithSameSize.id;
+                                      return iKey === existingKey ? { ...i, quantity: newQuantity } : i;
+                                    });
+                                  useCartStore.setState({ items: updatedItems });
+                                  toast.success('تم دمج الكميات');
+                                } else {
+                                  // Just update size
+                                  const updatedItems = items.map(i => {
+                                    const iKey = i.cartItemId || i.id;
+                                    return iKey === uniqueKey ? { ...i, selectedSize } : i;
+                                  });
+                                  useCartStore.setState({ items: updatedItems });
+                                }
                               }}
-                              className={`text-xs font-medium px-2 py-1 rounded border cursor-pointer ${
+                              className={`text-sm font-bold px-3 py-2 rounded border cursor-pointer min-w-[150px] ${
                                 item.selectedSize 
                                   ? 'bg-orange-100 text-orange-700 border-orange-300' 
-                                  : 'bg-yellow-50 text-yellow-700 border-yellow-300 animate-pulse'
+                                  : 'bg-yellow-100 text-yellow-800 border-yellow-400 animate-pulse ring-2 ring-yellow-300'
                               }`}
                             >
-                              <option value="">⚠️ اختر المقاس 📏</option>
-                              <option value="XS">XS</option>
-                              <option value="S">S</option>
-                              <option value="M">M</option>
-                              <option value="L">L</option>
-                              <option value="XL">XL</option>
-                              <option value="XXL">XXL</option>
-                              <option value="XXXL">XXXL</option>
-                              <option value="28">28</option>
-                              <option value="30">30</option>
-                              <option value="32">32</option>
-                              <option value="34">34</option>
-                              <option value="36">36</option>
-                              <option value="38">38</option>
-                              <option value="40">40</option>
-                              <option value="42">42</option>
-                              <option value="44">44</option>
-                              <option value="46">46</option>
+                              <option value="" className="bg-white">⚠️ اختار المقاس أولاً 📏</option>
+                              <option value="XS" className="bg-white">XS - Extra Small</option>
+                              <option value="S" className="bg-white">S - Small</option>
+                              <option value="M" className="bg-white">M - Medium</option>
+                              <option value="L" className="bg-white">L - Large</option>
+                              <option value="XL" className="bg-white">XL - Extra Large</option>
+                              <option value="XXL" className="bg-white">XXL - 2X Large</option>
+                              <option value="XXXL" className="bg-white">XXXL - 3X Large</option>
+                              <option value="28" className="bg-white">28</option>
+                              <option value="30" className="bg-white">30</option>
+                              <option value="32" className="bg-white">32</option>
+                              <option value="34" className="bg-white">34</option>
+                              <option value="36" className="bg-white">36</option>
+                              <option value="38" className="bg-white">38</option>
+                              <option value="40" className="bg-white">40</option>
+                              <option value="42" className="bg-white">42</option>
+                              <option value="44" className="bg-white">44</option>
+                              <option value="46" className="bg-white">46</option>
                             </select>
                           </div>
                           {Object.keys(attributes).length > 0 && 
@@ -480,9 +649,9 @@ export default function POS() {
                             ))
                           }
                         </div>
-                        <div className="mt-1">
-                          <span className="text-xs text-gray-500">سيريال: </span>
-                          <span className="font-mono font-semibold text-primary-600">{item.serialNumber || item.sku}</span>
+                        <div className="mt-2">
+                          <span className="text-xs text-gray-500">متاح: </span>
+                          <span className="font-bold text-green-600">{availableQty} قطعة</span>
                         </div>
                       </div>
                       <button
@@ -495,6 +664,84 @@ export default function POS() {
                     </div>
 
                     <div className="space-y-2">
+                      {/* Quantity Control */}
+                      <div className="bg-white rounded p-2">
+                        <label className="text-xs text-gray-500">الكمية:</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <button
+                            onClick={() => {
+                              if (item.quantity > 1) {
+                                const updatedItems = items.map(i => {
+                                  const iKey = i.cartItemId || i.id;
+                                  return iKey === uniqueKey ? { ...i, quantity: i.quantity - 1 } : i;
+                                });
+                                useCartStore.setState({ items: updatedItems });
+                              }
+                            }}
+                            className="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded font-bold"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const newQty = parseInt(e.target.value) || 1;
+                              // Check total quantity for this product across all sizes
+                              const totalQtyOtherItems = items
+                                .filter(i => i.id === item.id && (i.cartItemId || i.id) !== uniqueKey)
+                                .reduce((sum, i) => sum + i.quantity, 0);
+                              
+                              if (newQty > 0 && (newQty + totalQtyOtherItems) <= availableQty) {
+                                const updatedItems = items.map(i => {
+                                  const iKey = i.cartItemId || i.id;
+                                  return iKey === uniqueKey ? { ...i, quantity: newQty } : i;
+                                });
+                                useCartStore.setState({ items: updatedItems });
+                              } else if ((newQty + totalQtyOtherItems) > availableQty) {
+                                toast.error(`الكمية المتاحة: ${availableQty} فقط`);
+                              }
+                            }}
+                            className="w-16 text-center text-lg font-bold border rounded px-2 py-1"
+                            min="1"
+                            max={availableQty}
+                          />
+                          <button
+                            onClick={() => {
+                              // Check total quantity for this product across all sizes
+                              const totalQtyAllItems = items
+                                .filter(i => i.id === item.id)
+                                .reduce((sum, i) => sum + i.quantity, 0);
+                              
+                              if (totalQtyAllItems < availableQty) {
+                                const updatedItems = items.map(i => {
+                                  const iKey = i.cartItemId || i.id;
+                                  return iKey === uniqueKey ? { ...i, quantity: i.quantity + 1 } : i;
+                                });
+                                useCartStore.setState({ items: updatedItems });
+                              } else {
+                                toast.error(`الكمية المتاحة: ${availableQty} فقط`);
+                              }
+                            }}
+                            className="bg-primary-500 hover:bg-primary-600 text-white px-3 py-1 rounded font-bold"
+                          >
+                            +
+                          </button>
+                          
+                          {/* Details Button - Show if quantity > 1 */}
+                          {item.quantity > 1 && (
+                            <button
+                              onClick={() => openSizeDetails(item)}
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold"
+                              title="تفاصيل المقاسات"
+                            >
+                              📏 تفاصيل
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Price */}
                       {user?.role === 'ADMIN' ? (
                         <div className="bg-white rounded p-2">
                           <label className="text-xs text-gray-500">السعر:</label>
@@ -505,7 +752,7 @@ export default function POS() {
                               onChange={(e) => {
                                 const newPrice = parseFloat(e.target.value) || 0;
                                 const updatedItems = items.map(i => {
-                                  const iKey = i.serialNumber || i.id;
+                                  const iKey = i.cartItemId || i.id;
                                   return iKey === uniqueKey ? { ...i, customPrice: newPrice } : i;
                                 });
                                 useCartStore.setState({ items: updatedItems });
@@ -519,8 +766,9 @@ export default function POS() {
                         </div>
                       ) : (
                         <div className="bg-green-100 rounded p-2 text-center">
+                          <div className="text-xs text-gray-600">السعر × الكمية</div>
                           <span className="text-2xl font-bold text-green-700">
-                            {itemPrice.toFixed(2)} ج.م
+                            {(itemPrice * item.quantity).toFixed(2)} ج.م
                           </span>
                         </div>
                       )}
@@ -713,6 +961,80 @@ export default function POS() {
                   setCardConfirmed(false);
                 }}
                 className="w-full btn-secondary"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Size Details Modal */}
+      {showSizeDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold mb-4 text-center">تفاصيل المقاسات 📏</h2>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-center text-sm text-blue-600">
+                اختر المقاس لكل قطعة من الـ {itemSizes.length} قطع
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              {itemSizes.map((item, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    قطعة {index + 1}
+                  </label>
+                  <select
+                    value={item.size}
+                    onChange={(e) => {
+                      const newSizes = [...itemSizes];
+                      newSizes[index].size = e.target.value;
+                      setItemSizes(newSizes);
+                    }}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                      !item.size ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">اختر</option>
+                    <option value="XS">XS</option>
+                    <option value="S">S</option>
+                    <option value="M">M</option>
+                    <option value="L">L</option>
+                    <option value="XL">XL</option>
+                    <option value="XXL">XXL</option>
+                    <option value="XXXL">XXXL</option>
+                    <option value="28">28</option>
+                    <option value="30">30</option>
+                    <option value="32">32</option>
+                    <option value="34">34</option>
+                    <option value="36">36</option>
+                    <option value="38">38</option>
+                    <option value="40">40</option>
+                    <option value="42">42</option>
+                    <option value="44">44</option>
+                    <option value="46">46</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={saveSizeDetails}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg"
+              >
+                ✓ حفظ المقاسات
+              </button>
+              <button
+                onClick={() => {
+                  setShowSizeDetails(false);
+                  setSelectedItemForDetails(null);
+                  setItemSizes([]);
+                }}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 rounded-lg"
               >
                 إلغاء
               </button>

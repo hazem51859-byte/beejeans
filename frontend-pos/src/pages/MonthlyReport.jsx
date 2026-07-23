@@ -99,9 +99,42 @@ export default function MonthlyReport() {
     },
   });
 
+  // بيانات الإنتاج - شراء القماش
+  const { data: fabricPurchasesData } = useQuery({
+    queryKey: ['fabric-purchases', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/fabric/purchases', { 
+        params: { startDate, endDate: endDateString } 
+      });
+      return response.data;
+    },
+  });
+
+  // بيانات الإنتاج - أوامر التصنيع
+  const { data: manufacturingOrdersData } = useQuery({
+    queryKey: ['manufacturing-orders-report', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/production/manufacturing', { 
+        params: { startDate, endDate: endDateString, status: 'COMPLETED' } 
+      });
+      return response.data;
+    },
+  });
+
+  // بيانات الإنتاج - أوامر الغسيل
+  const { data: washingOrdersData } = useQuery({
+    queryKey: ['washing-orders-report', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/production/washing', { 
+        params: { startDate, endDate: endDateString, status: 'COMPLETED' } 
+      });
+      return response.data;
+    },
+  });
+
   // حساب الإجماليات - normalize data format
   const salesData = Array.isArray(sales?.data) ? sales.data : (Array.isArray(sales?.data?.data) ? sales.data.data : []);
-  const purchasesData = purchases?.data?.purchases || (Array.isArray(purchases?.data) ? purchases.data : (Array.isArray(purchases?.data?.data) ? purchases.data.data : []));
+  const purchasesData = purchases?.data?.data?.purchases || purchases?.data?.purchases || (Array.isArray(purchases?.data) ? purchases.data : (Array.isArray(purchases?.data?.data) ? purchases.data.data : []));
   const expensesData = expenses?.data?.expenses || (Array.isArray(expenses?.data) ? expenses.data : (Array.isArray(expenses?.data?.data) ? expenses.data.data : []));
   const transfersData = Array.isArray(transfers?.data) ? transfers.data : (Array.isArray(transfers?.data?.data) ? transfers.data.data : []);
   const partnersData = Array.isArray(partners?.data) ? partners.data : (Array.isArray(partners?.data?.data) ? partners.data.data : []);
@@ -111,19 +144,45 @@ export default function MonthlyReport() {
   const branchTransfers = branchTransfersData?.data || [];
   const customerSales = Array.isArray(customerSalesData?.data) ? customerSalesData.data : (Array.isArray(customerSalesData?.data?.data) ? customerSalesData.data.data : []);
 
+  // بيانات الإنتاج
+  const fabricPurchases = fabricPurchasesData?.data || [];
+  const manufacturingOrders = manufacturingOrdersData?.data || [];
+  const washingOrders = washingOrdersData?.data || [];
+
+  // حسابات الإنتاج
+  const totalFabricPurchases = fabricPurchases.reduce((sum, purchase) => sum + (purchase.totalCost || 0), 0);
+  const totalFabricMeters = fabricPurchases.reduce((sum, purchase) => sum + (purchase.meters || 0), 0);
+  const totalFabricPaid = fabricPurchases.reduce((sum, purchase) => sum + (purchase.paidAmount || 0), 0);
+  
+  const totalManufacturingCost = manufacturingOrders.reduce((sum, order) => sum + (order.totalManufacturingCost || 0), 0);
+  const totalManufacturingPieces = manufacturingOrders.reduce((sum, order) => sum + (order.piecesReceived || 0), 0);
+  const totalManufacturingPaid = manufacturingOrders.reduce((sum, order) => sum + (order.paidAmount || 0), 0);
+  
+  const totalWashingCost = washingOrders.reduce((sum, order) => sum + (order.totalWashingCost || 0), 0);
+  const totalWashingPieces = washingOrders.reduce((sum, order) => sum + (order.piecesReceived || 0), 0);
+  const totalWashingPaid = washingOrders.reduce((sum, order) => sum + (order.paidAmount || 0), 0);
+  
+  const totalProductionCost = totalFabricPurchases + totalManufacturingCost + totalWashingCost;
+  const totalProductionPaid = totalFabricPaid + totalManufacturingPaid + totalWashingPaid;
+
   const totalSales = salesData.reduce((sum, sale) => sum + (sale.total || 0), 0);
-  const totalReturns = returnsData.reduce((sum, ret) => sum + (ret.refundAmount || 0), 0);
+  const totalReturns = returnsData.reduce((sum, ret) => sum + (ret.totalSaleAmount || 0), 0);
+  const totalReturnsCost = returnsData.reduce((sum, ret) => sum + (ret.totalCostAmount || 0), 0);
   const netSales = totalSales - totalReturns;
   
-  const totalPurchases = purchasesData.reduce((sum, purchase) => sum + (purchase.totalAmount || 0), 0);
+  // المشتريات = المشتريات العادية + مشتريات الإنتاج (قماش + تصنيع + غسيل)
+  const regularPurchases = purchasesData.reduce((sum, purchase) => sum + (purchase.totalAmount || 0), 0);
+  const totalPurchases = regularPurchases + totalProductionCost;
   const totalExpenses = expensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
   
   // حساب معاملات الموردين
   const totalPurchasesPaid = purchasesData.reduce((sum, purchase) => sum + (purchase.paidAmount || 0), 0);
   const totalPurchasesRemaining = purchasesData.reduce((sum, purchase) => sum + (purchase.remainingAmount || 0), 0);
   
-  // حساب مبيعات العملاء (فواتير الجملة) - لازم يتحسب الأول
+  // حساب مبيعات العملاء (فواتير الجملة)
   const totalCustomerSales = customerSales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+  const totalCustomerSalesPaid = customerSales.reduce((sum, sale) => sum + (sale.amountPaid || 0), 0); // المدفوع فقط
+  const totalCustomerSalesRemaining = totalCustomerSales - totalCustomerSalesPaid; // المتبقي عند العملاء
   const customerSalesCount = customerSales.length;
   
   // تكلفة بضاعة مبيعات العملاء
@@ -133,17 +192,21 @@ export default function MonthlyReport() {
     }, 0) || 0);
   }, 0);
   
+  // الربح من مبيعات العملاء (كل المبيعات - حتى لو مش مدفوعة)
   const customerSalesProfit = totalCustomerSales - customerSalesCost;
   
-  // إضافة مبيعات العملاء (فواتير الجملة) للدخل - بعد ما نحسب totalCustomerSales
-  const totalRevenue = netSales + totalCustomerSales;
+  // الإيرادات = مبيعات الفروع فقط (مبيعات العملاء مش إيراد - دي مجرد بيع بضاعة موجودة)
+  const totalRevenue = netSales; // مبيعات الفروع فقط
   
-  // تكلفة البضاعة المباعة (COGS) - تشمل مبيعات الفروع + مبيعات العملاء
-  const costOfGoodsSold = salesData.reduce((sum, sale) => {
+  // تكلفة البضاعة المباعة (COGS)
+  // فقط تكلفة مبيعات الفروع (لأن مبيعات العملاء = بضاعة موجودة مش إنتاج جديد)
+  const branchSalesCost = salesData.reduce((sum, sale) => {
     return sum + (sale.items?.reduce((itemSum, item) => {
       return itemSum + ((item.product?.costPrice || 0) * item.quantity);
     }, 0) || 0);
-  }, 0) + customerSalesCost;
+  }, 0);
+
+  const costOfGoodsSold = branchSalesCost;
 
   // صافي الربح (على أساس الاستحقاق)
   const grossProfit = totalRevenue - costOfGoodsSold;
@@ -151,8 +214,8 @@ export default function MonthlyReport() {
   const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100) : 0;
   
   // التدفق النقدي (Cash Flow)
-  const cashInflow = totalSales + totalCustomerSales - totalReturns; // الإيرادات النقدية
-  const cashOutflow = totalPurchasesPaid + totalExpenses; // المصروفات النقدية
+  const cashInflow = totalSales + totalCustomerSalesPaid - totalReturns; // الإيرادات النقدية المدفوعة فقط
+  const cashOutflow = totalExpenses + totalProductionPaid; // المصروفات النقدية (مصروفات + إنتاج فقط)
   const netCashFlow = cashInflow - cashOutflow;
 
   // حساب حصص الشركاء (من الربح أو الخسارة)
@@ -230,8 +293,11 @@ export default function MonthlyReport() {
             <Users className="text-purple-600" size={24} />
           </div>
           <p className="text-2xl font-bold text-purple-700">{totalCustomerSales.toFixed(2)} ج.م</p>
-          <p className="text-xs text-gray-600 mt-1">{customerSalesCount} فاتورة</p>
-          <p className="text-xs text-purple-700 mt-1">ربح: {customerSalesProfit.toFixed(2)} ج.م</p>
+          <div className="flex justify-between text-xs mt-1">
+            <span className="text-green-600">مدفوع: {totalCustomerSalesPaid.toFixed(2)}</span>
+            <span className="text-orange-600">متبقي: {totalCustomerSalesRemaining.toFixed(2)}</span>
+          </div>
+          <p className="text-xs text-gray-600 mt-1">{customerSalesCount} فاتورة • ربح: {customerSalesProfit.toFixed(2)} ج.م</p>
         </div>
 
         <div className="card bg-gradient-to-br from-red-50 to-red-100">
@@ -277,47 +343,85 @@ export default function MonthlyReport() {
           </div>
           
           <div className="space-y-3">
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="font-medium">مبيعات الفروع</span>
-              <span className="font-bold text-green-700">+{totalSales.toFixed(2)}</span>
+            {/* الإيرادات */}
+            <div className="bg-green-50 p-2 rounded">
+              <p className="font-bold text-sm text-green-900 mb-2">📥 الإيرادات النقدية</p>
+              
+              <div className="flex justify-between items-center pb-2 border-b border-green-200">
+                <span className="text-sm">مبيعات الفروع</span>
+                <span className="font-medium text-green-700">{totalSales.toFixed(2)}</span>
+              </div>
+              
+              {totalReturns > 0 && (
+                <div className="flex justify-between items-center pb-2 border-b border-green-200">
+                  <span className="text-sm text-gray-600">- المرتجعات</span>
+                  <span className="text-red-600">({totalReturns.toFixed(2)})</span>
+                </div>
+              )}
+              
+              <div className="flex justify-between items-center pt-2 font-bold">
+                <span>= صافي الإيرادات</span>
+                <span className="text-green-700">{totalRevenue.toFixed(2)}</span>
+              </div>
             </div>
             
-            {totalReturns > 0 && (
-              <div className="flex justify-between items-center pb-2 border-b">
-                <span className="text-gray-700">- المرتجعات</span>
-                <span className="text-red-700">-{totalReturns.toFixed(2)}</span>
+            {/* التكاليف */}
+            <div className="bg-red-50 p-2 rounded">
+              <p className="font-bold text-sm text-red-900 mb-2">📤 التكاليف</p>
+              
+              <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                <span className="text-sm">تكلفة البضاعة المباعة (فروع)</span>
+                <span className="font-medium text-red-700">{costOfGoodsSold.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                <span className="text-sm">تكاليف الإنتاج (قماش + تصنيع + غسيل)</span>
+                <span className="font-medium text-red-700">{totalProductionCost.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                <span className="text-sm">المصروفات التشغيلية</span>
+                <span className="font-medium text-red-700">{totalExpenses.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between items-center pt-2 font-bold">
+                <span>= إجمالي التكاليف</span>
+                <span className="text-red-700">{(costOfGoodsSold + totalProductionCost + totalExpenses).toFixed(2)}</span>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-center pt-3 bg-blue-100 p-3 rounded-lg border-2 border-blue-300">
+              <span className="font-bold text-lg">= صافي الربح / الخسارة</span>
+              <span className={`font-bold text-xl ${(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses) >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                {(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses) >= 0 ? '+' : ''}{(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses).toFixed(2)} ج.م
+              </span>
+            </div>
+            
+            {/* ملاحظة مبيعات العملاء */}
+            {totalCustomerSales > 0 && (
+              <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mt-3">
+                <p className="text-xs font-bold text-yellow-900 mb-1">📦 مبيعات العملاء (حساب منفصل):</p>
+                <div className="text-xs text-gray-700 space-y-1">
+                  <div className="flex justify-between">
+                    <span>إجمالي المبيعات:</span>
+                    <span className="font-medium">{totalCustomerSales.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>المدفوع:</span>
+                    <span className="font-medium text-green-700">{totalCustomerSalesPaid.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>المتبقي (ديون):</span>
+                    <span className="font-medium text-orange-700">{totalCustomerSalesRemaining.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between border-t border-yellow-300 pt-1 mt-1">
+                    <span className="font-bold">الربح المتوقع:</span>
+                    <span className="font-bold text-purple-700">{customerSalesProfit.toFixed(2)} ج.م</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 italic">* لا يُحسب في صافي الربح حتى يتم التحصيل</p>
               </div>
             )}
-            
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="font-medium">+ مبيعات العملاء (جملة)</span>
-              <span className="font-bold text-green-700">+{totalCustomerSales.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b bg-green-50 p-2 rounded">
-              <span className="font-medium">= إجمالي الإيرادات</span>
-              <span className="font-bold text-green-700">{totalRevenue.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="text-gray-700">- تكلفة البضاعة المباعة</span>
-              <span className="text-red-700">-{costOfGoodsSold.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b bg-green-50 p-2 rounded">
-              <span className="font-medium">= مجمل الربح</span>
-              <span className="font-bold text-green-700">{grossProfit.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="text-gray-700">- المصروفات التشغيلية</span>
-              <span className="text-red-700">-{totalExpenses.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex justify-between items-center pt-2 bg-blue-50 p-3 rounded-lg">
-              <span className="font-bold text-lg">= صافي الربح</span>
-              <span className="font-bold text-xl text-blue-700">{netProfit.toFixed(2)} ج.م</span>
-            </div>
           </div>
         </div>
 
@@ -344,9 +448,23 @@ export default function MonthlyReport() {
                   <span className="font-medium text-green-700">+{totalSales.toFixed(2)}</span>
                 </div>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-700">مبيعات العملاء (نقدي)</span>
-                  <span className="font-medium text-green-700">+{totalCustomerSales.toFixed(2)}</span>
+                <div className="border-t pt-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-gray-700 font-medium">مبيعات العملاء (المدفوع نقدي)</span>
+                    <span className="font-bold text-green-700">+{totalCustomerSalesPaid.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-500">• إجمالي الفواتير</span>
+                    <span className="text-gray-600">{totalCustomerSales.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-blue-600">• المدفوع</span>
+                    <span className="text-green-600 font-semibold">{totalCustomerSalesPaid.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-orange-600">• المتبقي (ديون لنا)</span>
+                    <span className="text-orange-700 font-semibold">{totalCustomerSalesRemaining.toFixed(2)} ج.م</span>
+                  </div>
                 </div>
                 
                 {totalReturns > 0 && (
@@ -372,10 +490,26 @@ export default function MonthlyReport() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="text-gray-700">مدفوع للموردين</span>
-                    <div className="text-xs text-gray-500">من أصل {totalPurchases.toFixed(2)} ج.م مشتريات</div>
+                    <span className="text-gray-700">مدفوع للإنتاج (قماش)</span>
+                    <div className="text-xs text-gray-500">من أصل {totalFabricPurchases.toFixed(2)} ج.م</div>
                   </div>
-                  <span className="font-medium text-red-700">-{totalPurchasesPaid.toFixed(2)}</span>
+                  <span className="font-medium text-red-700">-{totalFabricPaid.toFixed(2)}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-gray-700">مدفوع للتصنيع</span>
+                    <div className="text-xs text-gray-500">من أصل {totalManufacturingCost.toFixed(2)} ج.م</div>
+                  </div>
+                  <span className="font-medium text-red-700">-{totalManufacturingPaid.toFixed(2)}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-gray-700">مدفوع للغسيل</span>
+                    <div className="text-xs text-gray-500">من أصل {totalWashingCost.toFixed(2)} ج.م</div>
+                  </div>
+                  <span className="font-medium text-red-700">-{totalWashingPaid.toFixed(2)}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
@@ -407,7 +541,7 @@ export default function MonthlyReport() {
             </div>
             
             {/* التزامات مستقبلية */}
-            {totalPurchasesRemaining > 0 && (
+            {(totalPurchasesRemaining > 0 || (totalProductionCost - totalProductionPaid) > 0) && (
               <div className="mt-3 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">⚠️</span>
@@ -415,16 +549,48 @@ export default function MonthlyReport() {
                 </div>
                 
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center p-2 bg-yellow-100 rounded">
-                    <div>
-                      <span className="font-medium text-yellow-900">متبقي للموردين</span>
-                      <div className="text-xs text-yellow-700">سيتم دفعها في المستقبل</div>
+                  {(totalFabricPurchases - totalFabricPaid) > 0 && (
+                    <div className="flex justify-between items-center p-2 bg-yellow-100 rounded">
+                      <div>
+                        <span className="font-medium text-yellow-900">متبقي للقماش</span>
+                        <div className="text-xs text-yellow-700">سيتم دفعها في المستقبل</div>
+                      </div>
+                      <span className="font-bold text-yellow-900">{(totalFabricPurchases - totalFabricPaid).toFixed(2)} ج.م</span>
                     </div>
-                    <span className="font-bold text-yellow-900">{totalPurchasesRemaining.toFixed(2)} ج.م</span>
-                  </div>
+                  )}
+                  
+                  {(totalManufacturingCost - totalManufacturingPaid) > 0 && (
+                    <div className="flex justify-between items-center p-2 bg-yellow-100 rounded">
+                      <div>
+                        <span className="font-medium text-yellow-900">متبقي للتصنيع</span>
+                        <div className="text-xs text-yellow-700">سيتم دفعها في المستقبل</div>
+                      </div>
+                      <span className="font-bold text-yellow-900">{(totalManufacturingCost - totalManufacturingPaid).toFixed(2)} ج.م</span>
+                    </div>
+                  )}
+                  
+                  {(totalWashingCost - totalWashingPaid) > 0 && (
+                    <div className="flex justify-between items-center p-2 bg-yellow-100 rounded">
+                      <div>
+                        <span className="font-medium text-yellow-900">متبقي للغسيل</span>
+                        <div className="text-xs text-yellow-700">سيتم دفعها في المستقبل</div>
+                      </div>
+                      <span className="font-bold text-yellow-900">{(totalWashingCost - totalWashingPaid).toFixed(2)} ج.م</span>
+                    </div>
+                  )}
+                  
+                  {totalCustomerSalesRemaining > 0 && (
+                    <div className="flex justify-between items-center p-2 bg-blue-100 rounded border border-blue-300">
+                      <div>
+                        <span className="font-medium text-blue-900">💰 متبقي عند العملاء (ديون لنا)</span>
+                        <div className="text-xs text-blue-700">مبيعات آجلة - سيتم تحصيلها في المستقبل</div>
+                      </div>
+                      <span className="font-bold text-blue-900">{totalCustomerSalesRemaining.toFixed(2)} ج.م</span>
+                    </div>
+                  )}
                   
                   <div className="text-xs text-yellow-800 bg-yellow-100 p-2 rounded">
-                    💡 <strong>ملحوظة:</strong> هذا المبلغ مش محسوب في التدفق النقدي لأنه لسه ما اتدفعش
+                    💡 <strong>ملحوظة:</strong> هذه المبالغ مش محسوبة في التدفق النقدي لأنها لسه ما اتدفعتش
                   </div>
                 </div>
               </div>
@@ -443,6 +609,156 @@ export default function MonthlyReport() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* بيانات الإنتاج */}
+      <div className="card mt-6">
+        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+          <Package size={20} />
+          دورة الإنتاج (القماش → التصنيع → الغسيل)
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* شراء القماش */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
+              📦 شراء القماش
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-700">إجمالي التكلفة:</span>
+                <span className="font-bold text-blue-700">{totalFabricPurchases.toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">إجمالي الأمتار:</span>
+                <span className="font-medium">{totalFabricMeters.toFixed(2)} متر</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">عدد الفواتير:</span>
+                <span className="font-medium">{fabricPurchases.length}</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* التصنيع */}
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <h3 className="font-bold text-green-900 mb-3 flex items-center gap-2">
+              ⚙️ التصنيع
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-700">إجمالي التكلفة:</span>
+                <span className="font-bold text-green-700">{totalManufacturingCost.toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">إجمالي القطع:</span>
+                <span className="font-medium">{totalManufacturingPieces} قطعة</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">عدد الأوامر:</span>
+                <span className="font-medium">{manufacturingOrders.length}</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* الغسيل */}
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+            <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
+              🧼 الغسيل
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-700">إجمالي التكلفة:</span>
+                <span className="font-bold text-purple-700">{totalWashingCost.toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">إجمالي القطع:</span>
+                <span className="font-medium">{totalWashingPieces} قطعة</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">عدد الأوامر:</span>
+                <span className="font-medium">{washingOrders.length}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* إجمالي تكاليف الإنتاج */}
+        <div className="bg-gradient-to-r from-orange-50 to-red-50 p-4 rounded-lg border-2 border-orange-300">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="font-bold text-orange-900 mb-1">إجمالي تكاليف الإنتاج</h3>
+              <p className="text-xs text-gray-600">قماش + تصنيع + غسيل</p>
+            </div>
+            <span className="text-3xl font-bold text-orange-700">{totalProductionCost.toFixed(2)} ج.م</span>
+          </div>
+        </div>
+        
+        {/* تفاصيل أوامر التصنيع */}
+        {manufacturingOrders.length > 0 && (
+          <div className="mt-6">
+            <h3 className="font-bold mb-3">تفاصيل أوامر التصنيع المكتملة</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-center p-2">رقم الأمر</th>
+                    <th className="text-right p-2">المورد</th>
+                    <th className="text-center p-2">القماش المستخدم</th>
+                    <th className="text-center p-2">القطع المنتجة</th>
+                    <th className="text-center p-2">التكلفة</th>
+                    <th className="text-center p-2">تاريخ الاستلام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {manufacturingOrders.map(order => (
+                    <tr key={order.id} className="border-b hover:bg-gray-50">
+                      <td className="p-2 text-center font-mono">#{order.orderNumber}</td>
+                      <td className="p-2">{order.supplier?.name}</td>
+                      <td className="p-2 text-center">{order.metersUsed?.toFixed(2)} متر</td>
+                      <td className="p-2 text-center font-medium">{order.piecesReceived} قطعة</td>
+                      <td className="p-2 text-center font-bold text-green-700">{order.totalManufacturingCost?.toFixed(2)} ج.م</td>
+                      <td className="p-2 text-center">{new Date(order.receivedDate).toLocaleDateString('ar-EG')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        
+        {/* تفاصيل أوامر الغسيل */}
+        {washingOrders.length > 0 && (
+          <div className="mt-6">
+            <h3 className="font-bold mb-3">تفاصيل أوامر الغسيل المكتملة</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-center p-2">رقم الأمر</th>
+                    <th className="text-right p-2">المغسلة</th>
+                    <th className="text-center p-2">القطع المغسولة</th>
+                    <th className="text-center p-2">التكلفة/قطعة</th>
+                    <th className="text-center p-2">إجمالي التكلفة</th>
+                    <th className="text-center p-2">تاريخ الاستلام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {washingOrders.map(order => (
+                    <tr key={order.id} className="border-b hover:bg-gray-50">
+                      <td className="p-2 text-center font-mono">#{order.orderNumber}</td>
+                      <td className="p-2">{order.supplier?.name}</td>
+                      <td className="p-2 text-center font-medium">{order.piecesReceived} قطعة</td>
+                      <td className="p-2 text-center">{order.washingCostPerPiece?.toFixed(2)} ج.م</td>
+                      <td className="p-2 text-center font-bold text-purple-700">{order.totalWashingCost?.toFixed(2)} ج.م</td>
+                      <td className="p-2 text-center">{new Date(order.receivedDate).toLocaleDateString('ar-EG')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* حصص الشركاء */}
@@ -540,10 +856,18 @@ export default function MonthlyReport() {
         <h2 className="text-lg font-bold mb-4">مبيعات العملاء (فواتير الجملة من المخزن الرئيسي)</h2>
         {customerSales && customerSales.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
               <div className="bg-green-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">إجمالي المبيعات</p>
                 <p className="text-2xl font-bold text-green-700">{totalCustomerSales.toFixed(2)} ج.م</p>
+              </div>
+              <div className="bg-emerald-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">المدفوع</p>
+                <p className="text-2xl font-bold text-emerald-700">{totalCustomerSalesPaid.toFixed(2)} ج.م</p>
+              </div>
+              <div className="bg-orange-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">المتبقي (ديون)</p>
+                <p className="text-2xl font-bold text-orange-700">{totalCustomerSalesRemaining.toFixed(2)} ج.م</p>
               </div>
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">عدد الفواتير</p>
@@ -552,10 +876,6 @@ export default function MonthlyReport() {
               <div className="bg-red-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600">التكلفة</p>
                 <p className="text-2xl font-bold text-red-700">{customerSalesCost.toFixed(2)} ج.م</p>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">الربح</p>
-                <p className="text-2xl font-bold text-purple-700">{customerSalesProfit.toFixed(2)} ج.م</p>
               </div>
             </div>
             
@@ -567,6 +887,8 @@ export default function MonthlyReport() {
                     <th className="text-right p-3 text-sm">العميل</th>
                     <th className="text-center p-3 text-sm">رقم الفاتورة</th>
                     <th className="text-center p-3 text-sm">الإجمالي</th>
+                    <th className="text-center p-3 text-sm">المدفوع</th>
+                    <th className="text-center p-3 text-sm">المتبقي</th>
                     <th className="text-center p-3 text-sm">التكلفة</th>
                     <th className="text-center p-3 text-sm">الربح</th>
                   </tr>
@@ -577,13 +899,19 @@ export default function MonthlyReport() {
                       return sum + ((item.product?.costPrice || 0) * item.quantity);
                     }, 0) || 0;
                     const saleProfit = sale.total - saleCost;
+                    const amountPaid = sale.amountPaid || 0;
+                    const remaining = sale.total - amountPaid;
                     
                     return (
                       <tr key={sale.id} className="border-b hover:bg-gray-50">
                         <td className="p-3 text-sm text-center">{new Date(sale.createdAt).toLocaleDateString('ar-EG')}</td>
                         <td className="p-3 text-sm font-medium">{sale.customer?.name || sale.customerName || 'غير محدد'}</td>
                         <td className="p-3 text-sm font-mono text-center">{sale.invoiceNumber}</td>
-                        <td className="p-3 text-sm font-medium text-green-700 text-center">{sale.total.toFixed(2)}</td>
+                        <td className="p-3 text-sm font-medium text-gray-700 text-center">{sale.total.toFixed(2)}</td>
+                        <td className="p-3 text-sm font-bold text-green-700 text-center">{amountPaid.toFixed(2)}</td>
+                        <td className="p-3 text-sm font-bold text-orange-700 text-center">
+                          {remaining > 0 ? remaining.toFixed(2) : '-'}
+                        </td>
                         <td className="p-3 text-sm text-red-700 text-center">{saleCost.toFixed(2)}</td>
                         <td className="p-3 text-sm font-bold text-purple-700 text-center">{saleProfit.toFixed(2)}</td>
                       </tr>
@@ -593,7 +921,9 @@ export default function MonthlyReport() {
                 <tfoot className="bg-gray-100 font-bold">
                   <tr>
                     <td colSpan="3" className="p-3 text-sm">الإجمالي</td>
-                    <td className="p-3 text-sm text-green-700 text-center">{totalCustomerSales.toFixed(2)}</td>
+                    <td className="p-3 text-sm text-gray-700 text-center">{totalCustomerSales.toFixed(2)}</td>
+                    <td className="p-3 text-sm text-green-700 text-center">{totalCustomerSalesPaid.toFixed(2)}</td>
+                    <td className="p-3 text-sm text-orange-700 text-center">{totalCustomerSalesRemaining.toFixed(2)}</td>
                     <td className="p-3 text-sm text-red-700 text-center">{customerSalesCost.toFixed(2)}</td>
                     <td className="p-3 text-sm text-purple-700 text-center">{customerSalesProfit.toFixed(2)}</td>
                   </tr>
@@ -655,6 +985,7 @@ export default function MonthlyReport() {
                   <th className="text-center p-3 text-sm">قيمة التوريدات</th>
                   <th className="text-center p-3 text-sm">عدد المبيعات</th>
                   <th className="text-center p-3 text-sm">الإيرادات</th>
+                  <th className="text-center p-3 text-sm">تكلفة المرتجعات</th>
                   <th className="text-center p-3 text-sm">تكلفة المبيعات</th>
                   <th className="text-center p-3 text-sm">المكسب</th>
                   <th className="text-center p-3 text-sm">رصيد الخزنة</th>
@@ -662,12 +993,19 @@ export default function MonthlyReport() {
               </thead>
               <tbody>
                 {branchTransfers.map((item) => {
+                  // حساب المرتجعات للفرع
+                  const branchReturns = returnsData.filter(r => r.branchId === item.branch.id);
+                  const branchReturnsCost = branchReturns.reduce((sum, r) => sum + (r.totalCostAmount || 0), 0);
+                  
                   return (
                     <tr key={item.branch.id} className="border-b hover:bg-gray-50">
                       <td className="p-3 text-sm font-medium">{item.branch.name}</td>
                       <td className="p-3 text-sm text-blue-700 text-center">{item.totalTransferred.toFixed(2)}</td>
                       <td className="p-3 text-sm text-center">{item.salesCount}</td>
                       <td className="p-3 text-sm font-medium text-green-700 text-center">{item.revenue.toFixed(2)}</td>
+                      <td className="p-3 text-sm text-orange-700 text-center">
+                        {branchReturnsCost > 0 ? branchReturnsCost.toFixed(2) : '-'}
+                      </td>
                       <td className="p-3 text-sm text-red-700 text-center">{item.costOfSales.toFixed(2)}</td>
                       <td className={`p-3 text-sm font-bold text-center ${item.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                         {item.profit >= 0 ? '+' : ''}{item.profit.toFixed(2)}
@@ -688,6 +1026,9 @@ export default function MonthlyReport() {
                   </td>
                   <td className="p-3 text-sm text-green-700 text-center">
                     {branchTransfers.reduce((sum, item) => sum + item.revenue, 0).toFixed(2)}
+                  </td>
+                  <td className="p-3 text-sm text-orange-700 text-center">
+                    {totalReturnsCost.toFixed(2)}
                   </td>
                   <td className="p-3 text-sm text-red-700 text-center">
                     {branchTransfers.reduce((sum, item) => sum + item.costOfSales, 0).toFixed(2)}

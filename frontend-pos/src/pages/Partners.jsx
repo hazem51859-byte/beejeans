@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, Users, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Edit2, Users, DollarSign, TrendingUp, TrendingDown, X } from 'lucide-react';
 import api from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
@@ -62,6 +62,18 @@ export default function Partners() {
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'فشل تحديث الشريك');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/partners/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['partners']);
+      queryClient.invalidateQueries(['partners-report']);
+      toast.success('تم حذف الشريك بنجاح');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في حذف الشريك');
     },
   });
 
@@ -226,12 +238,24 @@ export default function Partners() {
                     <span className="text-sm text-gray-500">{partner.sharePercentage}%</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleEdit(partner)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <Edit2 size={18} className="text-blue-600" />
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => handleEdit(partner)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Edit2 size={18} className="text-blue-600" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`هل أنت متأكد من حذف الشريك "${partner.name}"؟`)) {
+                        deleteMutation.mutate(partner.id);
+                      }
+                    }}
+                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <X size={18} className="text-red-600" />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3">

@@ -15,18 +15,30 @@ export default function Dashboard() {
     notes: ''
   });
 
+  const isAdmin = user?.role === 'ADMIN';
+
   // Get current shift (only for non-admin users)
   const { data: shiftData } = useQuery({
     queryKey: ['current-shift'],
     queryFn: shiftAPI.getCurrent,
-    enabled: user?.role !== 'ADMIN', // Only fetch for CASHIER/MANAGER
+    enabled: !isAdmin, // Only fetch for CASHIER/MANAGER
   });
 
   // Get daily report
+  // Admin sees all branches, others see their branch only
   const { data: dailyReport } = useQuery({
-    queryKey: ['daily-report', user?.branchId],
-    queryFn: () => reportAPI.getDaily(user?.branchId, { date: new Date() }),
-    enabled: !!user?.branchId,
+    queryKey: ['daily-report', isAdmin ? 'all' : user?.branchId],
+    queryFn: () => {
+      const date = new Date().toISOString();
+      if (isAdmin) {
+        // Admin: get summary for all branches
+        return reportAPI.getDaily(null, { date });
+      } else {
+        // Cashier/Manager: get their branch only
+        return reportAPI.getDaily(user?.branchId, { date });
+      }
+    },
+    enabled: !!user,
   });
   
   const closeShiftMutation = useMutation({
@@ -51,31 +63,34 @@ export default function Dashboard() {
     });
   };
 
+  // Normalize the daily report data
+  const reportData = dailyReport?.data?.data || dailyReport?.data || {};
+  
   const stats = [
     {
-      name: 'مبيعات اليوم',
-      value: dailyReport?.data?.data?.totalSales?.toFixed(2) || '0.00',
+      name: isAdmin ? 'إجمالي المبيعات' : 'مبيعات اليوم',
+      value: (reportData.totalSales || 0).toFixed(2),
       unit: 'جنيه',
       icon: DollarSign,
       color: 'bg-green-500',
     },
     {
       name: 'عدد المعاملات',
-      value: dailyReport?.data?.data?.transactionCount || '0',
+      value: reportData.transactionCount || 0,
       unit: 'معاملة',
       icon: ShoppingBag,
       color: 'bg-blue-500',
     },
     {
       name: 'الضريبة',
-      value: dailyReport?.data?.data?.totalTax?.toFixed(2) || '0.00',
+      value: (reportData.totalTax || 0).toFixed(2),
       unit: 'جنيه',
       icon: TrendingUp,
       color: 'bg-purple-500',
     },
     {
       name: 'الخصومات',
-      value: dailyReport?.data?.data?.totalDiscount?.toFixed(2) || '0.00',
+      value: (reportData.totalDiscount || 0).toFixed(2),
       unit: 'جنيه',
       icon: Package,
       color: 'bg-orange-500',
@@ -86,44 +101,50 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">لوحة التحكم</h1>
-        <p className="text-gray-600">مرحباً {user?.fullName}، إليك ملخص اليوم</p>
+        <p className="text-gray-600">
+          مرحباً {user?.fullName}، إليك ملخص {isAdmin ? 'كل الفروع' : 'اليوم'}
+        </p>
       </div>
 
-      {/* Current Shift Info */}
-      {shiftData?.data?.data ? (
-        <div className="card bg-green-50 border-2 border-green-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-green-800">الشيفت الحالي</h3>
-              <p className="text-sm text-green-700">
-                رقم الشيفت: {shiftData.data.data.shiftNumber}
-              </p>
-              <p className="text-sm text-green-700">
-                بدأ في: {dayjs(shiftData.data.data.openedAt).format('DD/MM/YYYY - HH:mm')}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-left">
-                <p className="text-sm text-green-700">الرصيد الافتتاحي</p>
-                <p className="text-2xl font-bold text-green-800">
-                  {shiftData.data.data.openingBalance} جنيه
-                </p>
+      {/* Current Shift Info - Only for Cashier/Manager */}
+      {!isAdmin && (
+        <>
+          {shiftData?.data?.data ? (
+            <div className="card bg-green-50 border-2 border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-green-800">الشيفت الحالي</h3>
+                  <p className="text-sm text-green-700">
+                    رقم الشيفت: {shiftData.data.data.shiftNumber}
+                  </p>
+                  <p className="text-sm text-green-700">
+                    بدأ في: {dayjs(shiftData.data.data.openedAt).format('DD/MM/YYYY - HH:mm')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-left">
+                    <p className="text-sm text-green-700">الرصيد الافتتاحي</p>
+                    <p className="text-2xl font-bold text-green-800">
+                      {shiftData.data.data.openingBalance} جنيه
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCloseModal(true)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-bold"
+                  >
+                    <XCircle size={20} />
+                    إغلاق الشيفت
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => setShowCloseModal(true)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-bold"
-              >
-                <XCircle size={20} />
-                إغلاق الشيفت
-              </button>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="card bg-yellow-50 border-2 border-yellow-200">
-          <p className="text-yellow-800 font-medium">⚠️ لا يوجد شيفت مفتوح حالياً</p>
-          <p className="text-sm text-yellow-700 mt-1">افتح شيفت جديد من الإعدادات للبدء في البيع</p>
-        </div>
+          ) : (
+            <div className="card bg-yellow-50 border-2 border-yellow-200">
+              <p className="text-yellow-800 font-medium">⚠️ لا يوجد شيفت مفتوح حالياً</p>
+              <p className="text-sm text-yellow-700 mt-1">افتح شيفت جديد من الإعدادات للبدء في البيع</p>
+            </div>
+          )}
+        </>
       )}
 
       {/* Stats Grid */}
@@ -177,10 +198,12 @@ export default function Dashboard() {
       <div className="card">
         <h3 className="font-bold text-lg mb-4">إجراءات سريعة</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <a href="/pos" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
-            <ShoppingBag className="mx-auto mb-2 text-primary-600" size={32} />
-            <p className="font-medium">بيع جديد</p>
-          </a>
+          {!isAdmin && (
+            <a href="/pos" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
+              <ShoppingBag className="mx-auto mb-2 text-primary-600" size={32} />
+              <p className="font-medium">بيع جديد</p>
+            </a>
+          )}
           <a href="/my-products" className="p-4 border rounded-lg hover:border-primary-500 hover:shadow-md transition-all text-center">
             <Package className="mx-auto mb-2 text-primary-600" size={32} />
             <p className="font-medium">المنتجات</p>
@@ -196,8 +219,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Close Shift Modal */}
-      {showCloseModal && (
+      {/* Close Shift Modal - Only for Cashier/Manager */}
+      {!isAdmin && showCloseModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">إغلاق الشيفت</h2>

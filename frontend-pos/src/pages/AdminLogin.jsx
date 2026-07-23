@@ -53,8 +53,9 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center p-4">
-      <div className="card max-w-md w-full">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="card max-w-md w-full">
           {/* Logo */}
           <div className="flex justify-center mb-6">
             <img 
@@ -125,5 +126,35 @@ export default function AdminLogin() {
           </form>
         </div>
       </div>
+      
+      {/* Fixed Footer - ZoTech - Full Width for Login Pages */}
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-3 px-6 shadow-lg border-t border-gray-700" dir="rtl">
+        <div className="flex items-center justify-center gap-8 text-sm">
+          <div className="text-gray-400 text-xs">
+            © 2026 جميع الحقوق محفوظة
+          </div>
+          
+          <div className="h-4 w-px bg-gray-600"></div>
+          
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+            </svg>
+            <a href="tel:01139395961" className="hover:text-blue-400 transition-colors font-medium">
+              01139395961
+            </a>
+          </div>
+          
+          <div className="h-4 w-px bg-gray-600"></div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-gray-300">تصميم وتطوير</span>
+            <div className="bg-blue-600 px-3 py-1 rounded-full font-bold text-xs">
+              ZoTech
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

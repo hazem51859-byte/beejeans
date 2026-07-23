@@ -1,0 +1,45 @@
+═══════════════════════════════════════════════
+   تحديث المشروع على Railway - خطوات سريعة
+═══════════════════════════════════════════════
+
+📋 الخطوات:
+
+1️⃣ تصدير البيانات المحلية
+   cd backend
+   node export-database.js
+   ✓ احفظ اسم الملف الناتج من مجلد backup/
+
+2️⃣ رفع التعديلات على GitHub
+   git add .
+   git commit -m "Update with all new features and data"
+   git push origin main
+   ✓ Railway هيعمل auto-deploy
+
+3️⃣ انتظر Deploy ينتهي (2-3 دقائق)
+   ✓ شوف Railway Dashboard
+
+4️⃣ استيراد البيانات (اختار طريقة):
+
+   ▸ الطريقة الأولى (Railway CLI):
+     npm install -g @railway/cli
+     railway login
+     railway link
+     cd backend
+     railway run node import-database.js backup/database-backup-XXX.json
+
+   ▸ الطريقة الثانية (Dashboard):
+     - افتح Railway Dashboard
+     - Backend Service → Shell
+     - node import-database.js /path/to/backup-file.json
+
+5️⃣ تحقق من النجاح
+   ✓ افتح Frontend URL
+   ✓ سجل دخول
+   ✓ تأكد من البيانات موجودة
+
+═══════════════════════════════════════════════
+
+📖 للتفاصيل الكاملة: شوف ملف UPDATE-RAILWAY.md
+
+═══════════════════════════════════════════════
+ZoTech - 01139395961

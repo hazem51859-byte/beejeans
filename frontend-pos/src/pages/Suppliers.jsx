@@ -7,29 +7,22 @@ import api from '../services/api';
 export default function Suppliers() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
-  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
+    type: 'FABRIC', // FABRIC, MANUFACTURING, WASHING
     phone: '',
     address: '',
-    notes: '',
-  });
-
-  const [purchaseData, setPurchaseData] = useState({
-    supplierId: '',
-    items: [{ description: '', quantity: 1, unitPrice: 0, size: null, color: '' }],
-    totalAmount: 0,
-    paidAmount: 0,
     notes: '',
   });
 
   const [paymentData, setPaymentData] = useState({
     amount: 0,
     notes: '',
+    invoiceAllocations: [], // توزيع المبلغ على الفواتير
   });
 
   const { data: suppliers } = useQuery({
@@ -79,17 +72,6 @@ export default function Suppliers() {
     },
   });
 
-  const createPurchaseMutation = useMutation({
-    mutationFn: (data) => api.post('/purchases', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['purchases']);
-      queryClient.invalidateQueries(['suppliers']);
-      setShowPurchaseModal(false);
-      resetPurchaseForm();
-      toast.success('تم تسجيل الوارد');
-    },
-  });
-
   const recordPaymentMutation = useMutation({
     mutationFn: ({ supplierId, data }) => api.post(`/suppliers/${supplierId}/payment`, data),
     onSuccess: () => {
@@ -98,28 +80,30 @@ export default function Suppliers() {
       setShowPaymentModal(false);
       setSelectedSupplier(null);
       setPaymentData({ amount: 0, notes: '' });
-      toast.success('تم تسجيل الدفعة بنجاح وتحديث الحساب');
+      toast.success('تم تسجيل الدفع بنجاح');
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'حدث خطأ أثناء تسجيل الدفعة');
-    }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/suppliers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['suppliers']);
+      toast.success('تم حذف المورد بنجاح');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في حذف المورد');
+    },
   });
 
   const resetForm = () => {
     setFormData({
       name: '',
+      type: 'FABRIC',
       phone: '',
       address: '',
-      notes: '',
-    });
-  };
-
-  const resetPurchaseForm = () => {
-    setPurchaseData({
-      supplierId: '',
-      items: [{ description: '', quantity: 1, unitPrice: 0, size: '', color: '' }],
-      totalAmount: 0,
-      paidAmount: 0,
       notes: '',
     });
   };
@@ -128,6 +112,7 @@ export default function Suppliers() {
     setEditingSupplier(supplier);
     setFormData({
       name: supplier.name,
+      type: supplier.type || 'FABRIC',
       phone: supplier.phone || '',
       address: supplier.address || '',
       notes: supplier.notes || '',
@@ -144,68 +129,128 @@ export default function Suppliers() {
     }
   };
 
-  const openPurchaseModal = (supplier) => {
-    setSelectedSupplier(supplier);
-    setPurchaseData({ ...purchaseData, supplierId: supplier.id });
-    setShowPurchaseModal(true);
-  };
-
-  const openPaymentModal = (supplier) => {
-    setSelectedSupplier(supplier);
-    setShowPaymentModal(true);
-  };
-
-  const addPurchaseItem = () => {
-    setPurchaseData({
-      ...purchaseData,
-      items: [...purchaseData.items, { description: '', quantity: 1, unitPrice: 0, size: null, color: '' }],
-    });
-  };
-
-  const updatePurchaseItem = (index, field, value) => {
-    const newItems = [...purchaseData.items];
-    newItems[index][field] = value;
-    
-    // لما يختار صنف، نحط السعر الافتراضي من الـ category
-    if (field === 'description' && value) {
-      const selectedCategory = categories.find(cat => cat.name === value);
-      if (selectedCategory && selectedCategory.defaultCostPrice) {
-        newItems[index]['unitPrice'] = selectedCategory.defaultCostPrice;
+  const openPaymentModal = async (supplier) => {
+    try {
+      // جلب بيانات المورد الكاملة مع الفواتير
+      const response = await api.get(`/suppliers/${supplier.id}`);
+      const supplierData = response.data.data;
+      
+      // جمع كل الفواتير المستحقة حسب نوع المورد
+      let unpaidInvoices = [];
+      
+      if (supplier.type === 'FABRIC' && supplierData.fabricPurchases) {
+        unpaidInvoices = supplierData.fabricPurchases
+          .filter(purchase => purchase.totalCost > purchase.amountPaid)
+          .map(purchase => ({
+            id: purchase.id,
+            type: 'FABRIC',
+            invoiceNumber: `FABRIC-${purchase.id.substring(0, 8)}`,
+            date: purchase.purchaseDate,
+            total: purchase.totalCost,
+            amountPaid: purchase.amountPaid,
+            remaining: purchase.totalCost - purchase.amountPaid,
+            allocation: 0,
+          }));
+      } else if (supplier.type === 'MANUFACTURING' && supplierData.manufacturingOrders) {
+        unpaidInvoices = supplierData.manufacturingOrders
+          .filter(order => order.totalCost > order.amountPaid)
+          .map(order => ({
+            id: order.id,
+            type: 'MANUFACTURING',
+            invoiceNumber: `MANUF-${order.id.substring(0, 8)}`,
+            date: order.sentDate,
+            total: order.totalCost,
+            amountPaid: order.amountPaid,
+            remaining: order.totalCost - order.amountPaid,
+            allocation: 0,
+          }));
+      } else if (supplier.type === 'WASHING' && supplierData.washingOrders) {
+        unpaidInvoices = supplierData.washingOrders
+          .filter(order => order.totalCost > order.amountPaid)
+          .map(order => ({
+            id: order.id,
+            type: 'WASHING',
+            invoiceNumber: `WASH-${order.id.substring(0, 8)}`,
+            date: order.sentDate,
+            total: order.totalCost,
+            amountPaid: order.amountPaid,
+            remaining: order.totalCost - order.amountPaid,
+            allocation: 0,
+          }));
       }
+      
+      setSelectedSupplier(supplierData);
+      setPaymentData({
+        amount: 0,
+        notes: '',
+        invoiceAllocations: unpaidInvoices,
+      });
+      setShowPaymentModal(true);
+    } catch (error) {
+      console.error('Error loading supplier data:', error);
+      toast.error('فشل في تحميل بيانات المورد');
     }
-    
-    const total = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    setPurchaseData({ ...purchaseData, items: newItems, totalAmount: total });
-  };
-
-  const removePurchaseItem = (index) => {
-    const newItems = purchaseData.items.filter((_, i) => i !== index);
-    const total = newItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    setPurchaseData({ ...purchaseData, items: newItems, totalAmount: total });
-  };
-
-  const handlePurchaseSubmit = (e) => {
-    e.preventDefault();
-    const remainingAmount = purchaseData.totalAmount - purchaseData.paidAmount;
-    createPurchaseMutation.mutate({
-      ...purchaseData,
-      supplierName: selectedSupplier.name,
-      supplierPhone: selectedSupplier.phone,
-      remainingAmount,
-      invoiceNumber: `PUR-${Date.now()}`,
-      purchaseDate: new Date().toISOString(),
-    });
   };
 
   const handlePaymentSubmit = (e) => {
     e.preventDefault();
+    
+    const totalAllocated = paymentData.invoiceAllocations.reduce((sum, inv) => sum + (parseFloat(inv.allocation) || 0), 0);
+    
+    if (totalAllocated <= 0) {
+      toast.error('يرجى توزيع المبلغ على الفواتير');
+      return;
+    }
+    
+    // فلترة الفواتير اللي تم توزيع مبالغ عليها فقط
+    const allocatedInvoices = paymentData.invoiceAllocations
+      .filter(inv => inv.allocation > 0)
+      .map(inv => ({
+        id: inv.id,
+        type: inv.type,
+        amount: parseFloat(inv.allocation),
+      }));
+    
     recordPaymentMutation.mutate({
       supplierId: selectedSupplier.id,
       data: { 
-        amount: parseFloat(paymentData.amount),
-        notes: paymentData.notes
+        amount: totalAllocated,
+        notes: paymentData.notes,
+        invoiceAllocations: allocatedInvoices,
       },
     });
+  };
+  
+  const autoDistributePayment = (amount) => {
+    const totalAmount = parseFloat(amount) || 0;
+    let remaining = totalAmount;
+    
+    const updatedAllocations = paymentData.invoiceAllocations.map(inv => {
+      if (remaining <= 0) return { ...inv, allocation: 0 };
+      
+      const toAllocate = Math.min(remaining, inv.remaining);
+      remaining -= toAllocate;
+      
+      return { ...inv, allocation: toAllocate };
+    });
+    
+    setPaymentData({ ...paymentData, amount: totalAmount, invoiceAllocations: updatedAllocations });
+  };
+  
+  const updateInvoiceAllocation = (index, value) => {
+    const newValue = parseFloat(value) || 0;
+    const invoice = paymentData.invoiceAllocations[index];
+    
+    // التأكد من عدم تجاوز المبلغ المتبقي
+    const allocatedValue = Math.min(newValue, invoice.remaining);
+    
+    const updatedAllocations = [...paymentData.invoiceAllocations];
+    updatedAllocations[index] = { ...invoice, allocation: allocatedValue };
+    
+    // حساب الإجمالي
+    const totalAllocated = updatedAllocations.reduce((sum, inv) => sum + (inv.allocation || 0), 0);
+    
+    setPaymentData({ ...paymentData, amount: totalAllocated, invoiceAllocations: updatedAllocations });
   };
 
   const getSupplierPurchases = (supplierId) => {
@@ -214,12 +259,15 @@ export default function Suppliers() {
   };
 
   const calculateSupplierBalance = (supplier) => {
-    const supplierPurchases = getSupplierPurchases(supplier.id);
+    // عدد الفواتير = 1 لو عنده رصيد، 0 لو مفيش
+    // TODO: المفروض نجيب العدد الحقيقي من fabric/manufacturing/washing حسب النوع
+    const purchasesCount = supplier.balance > 0 ? 1 : 0;
+    
     return {
-      totalAmount: supplier.totalPurchases || 0,
+      totalAmount: supplier.totalPurchases || supplier.balance || 0,
       paidAmount: supplier.totalPaid || 0,
       remaining: supplier.balance || 0,
-      purchasesCount: supplierPurchases.length,
+      purchasesCount: purchasesCount,
     };
   };
 
@@ -253,9 +301,21 @@ export default function Suppliers() {
                     <p className="text-sm text-gray-500">{supplier.phone}</p>
                   </div>
                 </div>
-                <button onClick={() => handleEdit(supplier)} className="text-gray-600 hover:text-gray-800">
-                  <Edit2 size={18} />
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => handleEdit(supplier)} className="text-gray-600 hover:text-gray-800">
+                    <Edit2 size={18} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm(`هل أنت متأكد من حذف المورد "${supplier.name}"؟`)) {
+                        deleteMutation.mutate(supplier.id);
+                      }
+                    }}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -311,12 +371,8 @@ export default function Suppliers() {
               )}
 
               <div className="flex gap-2">
-                <button onClick={() => openPurchaseModal(supplier)} className="btn-primary flex-1">
-                  <Package size={16} />
-                  تسجيل وارد
-                </button>
                 {balance.remaining > 0 && (
-                  <button onClick={() => openPaymentModal(supplier)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
+                  <button onClick={() => openPaymentModal(supplier)} className="btn-primary flex-1">
                     <DollarSign size={16} />
                     دفع
                   </button>
@@ -333,6 +389,19 @@ export default function Suppliers() {
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">{editingSupplier ? 'تعديل مورد' : 'مورد جديد'}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">نوع المورد *</label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  className="input-field"
+                  required
+                >
+                  <option value="FABRIC">مورد قماش</option>
+                  <option value="MANUFACTURING">مورد تصنيع</option>
+                  <option value="WASHING">مورد غسيل</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-2">الاسم *</label>
                 <input
@@ -391,151 +460,10 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* Modal: تسجيل وارد */}
-      {showPurchaseModal && selectedSupplier && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">تسجيل وارد - {selectedSupplier.name}</h2>
-            <form onSubmit={handlePurchaseSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">تفاصيل البضاعة</label>
-                {purchaseData.items.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 mb-3 bg-gray-50">
-                    <div className="grid grid-cols-2 gap-3 mb-2">
-                      <div className="col-span-2">
-                        <label className="block text-xs mb-1">الصنف</label>
-                        <select
-                          value={item.description}
-                          onChange={(e) => updatePurchaseItem(index, 'description', e.target.value)}
-                          className="input-field"
-                          required
-                        >
-                          <option value="">اختر الصنف...</option>
-                          {categories.map(cat => (
-                            <option key={cat.id} value={cat.name}>{cat.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs mb-1">اللون</label>
-                        <input
-                          type="text"
-                          value={item.color}
-                          onChange={(e) => updatePurchaseItem(index, 'color', e.target.value)}
-                          className="input-field"
-                          placeholder="أسود"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs mb-1">الكمية</label>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updatePurchaseItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="input-field"
-                          min="1"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs mb-1 font-bold text-gray-700">
-                          سعر الشراء (للقطعة الواحدة)
-                          <span className="text-blue-600 text-[10px] font-normal mr-1">
-                            (سيتم تحميله تلقائياً من الصنف)
-                          </span>
-                        </label>
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updatePurchaseItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="input-field"
-                          min="0"
-                          step="0.01"
-                          required
-                          placeholder="سعر الشراء"
-                        />
-                      </div>
-                    </div>
-                    {purchaseData.items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removePurchaseItem(index)}
-                        className="text-sm text-red-600 hover:text-red-700"
-                      >
-                        <X size={16} className="inline" /> حذف
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addPurchaseItem}
-                  className="text-sm text-primary-600 hover:text-primary-700"
-                >
-                  + إضافة صنف آخر
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div className="col-span-2 bg-blue-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-600">الإجمالي</p>
-                  <p className="text-2xl font-bold text-blue-700">{purchaseData.totalAmount.toFixed(2)} ج.م</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">المدفوع</label>
-                  <input
-                    type="number"
-                    value={purchaseData.paidAmount}
-                    onChange={(e) => setPurchaseData({ ...purchaseData, paidAmount: parseFloat(e.target.value) || 0 })}
-                    className="input-field"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div className="bg-red-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-600">المتبقي (آجل)</p>
-                  <p className="text-xl font-bold text-red-700">
-                    {(purchaseData.totalAmount - purchaseData.paidAmount).toFixed(2)} ج.م
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">ملاحظات</label>
-                <textarea
-                  value={purchaseData.notes}
-                  onChange={(e) => setPurchaseData({ ...purchaseData, notes: e.target.value })}
-                  className="input-field"
-                  rows="2"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t">
-                <button type="submit" className="btn-primary flex-1">
-                  تسجيل الوارد
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPurchaseModal(false);
-                    setSelectedSupplier(null);
-                    resetPurchaseForm();
-                  }}
-                  className="px-6 py-2 border rounded-lg hover:bg-gray-50"
-                >
-                  إلغاء
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Modal: دفع */}
       {showPaymentModal && selectedSupplier && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl my-8">
             <h2 className="text-xl font-bold mb-4">دفعة جديدة - {selectedSupplier.name}</h2>
             <form onSubmit={handlePaymentSubmit} className="space-y-4">
               <div className="bg-red-50 p-4 rounded-lg mb-4">
@@ -544,18 +472,90 @@ export default function Suppliers() {
                   {calculateSupplierBalance(selectedSupplier).remaining.toFixed(2)} ج.م
                 </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">المبلغ المدفوع *</label>
-                <input
-                  type="number"
-                  value={paymentData.amount}
-                  onChange={(e) => setPaymentData({ ...paymentData, amount: parseFloat(e.target.value) || 0 })}
-                  className="input-field"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
+
+              {/* الفواتير المستحقة */}
+              {paymentData.invoiceAllocations.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-100 p-3 font-bold">توزيع الدفعة على الفواتير</div>
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="p-2 text-right">رقم الفاتورة</th>
+                          <th className="p-2 text-right">التاريخ</th>
+                          <th className="p-2 text-right">الإجمالي</th>
+                          <th className="p-2 text-right">المدفوع</th>
+                          <th className="p-2 text-right">المتبقي</th>
+                          <th className="p-2 text-right">المبلغ المدفوع الآن</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paymentData.invoiceAllocations.map((invoice, index) => (
+                          <tr key={invoice.id} className="border-t">
+                            <td className="p-2 font-medium">{invoice.invoiceNumber}</td>
+                            <td className="p-2 text-xs">{new Date(invoice.date).toLocaleDateString('ar-EG')}</td>
+                            <td className="p-2">{invoice.total.toFixed(2)} ج.م</td>
+                            <td className="p-2 text-green-700">{invoice.amountPaid.toFixed(2)} ج.م</td>
+                            <td className="p-2 text-red-700 font-bold">{invoice.remaining.toFixed(2)} ج.م</td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                value={invoice.allocation || ''}
+                                onChange={(e) => updateInvoiceAllocation(index, e.target.value)}
+                                className="input-field w-full"
+                                min="0"
+                                max={invoice.remaining}
+                                step="0.01"
+                                placeholder="0.00"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="bg-blue-50 p-3 flex justify-between items-center border-t-2">
+                    <span className="font-bold">إجمالي المبلغ المدفوع:</span>
+                    <span className="text-xl font-bold text-blue-700">
+                      {paymentData.invoiceAllocations.reduce((sum, inv) => sum + (inv.allocation || 0), 0).toFixed(2)} ج.م
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {paymentData.invoiceAllocations.length === 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-center">
+                  <p className="text-yellow-800">لا توجد فواتير مستحقة لهذا المورد</p>
+                </div>
+              )}
+
+              {/* توزيع تلقائي */}
+              {paymentData.invoiceAllocations.length > 0 && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <label className="block text-sm font-medium mb-2">توزيع تلقائي للمبلغ</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      className="input-field flex-1"
+                      placeholder="أدخل المبلغ"
+                      min="0"
+                      step="0.01"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = e.target.previousElementSibling;
+                        autoDistributePayment(input.value);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      توزيع تلقائي
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">سيتم توزيع المبلغ على الفواتير بالترتيب</p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium mb-2">ملاحظات</label>
                 <textarea
@@ -565,8 +565,13 @@ export default function Suppliers() {
                   rows="2"
                 />
               </div>
+              
               <div className="flex gap-3">
-                <button type="submit" className="btn-primary flex-1">
+                <button 
+                  type="submit" 
+                  className="btn-primary flex-1"
+                  disabled={paymentData.invoiceAllocations.length === 0}
+                >
                   تسجيل الدفعة
                 </button>
                 <button
@@ -574,7 +579,7 @@ export default function Suppliers() {
                   onClick={() => {
                     setShowPaymentModal(false);
                     setSelectedSupplier(null);
-                    setPaymentData({ amount: 0, notes: '' });
+                    setPaymentData({ amount: 0, notes: '', invoiceAllocations: [] });
                   }}
                   className="px-6 py-2 border rounded-lg hover:bg-gray-50"
                 >

@@ -24,6 +24,13 @@ export default function BranchLogin() {
     if (user && user.role !== 'ADMIN' && user.branch?.url === branchCode) {
       navigate('/', { replace: true });
     }
+    
+    // إذا كان Admin مسجل دخول، اعرض رسالة تنبيه
+    if (user && user.role === 'ADMIN' && branchCode) {
+      toast.error('لا يمكن للمسؤول تسجيل الدخول من صفحة الفرع. الرجاء عمل Logout أولاً أو فتح اللينك في نافذة خاصة.', {
+        duration: 5000
+      });
+    }
   }, [user, branchCode, navigate]);
   
   const [credentials, setCredentials] = useState({
@@ -141,52 +148,108 @@ export default function BranchLogin() {
   // If no branch code in URL, show branch selector
   if (!branchCode && !selectedBranchCode && allBranchesData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
-        <div className="card max-w-md w-full">
-          <div className="flex justify-center mb-6">
-            <img 
-              src="/bee.jpg" 
-              alt="Bee Logo" 
-              className="h-24 w-auto object-contain"
-              onError={(e) => e.target.style.display = 'none'}
-            />
-          </div>
-          
-          <div className="text-center mb-8">
-            <div className="bg-primary-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <LogIn className="text-white" size={32} />
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="card max-w-md w-full">
+            <div className="flex justify-center mb-6">
+              <img 
+                src="/bee.jpg" 
+                alt="Bee Logo" 
+                className="h-24 w-auto object-contain"
+                onError={(e) => e.target.style.display = 'none'}
+              />
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-1">Bee 🐝 JEANS</h1>
-            <h2 className="text-xl font-semibold text-primary-600 mb-2">تسجيل دخول الفرع</h2>
-            <p className="text-gray-600">اختر الفرع للمتابعة</p>
-          </div>
+            
+            <div className="text-center mb-8">
+              <div className="bg-primary-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <LogIn className="text-white" size={32} />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-800 mb-1">Bee 🐝 JEANS</h1>
+              <h2 className="text-xl font-semibold text-primary-600 mb-2">تسجيل دخول الفرع</h2>
+              <p className="text-gray-600">اختر الفرع للمتابعة</p>
+            </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">اختر الفرع</label>
-              <select
-                value={selectedBranchCode}
-                onChange={(e) => setSelectedBranchCode(e.target.value)}
-                className="input-field"
-                required
-              >
-                <option value="">-- اختر الفرع --</option>
-                {allBranchesData.map((branch) => (
-                  <option key={branch.id} value={branch.url}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">اختر الفرع</label>
+                <select
+                  value={selectedBranchCode}
+                  onChange={(e) => setSelectedBranchCode(e.target.value)}
+                  className="input-field"
+                  required
+                >
+                  <option value="">-- اختر الفرع --</option>
+                  {allBranchesData.map((branch) => (
+                    <option key={branch.id} value={branch.url}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
+        
+      {/* Fixed Footer - ZoTech - Full Width for Login Pages */}
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-3 px-6 shadow-lg border-t border-gray-700" dir="rtl">
+        <div className="flex items-center justify-center gap-8 text-sm">
+          <div className="text-gray-400 text-xs">
+            © 2026 جميع الحقوق محفوظة
+          </div>
+          
+          <div className="h-4 w-px bg-gray-600"></div>
+          
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+            </svg>
+            <a href="tel:01139395961" className="hover:text-blue-400 transition-colors font-medium">
+              01139395961
+            </a>
+          </div>
+          
+          <div className="h-4 w-px bg-gray-600"></div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-gray-300">تصميم وتطوير</span>
+            <div className="bg-blue-600 px-3 py-1 rounded-full font-bold text-xs">
+              ZoTech
+            </div>
+          </div>
+        </div>
+      </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
-      <div className="card max-w-md w-full">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="card max-w-md w-full">
+          {/* Admin Warning */}
+          {user && user.role === 'ADMIN' && (
+            <div className="mb-6 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded">
+              <div className="flex items-start gap-3">
+                <div className="text-yellow-600 flex-shrink-0">⚠️</div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-yellow-900 mb-1">أنت مسجل دخول كمسؤول</h3>
+                  <p className="text-sm text-yellow-800 mb-3">
+                    لا يمكنك تسجيل الدخول كموظف فرع وأنت مسجل كمسؤول. الرجاء تسجيل الخروج أولاً.
+                  </p>
+                  <button
+                    onClick={() => {
+                      logout();
+                      toast.success('تم تسجيل الخروج');
+                    }}
+                    className="btn-secondary text-sm"
+                  >
+                    تسجيل الخروج
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        
           {/* Logo */}
           <div className="flex justify-center mb-6">
             <img 
@@ -206,7 +269,7 @@ export default function BranchLogin() {
             <p className="text-gray-600">سجل دخولك للمتابعة</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" style={{ opacity: user?.role === 'ADMIN' ? 0.5 : 1, pointerEvents: user?.role === 'ADMIN' ? 'none' : 'auto' }}>
             <div>
               <label className="block text-sm font-medium mb-2">اسم المستخدم</label>
               <div className="relative">
@@ -219,6 +282,7 @@ export default function BranchLogin() {
                   placeholder="ادخل اسم المستخدم"
                   required
                   autoFocus
+                  disabled={user?.role === 'ADMIN'}
                 />
               </div>
             </div>
@@ -234,13 +298,14 @@ export default function BranchLogin() {
                   className="input-field pr-10"
                   placeholder="ادخل كلمة المرور"
                   required
+                  disabled={user?.role === 'ADMIN'}
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={loginMutation.isPending}
+              disabled={loginMutation.isPending || user?.role === 'ADMIN'}
               className="w-full btn-primary disabled:opacity-50"
             >
               {loginMutation.isPending ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
@@ -248,5 +313,35 @@ export default function BranchLogin() {
           </form>
         </div>
       </div>
+      
+      {/* Fixed Footer - ZoTech */}
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-3 px-6 shadow-lg border-t border-gray-700" dir="rtl">
+        <div className="flex items-center justify-center gap-8 text-sm">
+          <div className="text-gray-400 text-xs">
+            © 2026 جميع الحقوق محفوظة
+          </div>
+          
+          <div className="h-4 w-px bg-gray-600"></div>
+          
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+            </svg>
+            <a href="tel:01139395961" className="hover:text-blue-400 transition-colors font-medium">
+              01139395961
+            </a>
+          </div>
+          
+          <div className="h-4 w-px bg-gray-600"></div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-gray-300">تصميم وتطوير</span>
+            <div className="bg-blue-600 px-3 py-1 rounded-full font-bold text-xs">
+              ZoTech
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

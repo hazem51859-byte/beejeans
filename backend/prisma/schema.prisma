@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://postgres:Zoma.54559@localhost:5432/bee_jeans_pos?schema=public"
+  url      = env("DATABASE_URL")
 }
 
 // =====================

@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../config/database');
 
 // Get all transfers with filters
 exports.getAllTransfers = async (req, res) => {
@@ -9,9 +8,14 @@ exports.getAllTransfers = async (req, res) => {
     
     const where = {};
     
-    // إذا كان كاشير، يشوف فقط التوريدات الخاصة بفرعه
-    if (userRole === 'CASHIER') {
-      where.toBranchId = req.user.branchId;
+    // إذا كان كاشير أو مدير فرع، يشوف التوريدات الصادرة والواردة لفرعه
+    if (userRole === 'CASHIER' || userRole === 'MANAGER') {
+      if (req.user.branchId) {
+        where.OR = [
+          { fromBranchId: req.user.branchId },
+          { toBranchId: req.user.branchId }
+        ];
+      }
     } else if (branchId) {
       where.OR = [
         { fromBranchId: branchId },
@@ -70,14 +74,23 @@ exports.getAllTransfers = async (req, res) => {
 exports.getPendingTransfersForSending = async (req, res) => {
   try {
     const branchId = req.user.branchId;
+    const userRole = req.user.role;
+    
+    const where = {
+      status: {
+        in: ['PENDING', 'IN_TRANSIT']
+      }
+    };
+
+    if (userRole !== 'ADMIN') {
+      if (!branchId) {
+        return res.json({ success: true, data: [] });
+      }
+      where.fromBranchId = branchId;
+    }
     
     const transfers = await prisma.transfer.findMany({
-      where: {
-        fromBranchId: branchId,
-        status: {
-          in: ['PENDING', 'IN_TRANSIT']
-        }
-      },
+      where,
       include: {
         fromBranch: true,
         toBranch: true,
@@ -106,14 +119,23 @@ exports.getPendingTransfersForSending = async (req, res) => {
 exports.getPendingTransfersWithDetails = async (req, res) => {
   try {
     const branchId = req.user.branchId;
+    const userRole = req.user.role;
+    
+    const where = {
+      status: {
+        in: ['PENDING', 'IN_TRANSIT']
+      }
+    };
+
+    if (userRole !== 'ADMIN') {
+      if (!branchId) {
+        return res.json({ success: true, data: [] });
+      }
+      where.toBranchId = branchId;
+    }
     
     const transfers = await prisma.transfer.findMany({
-      where: {
-        toBranchId: branchId,
-        status: {
-          in: ['PENDING', 'IN_TRANSIT']
-        }
-      },
+      where,
       include: {
         fromBranch: true,
         toBranch: true,

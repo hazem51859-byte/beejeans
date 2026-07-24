@@ -19,7 +19,7 @@ exports.getInventoryByBranch = async (req, res, next) => {
 
     const total = await prisma.inventory.count({ where: { branchId } });
     
-    // حساب الكميات المنتظرة (في التوريدات المعلقة أو في الطريق)
+    // حساب الكميات المنتظرة للطلب التي لم تشحن بعد (PENDING) والتي تم شحنها وفي الطريق (IN_TRANSIT)
     const pendingTransfers = await prisma.transferItem.findMany({
       where: {
         transfer: {
@@ -39,28 +39,38 @@ exports.getInventoryByBranch = async (req, res, next) => {
       }
     });
     
-    // تجميع الكميات المنتظرة حسب المنتج
+    // تجميع الكميات المحجوزة
     const pendingByProduct = {};
     pendingTransfers.forEach(item => {
       if (!pendingByProduct[item.productId]) {
         pendingByProduct[item.productId] = {
-          quantity: 0,
+          unshippedQuantity: 0, // PENDING فقط (لم تخصم بعد من المخزن)
+          inTransitQuantity: 0, // IN_TRANSIT (خصمت بالفعل من المخزن)
           transfers: []
         };
       }
-      pendingByProduct[item.productId].quantity += item.quantityRequested;
+
+      if (item.transfer.status === 'PENDING') {
+        pendingByProduct[item.productId].unshippedQuantity += item.quantityRequested;
+      } else if (item.transfer.status === 'IN_TRANSIT') {
+        pendingByProduct[item.productId].inTransitQuantity += item.quantityRequested;
+      }
+
       pendingByProduct[item.productId].transfers.push({
         transferNumber: item.transfer.transferNumber,
         toBranch: item.transfer.toBranch?.name,
-        quantity: item.quantityRequested
+        quantity: item.quantityRequested,
+        status: item.transfer.status
       });
     });
     
     // إخفاء سعر الشراء عن الكاشير وإضافة الكميات المنتظرة
     const userRole = req.user?.role;
     const sanitizedInventory = inventory.map(inv => {
-      const pendingData = pendingByProduct[inv.productId] || { quantity: 0, transfers: [] };
-      const availableQuantity = inv.quantity - pendingData.quantity;
+      const pendingData = pendingByProduct[inv.productId] || { unshippedQuantity: 0, inTransitQuantity: 0, transfers: [] };
+      // الخصم فقط للـ PENDING لأن الـ IN_TRANSIT تم خصمه بالفعل من inv.quantity في قاعدة البيانات عند الشحن
+      const availableQuantity = inv.quantity - pendingData.unshippedQuantity;
+      const totalPending = pendingData.unshippedQuantity + pendingData.inTransitQuantity;
       
       let productData = inv.product;
       if (userRole === 'CASHIER' && inv.product) {
@@ -71,7 +81,7 @@ exports.getInventoryByBranch = async (req, res, next) => {
       return {
         ...inv,
         product: productData,
-        pendingQuantity: pendingData.quantity,
+        pendingQuantity: totalPending,
         availableQuantity: Math.max(0, availableQuantity),
         pendingTransfers: pendingData.transfers
       };

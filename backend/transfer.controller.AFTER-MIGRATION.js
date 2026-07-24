@@ -349,7 +349,7 @@ exports.confirmReceipt = async (req, res) => {
       // تحديث المخزون في الفرع المستقبل
       await prisma.inventory.upsert({
         where: {
-          branchId_productId: {
+          productId_branchId: {
             productId: item.productId,
             branchId: transfer.toBranchId
           }
@@ -372,7 +372,7 @@ exports.confirmReceipt = async (req, res) => {
       if (transfer.fromBranchId) {
         const fromInventory = await prisma.inventory.findUnique({
           where: {
-            branchId_productId: {
+            productId_branchId: {
               productId: item.productId,
               branchId: transfer.fromBranchId
             }

@@ -310,7 +310,7 @@ exports.completeTransferReceiving = async (req, res) => {
       // إضافة الكمية المستلمة فعلياً للفرع المستقبل
       await prisma.inventory.upsert({
         where: {
-          branchId_productId: {
+          productId_branchId: {
             productId: transferItem.productId,
             branchId: transfer.toBranchId
           }
@@ -334,7 +334,7 @@ exports.completeTransferReceiving = async (req, res) => {
         // نقص: نرجع الكمية الناقصة للمخزن المصدر
         await prisma.inventory.upsert({
           where: {
-            branchId_productId: {
+            productId_branchId: {
               productId: transferItem.productId,
               branchId: transfer.fromBranchId
             }
@@ -421,9 +421,9 @@ exports.createTransfer = async (req, res) => {
     for (const item of items) {
       const inventory = await prisma.inventory.findUnique({
         where: {
-          branchId_productId: {
-            branchId: sourceBranchId,
-            productId: item.productId
+          productId_branchId: {
+            productId: item.productId,
+            branchId: sourceBranchId
           }
         }
       });
@@ -482,9 +482,9 @@ exports.createTransfer = async (req, res) => {
     for (const item of items) {
       await prisma.inventory.update({
         where: {
-          branchId_productId: {
-            branchId: sourceBranchId,
-            productId: item.productId
+          productId_branchId: {
+            productId: item.productId,
+            branchId: sourceBranchId
           }
         },
         data: {

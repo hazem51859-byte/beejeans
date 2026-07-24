@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
 // Railway production URL
-const API_BASE_URL = 'https://beejeans.up.railway.app/api/v1';
+const API_BASE_URL = 'https://bee-jeans-pos-production.up.railway.app/api/v1';
 
 console.log('🌐 API URL:', API_BASE_URL);
 

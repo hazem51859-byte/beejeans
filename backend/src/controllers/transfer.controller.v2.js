@@ -560,8 +560,8 @@ exports.createTransfer = async (req, res) => {
         return res.status(400).json({ success: false, error: `المنتج غير موجود: ${item.productId}` });
       }
 
-      const costPrice = item.costPrice !== undefined ? parseFloat(item.costPrice) : (product.costPrice || 0);
-      const sellingPrice = item.sellingPrice !== undefined ? parseFloat(item.sellingPrice) : (product.sellingPrice || 0);
+      const costPrice = product.costPrice || 0;
+      const sellingPrice = product.sellingPrice || 0;
       const qty = parseInt(item.quantity);
 
       totalCost += costPrice * qty;

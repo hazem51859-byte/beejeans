@@ -68,8 +68,7 @@ exports.getInventoryByBranch = async (req, res, next) => {
     const userRole = req.user?.role;
     const sanitizedInventory = inventory.map(inv => {
       const pendingData = pendingByProduct[inv.productId] || { unshippedQuantity: 0, inTransitQuantity: 0, transfers: [] };
-      // الخصم فقط للـ PENDING لأن الـ IN_TRANSIT تم خصمه بالفعل من inv.quantity في قاعدة البيانات عند الشحن
-      const availableQuantity = inv.quantity - pendingData.unshippedQuantity;
+      const availableQuantity = inv.quantity;
       const totalPending = pendingData.unshippedQuantity + pendingData.inTransitQuantity;
       
       let productData = inv.product;

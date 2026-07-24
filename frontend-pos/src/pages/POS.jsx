@@ -458,9 +458,9 @@ export default function POS() {
   const change = parseFloat(amountPaid || 0) - total;
 
   return (
-    <div className="h-full flex flex-col lg:flex-row gap-5">
-      {/* Left: Cart Items & Product Search Display */}
-      <div className="flex-1 flex flex-col gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* Right (RTL): Cart Items & Product Search Display (Takes 67% width) */}
+      <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-5">
         {/* Modern Barcode & Product Search */}
         <div className="card border-slate-200/90 shadow-md">
           <div className="relative">
@@ -549,7 +549,7 @@ export default function POS() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {items.map((item) => {
                 const itemPrice = item.customPrice !== undefined ? item.customPrice : (item.category?.defaultSellingPrice || item.sellingPrice);
                 const uniqueKey = item.cartItemId || item.id;
@@ -787,8 +787,8 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Right: Payment Summary Panel */}
-      <div className="w-full lg:w-88 flex flex-col gap-4">
+      {/* Left (RTL): Payment Summary Panel (Takes 33% width) */}
+      <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-5">
         {/* Current Shift Info Badge */}
         {currentShift ? (
           <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white border border-emerald-200/80 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">

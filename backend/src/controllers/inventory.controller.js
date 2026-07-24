@@ -79,6 +79,7 @@ exports.getInventoryByBranch = async (req, res, next) => {
       
       return {
         ...inv,
+        quantity: inv.quantity + totalPending, // الكمية الكلية تشمل المنتظرة لحين الاستلام الفعلي
         product: productData,
         pendingQuantity: totalPending,
         availableQuantity: Math.max(0, availableQuantity),

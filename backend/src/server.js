@@ -62,9 +62,13 @@ app.use(morgan('dev'));
 // Rate limiting
 app.use('/api/', rateLimiter);
 
-// Health check
+// Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    version: '2.0'
+  });
 });
 
 // API Routes

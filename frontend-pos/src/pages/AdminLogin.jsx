@@ -10,11 +10,6 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const { setAuth, user } = useAuthStore();
   
-  console.log('👔 === ADMIN LOGIN COMPONENT LOADED ===');
-  console.log('Pathname:', window.location.pathname);
-  console.log('Current user:', user?.username || 'none');
-  console.log('=======================================');
-  
   // إذا كان المستخدم admin مسجل دخول بالفعل، انقله للداشبورد
   useEffect(() => {
     if (user?.role === 'ADMIN') {

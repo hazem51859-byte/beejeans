@@ -60,8 +60,6 @@ function App() {
   const { user } = useAuthStore();
   const location = useLocation();
   const isAdmin = user?.role === 'ADMIN';
-  
-  console.log('🚀 App.jsx - Location:', location.pathname, 'User:', user?.username || 'null');
 
   return (
     <Routes>

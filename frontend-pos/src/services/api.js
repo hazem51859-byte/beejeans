@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-// Railway production URL
-const API_BASE_URL = 'https://bee-jeans-pos-production.up.railway.app/api/v1';
+// Base URL from environment or production fallback
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://bee-jeans-pos-production.up.railway.app/api/v1';
 
 console.log('🌐 API URL:', API_BASE_URL);
 

@@ -58,9 +58,9 @@ export default function MonthlyReport() {
   });
 
   const { data: returns } = useQuery({
-    queryKey: ['returns', startDate, endDate],
+    queryKey: ['returns', startDate, endDateString],
     queryFn: async () => {
-      const response = await api.get('/returns', { params: { startDate, endDate } });
+      const response = await api.get('/returns', { params: { startDate, endDate: endDateString } });
       return response.data;
     },
   });

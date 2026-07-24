@@ -173,7 +173,7 @@ exports.closeShift = async (req, res, next) => {
     const totalSales = salesData._sum.total || 0;
     const totalTransactions = salesData._count || 0;
 
-    // Calculate expected cash (opening balance + cash sales)
+    // Calculate expected cash (opening balance + cash sales - cash returns)
     const cashSales = await prisma.sale.aggregate({
       where: {
         shiftId: id,
@@ -185,7 +185,17 @@ exports.closeShift = async (req, res, next) => {
       }
     });
 
-    const expectedCash = parseFloat(shift.openingBalance) + parseFloat(cashSales._sum.amountPaid || 0);
+    const cashReturns = await prisma.return.aggregate({
+      where: {
+        sale: { shiftId: id },
+        refundMethod: 'CASH'
+      },
+      _sum: {
+        totalSaleAmount: true
+      }
+    });
+
+    const expectedCash = parseFloat(shift.openingBalance) + parseFloat(cashSales._sum.amountPaid || 0) - parseFloat(cashReturns._sum.totalSaleAmount || 0);
 
     // Close shift - actualCash = expectedCash (automatic calculation)
     const closedShift = await prisma.shift.update({

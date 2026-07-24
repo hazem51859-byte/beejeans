@@ -9,7 +9,8 @@ import dayjs from 'dayjs';
 export default function Settings() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('shift');
+  const isAdmin = user?.role === 'ADMIN';
+  const [activeTab, setActiveTab] = useState(isAdmin ? 'profile' : 'shift');
   const [closingData, setClosingData] = useState({
     notes: '',
   });
@@ -19,10 +20,11 @@ export default function Settings() {
     confirmPassword: '',
   });
 
-  // Get current shift
+  // Get current shift (only for non-admin users)
   const { data: shiftData, refetch: refetchShift } = useQuery({
     queryKey: ['current-shift'],
     queryFn: shiftAPI.getCurrent,
+    enabled: !isAdmin,
   });
 
   const currentShift = shiftData?.data?.data;
@@ -108,7 +110,7 @@ export default function Settings() {
   };
 
   const tabs = [
-    { id: 'shift', name: 'إدارة الشيفت', icon: DoorOpen },
+    ...(!isAdmin ? [{ id: 'shift', name: 'إدارة الشيفت', icon: DoorOpen }] : []),
     { id: 'profile', name: 'الملف الشخصي', icon: User },
     { id: 'security', name: 'الأمان', icon: Lock },
   ];
@@ -117,7 +119,7 @@ export default function Settings() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">الإعدادات</h1>
-        <p className="text-gray-600">إدارة الحساب والشيفتات</p>
+        <p className="text-gray-600">{isAdmin ? 'إدارة الحساب' : 'إدارة الحساب والشيفتات'}</p>
       </div>
 
       {/* Tabs */}
@@ -141,8 +143,8 @@ export default function Settings() {
         })}
       </div>
 
-      {/* Shift Management Tab */}
-      {activeTab === 'shift' && (
+      {/* Shift Management Tab - Only for non-admin users */}
+      {(!isAdmin && activeTab === 'shift') && (
         <div className="space-y-6">
           {currentShift ? (
             <>

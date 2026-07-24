@@ -96,45 +96,61 @@ export default function Layout() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-800">
       {/* Top Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="px-6 py-4 flex items-center justify-between">
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm z-30 relative min-h-[74px] flex items-center px-6 py-3">
+        <div className="w-full flex items-center justify-between relative">
+          {/* Right side (over sidebar in RTL): Dollar Icon + Status Indicator */}
           <div className="flex items-center gap-3">
-            <div className="bg-primary-600 w-10 h-10 rounded-lg flex items-center justify-center">
-              <DollarSign className="text-white" size={24} />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-md shadow-emerald-600/25 ring-2 ring-emerald-100">
+              <DollarSign className="text-white" size={22} />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">
-                {user?.role === 'ADMIN' ? 'Biso & Gilan & Layan' : 'Bee 🐝 JEANS'}
-              </h1>
-              <p className="text-sm text-gray-500">{user?.branch?.name || 'نظام نقاط البيع'}</p>
+            <div className="flex items-center gap-2 bg-slate-100/80 px-3.5 py-1.5 rounded-xl border border-slate-200/60">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-xs font-bold text-slate-600">نظام نقاط البيع</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="font-medium text-gray-800">{user?.fullName}</p>
-              <p className="text-sm text-gray-500">{user?.role === 'ADMIN' ? 'مدير' : user?.role === 'MANAGER' ? 'مدير فرع' : 'كاشير'}</p>
+          {/* Center: Main Brand & Branch Title (Prominent & Clean) */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center bg-gradient-to-r from-emerald-50/90 via-white to-teal-50/90 px-8 py-2.5 rounded-2xl border border-emerald-300/40 shadow-md shadow-emerald-500/10 ring-4 ring-emerald-500/5">
+            <div className="text-center">
+              <h1 className="text-xl font-black tracking-tight text-slate-900 leading-tight">
+                {user?.role === 'ADMIN' ? 'Biso & Gilan & Layan' : 'Bee 🐝 JEANS'}
+              </h1>
+              <p className="text-xs font-extrabold text-emerald-700 mt-0.5 tracking-wide">
+                {user?.branch?.name || (user?.role === 'ADMIN' ? 'المصنع الرئيسي' : 'نظام نقاط البيع الاحترافي')}
+              </p>
             </div>
-            <div className="bg-primary-100 w-10 h-10 rounded-full flex items-center justify-center">
-              <User className="text-primary-600" size={20} />
+          </div>
+
+          {/* Left side: User Profile */}
+          <div className="flex items-center gap-3.5">
+            <div className="text-left">
+              <p className="font-bold text-slate-900 text-sm">{user?.fullName}</p>
+              <span className="inline-block mt-0.5 px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                {user?.role === 'ADMIN' ? 'مدير عام' : user?.role === 'MANAGER' ? 'مدير فرع' : 'كاشير'}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-slate-100 border border-emerald-200/60 flex items-center justify-center shadow-sm">
+              <User className="text-emerald-600" size={20} />
             </div>
           </div>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar with Scroll */}
-        <aside className="w-64 bg-white border-l shadow-sm flex flex-col">
+        {/* Dark Luxury Sidebar with Scroll */}
+        <aside className="w-64 bg-slate-900 text-slate-300 border-l border-slate-800 shadow-xl flex flex-col z-20">
           {/* Scrollable Navigation */}
-          <nav className="p-4 space-y-2 overflow-y-auto flex-1">
+          <nav className="p-3.5 space-y-1.5 overflow-y-auto flex-1 custom-sidebar-scroll">
             {filteredNavigation.map((item) => {
               // Header items (non-clickable section titles)
               if (item.isHeader) {
                 return (
-                  <div key={item.path} className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    {item.name}
+                  <div key={item.path} className="px-3 pt-4 pb-1 text-[11px] font-extrabold text-emerald-400/90 uppercase tracking-wider flex items-center gap-2">
+                    <span className="h-px bg-emerald-500/20 flex-1"></span>
+                    <span>{item.name.replace(/---/g, '').trim()}</span>
+                    <span className="h-px bg-emerald-500/20 flex-1"></span>
                   </div>
                 );
               }
@@ -146,60 +162,70 @@ export default function Layout() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group ${
                     active
-                      ? 'bg-primary-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30 border border-emerald-400/30'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 hover:translate-x-[-2px]'
                   }`}
                 >
-                  {Icon && <Icon size={20} />}
-                  <span className="font-medium">{item.name}</span>
+                  <div className="flex items-center gap-3">
+                    {Icon && (
+                      <Icon 
+                        size={19} 
+                        className={`transition-colors ${active ? 'text-white' : 'text-slate-400 group-hover:text-emerald-400'}`} 
+                      />
+                    )}
+                    <span>{item.name}</span>
+                  </div>
+                  {active && (
+                    <span className="w-1.5 h-4 bg-white/90 rounded-full shadow-sm"></span>
+                  )}
                 </Link>
               );
             })}
           </nav>
           
           {/* Fixed Logout Button at Bottom */}
-          <div className="p-4 border-t border-gray-200 bg-white">
+          <div className="p-3.5 border-t border-slate-800 bg-slate-900/95">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-rose-400 hover:text-rose-200 hover:bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 transition-all text-sm font-semibold group"
             >
-              <LogOut size={20} />
-              <span className="font-medium">تسجيل الخروج</span>
+              <LogOut size={19} className="group-hover:-translate-x-0.5 transition-transform" />
+              <span>تسجيل الخروج</span>
             </button>
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-auto">
-          <div className="p-6 pb-16">
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-auto bg-slate-50/60 relative">
+          <div className="p-6 pb-20 max-w-7xl mx-auto">
             <Outlet />
           </div>
           
           {/* Fixed Footer - ZoTech */}
-          <div className="fixed bottom-0 right-64 left-0 bg-gradient-to-r from-gray-900 to-gray-800 text-white py-3 px-6 shadow-lg border-t border-gray-700 z-40" dir="rtl">
-            <div className="flex items-center justify-center gap-8 text-sm">
-              <div className="text-gray-400 text-xs">
+          <div className="fixed bottom-0 right-64 left-0 bg-slate-900/95 backdrop-blur-md text-white py-2.5 px-6 shadow-2xl border-t border-slate-800 z-40" dir="rtl">
+            <div className="flex items-center justify-center gap-8 text-xs">
+              <div className="text-slate-400 font-medium">
                 © 2026 جميع الحقوق محفوظة
               </div>
               
-              <div className="h-4 w-px bg-gray-600"></div>
+              <div className="h-3.5 w-px bg-slate-700"></div>
               
               <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-3.5 h-3.5 text-emerald-400 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                 </svg>
-                <a href="tel:01139395961" className="hover:text-blue-400 transition-colors font-medium">
+                <a href="tel:01139395961" className="hover:text-emerald-300 transition-colors font-semibold tracking-wide">
                   01139395961
                 </a>
               </div>
               
-              <div className="h-4 w-px bg-gray-600"></div>
+              <div className="h-3.5 w-px bg-slate-700"></div>
               
               <div className="flex items-center gap-2">
-                <span className="text-gray-300">تصميم وتطوير</span>
-                <div className="bg-blue-600 px-3 py-1 rounded-full font-bold text-xs">
+                <span className="text-slate-400">تصميم وتطوير</span>
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-0.5 rounded-full font-bold text-[11px] shadow-sm shadow-emerald-500/30 tracking-wide text-white">
                   ZoTech
                 </div>
               </div>
@@ -207,8 +233,6 @@ export default function Layout() {
           </div>
         </main>
       </div>
-
-      {/* Footer Removed Temporarily */}
     </div>
   );
 }

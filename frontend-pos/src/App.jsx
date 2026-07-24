@@ -129,8 +129,10 @@ function App() {
         )}
       </Route>
 
-      {/* Catch all - redirect to admin login */}
-      <Route path="*" element={<Navigate to="/admin-login" replace />} />
+      {/* Catch all - redirect based on auth status */}
+      <Route path="*" element={
+        user?.role === 'ADMIN' ? <Navigate to="/" replace /> : <Navigate to="/branch-login" replace />
+      } />
     </Routes>
   );
 }

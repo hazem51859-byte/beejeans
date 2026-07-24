@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://beejeans.up.railway.app/api/v1';
+// Try to get from window (runtime), then from Vite env, then fallback
+const API_BASE_URL = window.ENV?.VITE_API_URL || import.meta.env.VITE_API_URL || 'https://beejeans.up.railway.app/api/v1';
+
+console.log('🌐 API URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,

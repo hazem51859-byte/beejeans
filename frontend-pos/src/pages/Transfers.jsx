@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Package, CheckCircle, XCircle, ArrowLeftRight, Truck, Trash2 } from 'lucide-react';
+import { Plus, Package, CheckCircle, XCircle, ArrowLeftRight, Truck, Trash2, Eye, Clock, MapPin, User, FileText, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
@@ -12,8 +12,9 @@ export default function Transfers() {
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedTransfer, setSelectedTransfer] = useState(null);
-  const [activeTab, setActiveTab] = useState('inbox');
+  const [activeTab, setActiveTab] = useState(isAdmin ? 'all' : 'inbox');
   
   const [formData, setFormData] = useState({
     fromBranchId: '',
@@ -74,8 +75,13 @@ export default function Transfers() {
 
   // Filter transfers based on active tab
   const filteredTransfers = transfers.filter(t => {
+    if (activeTab === 'all') return true; // Admin: show all transfers
     if (activeTab === 'inbox') return t.toBranchId === user?.branchId && t.status !== 'DELIVERED';
-    if (activeTab === 'outbox') return t.fromBranchId === user?.branchId && t.status !== 'DELIVERED';
+    if (activeTab === 'outbox') {
+      // For admin, show transfers they sent (by user id) OR from their branch
+      if (isAdmin) return t.sentBy === user?.id || t.fromBranchId === user?.branchId;
+      return t.fromBranchId === user?.branchId && t.status !== 'DELIVERED';
+    }
     if (activeTab === 'history') return t.status === 'DELIVERED';
     return false;
   });
@@ -164,6 +170,11 @@ export default function Transfers() {
     setShowReceiveModal(true);
   };
 
+  const handleOpenDetailModal = (transfer) => {
+    setSelectedTransfer(transfer);
+    setShowDetailModal(true);
+  };
+
   const handleReceiveSubmit = (e) => {
     e.preventDefault();
     
@@ -195,6 +206,20 @@ export default function Transfers() {
     );
   };
 
+  const getStatusStep = (status) => {
+    const steps = ['PENDING', 'IN_TRANSIT', 'DELIVERED'];
+    return steps.indexOf(status);
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ar-EG', { 
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
   if (isLoading) {
     return <div className="flex justify-center items-center h-screen">جاري التحميل...</div>;
   }
@@ -216,6 +241,14 @@ export default function Transfers() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-4 py-2 rounded-lg ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          >
+            الكل
+          </button>
+        )}
         <button
           onClick={() => setActiveTab('inbox')}
           className={`px-4 py-2 rounded-lg ${activeTab === 'inbox' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
@@ -264,14 +297,24 @@ export default function Transfers() {
                   {new Date(transfer.sentAt).toLocaleDateString('ar-EG')}
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap">
-                  {transfer.status === 'PENDING' && activeTab === 'inbox' && (
+                  <div className="flex items-center gap-2">
+                    {transfer.status === 'PENDING' && activeTab === 'inbox' && (
+                      <button
+                        onClick={() => handleOpenReceiveModal(transfer)}
+                        className="text-green-600 hover:text-green-900 text-sm"
+                      >
+                        استلام
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleOpenReceiveModal(transfer)}
-                      className="text-green-600 hover:text-green-900 text-sm"
+                      onClick={() => handleOpenDetailModal(transfer)}
+                      className="text-blue-600 hover:text-blue-900 text-sm flex items-center gap-1"
+                      title="عرض التفاصيل"
                     >
-                      استلام
+                      <Eye size={16} />
+                      تفاصيل
                     </button>
-                  )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -510,6 +553,237 @@ export default function Transfers() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Detail Modal */}
+      {showDetailModal && selectedTransfer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl my-8">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">تفاصيل التوريد</h2>
+                <p className="font-mono text-gray-500">{selectedTransfer.transferNumber}</p>
+              </div>
+              <div>{getStatusBadge(selectedTransfer.status)}</div>
+            </div>
+
+            {/* Status Timeline */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between relative">
+                {/* Progress bar background */}
+                <div className="absolute top-5 right-5 left-5 h-1 bg-gray-200 rounded"></div>
+                {/* Progress bar fill */}
+                <div 
+                  className="absolute top-5 right-5 h-1 bg-blue-500 rounded transition-all"
+                  style={{ 
+                    width: selectedTransfer.status === 'CANCELLED' ? '0%' :
+                           selectedTransfer.status === 'PENDING' ? '0%' : 
+                           selectedTransfer.status === 'IN_TRANSIT' ? '50%' : '100%' 
+                  }}
+                ></div>
+                
+                {[
+                  { key: 'PENDING', label: 'تم الإنشاء', icon: FileText, date: selectedTransfer.createdAt },
+                  { key: 'IN_TRANSIT', label: 'قيد النقل', icon: Truck, date: selectedTransfer.sentAt },
+                  { key: 'DELIVERED', label: 'تم الاستلام', icon: CheckCircle, date: selectedTransfer.receivedAt }
+                ].map((step, idx) => {
+                  const currentStep = getStatusStep(selectedTransfer.status);
+                  const isActive = getStatusStep(step.key) <= currentStep && selectedTransfer.status !== 'CANCELLED';
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.key} className="flex flex-col items-center z-10 relative">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        isActive ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-400'
+                      }`}>
+                        <Icon size={20} />
+                      </div>
+                      <p className={`text-xs mt-2 font-medium ${isActive ? 'text-blue-700' : 'text-gray-400'}`}>
+                        {step.label}
+                      </p>
+                      {step.date && isActive && (
+                        <p className="text-xs text-gray-400 mt-1">{formatDate(step.date)}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Transfer Info Cards */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-gray-600 mb-2">
+                  <MapPin size={16} />
+                  <span className="text-sm font-medium">من</span>
+                </div>
+                <p className="font-semibold">{selectedTransfer.fromBranch?.name || 'المخزن الرئيسي'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-gray-600 mb-2">
+                  <MapPin size={16} />
+                  <span className="text-sm font-medium">إلى</span>
+                </div>
+                <p className="font-semibold">{selectedTransfer.toBranch?.name}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-gray-600 mb-2">
+                  <User size={16} />
+                  <span className="text-sm font-medium">المُرسل</span>
+                </div>
+                <p className="font-semibold">{selectedTransfer.sentByUser?.fullName || selectedTransfer.sentByUser?.username || '-'}</p>
+                <p className="text-xs text-gray-400">{formatDate(selectedTransfer.sentAt)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-gray-600 mb-2">
+                  <User size={16} />
+                  <span className="text-sm font-medium">المُستلم</span>
+                </div>
+                {selectedTransfer.receivedByUser ? (
+                  <>
+                    <p className="font-semibold">{selectedTransfer.receivedByUser?.fullName || selectedTransfer.receivedByUser?.username}</p>
+                    <p className="text-xs text-gray-400">{formatDate(selectedTransfer.receivedAt)}</p>
+                  </>
+                ) : (
+                  <p className="text-gray-400 text-sm">لم يتم الاستلام بعد</p>
+                )}
+              </div>
+            </div>
+
+            {/* Notes */}
+            {selectedTransfer.notes && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-gray-600 font-medium mb-1">ملاحظات الإرسال:</p>
+                <p className="text-sm">{selectedTransfer.notes}</p>
+              </div>
+            )}
+            {selectedTransfer.receiverNotes && (
+              <div className="mb-4 p-3 bg-green-50 rounded-lg">
+                <p className="text-sm text-gray-600 font-medium mb-1">ملاحظات المُستلم:</p>
+                <p className="text-sm">{selectedTransfer.receiverNotes}</p>
+              </div>
+            )}
+
+            {/* Discrepancy Alert */}
+            {selectedTransfer.hasDiscrepancy && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle size={18} className="text-red-600" />
+                  <h3 className="font-bold text-red-800">يوجد فروقات في الاستلام</h3>
+                </div>
+                {selectedTransfer.discrepancyType && (
+                  <p className="text-sm text-red-700 mb-1">
+                    النوع: {selectedTransfer.discrepancyType === 'SHORTAGE' ? 'نقص' : 'زيادة'}
+                  </p>
+                )}
+                {selectedTransfer.discrepancyNotes && (
+                  <p className="text-sm text-red-700">{selectedTransfer.discrepancyNotes}</p>
+                )}
+              </div>
+            )}
+
+            {/* Items Table */}
+            <div className="mb-6">
+              <h3 className="font-bold text-lg mb-3">الأصناف</h3>
+              <div className="bg-gray-50 rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">المنتج</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الكمية المطلوبة</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الكمية المستلمة</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الفرق</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {selectedTransfer.items?.map((item) => {
+                      const diff = item.quantityReceived != null 
+                        ? item.quantityReceived - (item.quantityRequested || 0) 
+                        : null;
+                      return (
+                        <tr key={item.id}>
+                          <td className="px-4 py-3 text-sm">
+                            <p className="font-medium">{item.product?.name || '-'}</p>
+                            <p className="text-xs text-gray-400">{item.product?.sku}</p>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium">{item.quantityRequested || '-'}</td>
+                          <td className="px-4 py-3 text-sm font-medium">
+                            {item.quantityReceived != null ? item.quantityReceived : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {diff != null ? (
+                              <span className={`font-bold ${
+                                diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-600'
+                              }`}>
+                                {diff === 0 ? '✓ مطابق' : diff > 0 ? `+${diff} زيادة` : `${diff} نقص`}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {getStatusBadge(item.status)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Summary for delivered transfers */}
+            {selectedTransfer.status === 'DELIVERED' && (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle size={18} className="text-green-600" />
+                  <h3 className="font-bold text-green-800">ملخص الاستلام</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">إجمالي المطلوب</p>
+                    <p className="font-bold text-lg">
+                      {selectedTransfer.items?.reduce((sum, i) => sum + (i.quantityRequested || 0), 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">إجمالي المستلم</p>
+                    <p className="font-bold text-lg">
+                      {selectedTransfer.items?.reduce((sum, i) => sum + (i.quantityReceived || 0), 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">الفرق الكلي</p>
+                    {(() => {
+                      const totalDiff = selectedTransfer.items?.reduce((sum, i) => 
+                        sum + ((i.quantityReceived || 0) - (i.quantityRequested || 0)), 0);
+                      return (
+                        <p className={`font-bold text-lg ${
+                          totalDiff === 0 ? 'text-green-600' : totalDiff > 0 ? 'text-blue-600' : 'text-red-600'
+                        }`}>
+                          {totalDiff === 0 ? '✓ مطابق' : totalDiff > 0 ? `+${totalDiff}` : totalDiff}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Close Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => { setShowDetailModal(false); setSelectedTransfer(null); }}
+                className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300"
+              >
+                إغلاق
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -643,6 +643,9 @@ model Transfer {
   hasDiscrepancy    Boolean         @default(false) // هل يوجد فروق؟
   discrepancyType   String?         // SHORTAGE (نقص) أو EXCESS (زيادة)
   discrepancyNotes  String?         // تفاصيل الفروقات
+
+  totalCost         Float?          @default(0) // إجمالي تكلفة البضاعة (للأدمن)
+  totalSellingPrice Float?          @default(0) // إجمالي سعر البيع للبضاعة
   
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -666,6 +669,9 @@ model TransferItem {
   // الكميات
   quantityRequested Int         // الكمية المطلوبة
   quantityReceived  Int?        // الكمية المستلمة فعلياً
+
+  costPrice         Float?      @default(0) // سعر التكلفة للقطعة
+  sellingPrice      Float?      @default(0) // سعر البيع للقطعة
   
   // حالة العنصر
   status            String      @default("PENDING") // PENDING, DELIVERED, CANCELLED

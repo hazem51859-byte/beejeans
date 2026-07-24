@@ -397,6 +397,131 @@ exports.confirmReceiving = async (req, res) => {
 };
 
 // Create transfer
+// Get pending transfers count (الإشعارات)
+exports.getPendingCount = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    const branchId = req.user.branchId;
+
+    let count = 0;
+    if (userRole === 'ADMIN') {
+      count = await prisma.transfer.count({
+        where: {
+          status: { in: ['PENDING', 'IN_TRANSIT'] }
+        }
+      });
+    } else if (branchId) {
+      count = await prisma.transfer.count({
+        where: {
+          OR: [
+            { toBranchId: branchId, status: 'IN_TRANSIT' },
+            { fromBranchId: branchId, status: 'PENDING' }
+          ]
+        }
+      });
+    }
+
+    res.json({ success: true, count });
+  } catch (error) {
+    console.error('Error fetching pending count:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch pending count' });
+  }
+};
+
+// Confirm shipping from source branch
+exports.confirmShipping = async (req, res) => {
+  try {
+    const { transferId } = req.params;
+    
+    const transfer = await prisma.transfer.findUnique({
+      where: { id: transferId },
+      include: { 
+        items: true,
+        fromBranch: true,
+        toBranch: true
+      }
+    });
+
+    if (!transfer) {
+      return res.status(404).json({ success: false, error: 'التوريد غير موجود' });
+    }
+
+    if (transfer.status !== 'PENDING') {
+      return res.status(400).json({ success: false, error: 'تم تجميع أو شحن هذا التوريد بالفعل' });
+    }
+
+    // الخصم من المخزن المصدر إن وجد
+    if (transfer.fromBranchId) {
+      for (const item of transfer.items) {
+        const inventory = await prisma.inventory.findUnique({
+          where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId: transfer.fromBranchId
+            }
+          }
+        });
+
+        if (!inventory || inventory.quantity < item.quantityRequested) {
+          const product = await prisma.product.findUnique({ where: { id: item.productId } });
+          return res.status(400).json({
+            success: false,
+            error: `الكمية غير متوفرة للمنتج ${product?.name || item.productId}. متوفر: ${inventory?.quantity || 0}`
+          });
+        }
+      }
+
+      for (const item of transfer.items) {
+        await prisma.inventory.update({
+          where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId: transfer.fromBranchId
+            }
+          },
+          data: {
+            quantity: { decrement: item.quantityRequested }
+          }
+        });
+      }
+    }
+
+    const updatedTransfer = await prisma.transfer.update({
+      where: { id: transferId },
+      data: {
+        status: 'IN_TRANSIT',
+        sentAt: new Date()
+      },
+      include: {
+        fromBranch: true,
+        toBranch: true,
+        items: { include: { product: true } }
+      }
+    });
+
+    // إرسال إشعار للفرع المستقبل
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`branch-${transfer.toBranchId}`).emit('new-transfer', {
+        transferId: transfer.id,
+        transferNumber: transfer.transferNumber,
+        fromBranch: transfer.fromBranch?.name || 'المخزن الرئيسي',
+        itemsCount: transfer.items.length
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updatedTransfer,
+      message: 'تم تأكيد الشحن وتحديث المخزون بنجاح'
+    });
+  } catch (error) {
+    console.error('Error confirming shipping:', error);
+    res.status(500).json({ success: false, error: 'فشل في تأكيد الشحن' });
+  }
+};
+
+// Create transfer
 exports.createTransfer = async (req, res) => {
   try {
     const { fromBranchId, toBranchId, items, notes } = req.body;
@@ -417,8 +542,41 @@ exports.createTransfer = async (req, res) => {
       sourceBranchId = mainBranch?.id || null;
     }
     
-    // التحقق من توفر الكميات في المخزن المصدر
+    // جلب المنتجات لحساب التكلفة وسعر البيع
+    const productIds = items.map(i => i.productId);
+    const dbProducts = await prisma.product.findMany({
+      where: { id: { in: productIds } }
+    });
+    const productMap = new Map(dbProducts.map(p => [p.id, p]));
+
+    // التحقق من توفر الكميات وحساب التكاليف الإجمالية
+    let totalCost = 0;
+    let totalSellingPrice = 0;
+    const itemsData = [];
+
     for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        return res.status(400).json({ success: false, error: `المنتج غير موجود: ${item.productId}` });
+      }
+
+      const costPrice = item.costPrice !== undefined ? parseFloat(item.costPrice) : (product.costPrice || 0);
+      const sellingPrice = item.sellingPrice !== undefined ? parseFloat(item.sellingPrice) : (product.sellingPrice || 0);
+      const qty = parseInt(item.quantity);
+
+      totalCost += costPrice * qty;
+      totalSellingPrice += sellingPrice * qty;
+
+      itemsData.push({
+        productId: item.productId,
+        quantityRequested: qty,
+        costPrice,
+        sellingPrice,
+        status: 'PENDING',
+        notes: item.notes || ''
+      });
+
+      // التحقق من المخزون
       const inventory = await prisma.inventory.findUnique({
         where: {
           productId_branchId: {
@@ -428,13 +586,10 @@ exports.createTransfer = async (req, res) => {
         }
       });
       
-      if (!inventory || inventory.quantity < item.quantity) {
-        const product = await prisma.product.findUnique({
-          where: { id: item.productId }
-        });
+      if (!inventory || inventory.quantity < qty) {
         return res.status(400).json({
           success: false,
-          error: `الكمية غير متوفرة للمنتج ${product?.name || item.productId}. متوفر: ${inventory?.quantity || 0}, مطلوب: ${item.quantity}`
+          error: `الكمية غير متوفرة للمنتج ${product.name}. متوفر: ${inventory?.quantity || 0}, مطلوب: ${qty}`
         });
       }
     }
@@ -450,14 +605,11 @@ exports.createTransfer = async (req, res) => {
         sentBy,
         notes,
         status: 'PENDING',
+        totalCost,
+        totalSellingPrice,
         sentAt: new Date(),
         items: {
-          create: items.map(item => ({
-            productId: item.productId,
-            quantityRequested: item.quantity,
-            status: 'PENDING',
-            notes: item.notes || ''
-          }))
+          create: itemsData
         }
       },
       include: {
@@ -478,29 +630,13 @@ exports.createTransfer = async (req, res) => {
       }
     });
     
-    // خصم الكمية من المخزن المصدر مباشرة عند إنشاء التوريد
-    for (const item of items) {
-      await prisma.inventory.update({
-        where: {
-          productId_branchId: {
-            productId: item.productId,
-            branchId: sourceBranchId
-          }
-        },
-        data: {
-          quantity: {
-            decrement: item.quantity
-          }
-        }
-      });
-    }
-    
     const io = req.app.get('io');
     if (io) {
-      io.to(`branch-${toBranchId}`).emit('new-transfer', {
+      // إرسال إشعار للفرع المرسل لتأكيد الشحن
+      io.to(`branch-${sourceBranchId}`).emit('new-transfer', {
         transferId: transfer.id,
         transferNumber: transfer.transferNumber,
-        fromBranch: transfer.fromBranch?.name || 'المخزن الرئيسي',
+        toBranch: transfer.toBranch?.name,
         itemsCount: items.length
       });
     }
@@ -520,32 +656,5 @@ exports.createTransfer = async (req, res) => {
 
 // Ship direct (for admin to mark as shipped)
 exports.shipDirect = async (req, res) => {
-  try {
-    const { transferId } = req.params;
-    
-    const transfer = await prisma.transfer.update({
-      where: { id: transferId },
-      data: {
-        status: 'IN_TRANSIT',
-        sentAt: new Date()
-      },
-      include: {
-        fromBranch: true,
-        toBranch: true,
-        items: {
-          include: {
-            product: true
-          }
-        }
-      }
-    });
-    
-    res.json({
-      success: true,
-      data: transfer
-    });
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to ship transfer' });
-  }
+  return exports.confirmShipping(req, res);
 };

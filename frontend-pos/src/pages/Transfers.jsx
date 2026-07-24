@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Package, CheckCircle, XCircle, ArrowLeftRight, Truck, Trash2, Eye, Clock, MapPin, User, FileText, AlertTriangle } from 'lucide-react';
-import api from '../services/api';
+import { Plus, Package, CheckCircle, XCircle, ArrowLeftRight, Truck, Trash2, Eye, MapPin, User, FileText, AlertTriangle, Send, DollarSign, TrendingUp } from 'lucide-react';
+import api, { transferAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
 export default function Transfers() {
@@ -19,7 +19,7 @@ export default function Transfers() {
   const [formData, setFormData] = useState({
     fromBranchId: '',
     toBranchId: '',
-    items: [{ productId: '', quantity: 1 }],
+    items: [{ productId: '', quantity: 1, costPrice: 0, sellingPrice: 0 }],
     notes: '',
   });
 
@@ -78,9 +78,8 @@ export default function Transfers() {
     if (activeTab === 'all') return true; // Admin: show all transfers
     if (activeTab === 'inbox') return t.toBranchId === user?.branchId && t.status !== 'DELIVERED';
     if (activeTab === 'outbox') {
-      // For admin, show transfers they sent (by user id) OR from their branch
       if (isAdmin) return t.sentBy === user?.id || t.fromBranchId === user?.branchId;
-      return t.fromBranchId === user?.branchId && t.status !== 'DELIVERED';
+      return t.fromBranchId === user?.branchId;
     }
     if (activeTab === 'history') return t.status === 'DELIVERED';
     return false;
@@ -91,12 +90,26 @@ export default function Transfers() {
     mutationFn: (data) => api.post('/transfers', data),
     onSuccess: () => {
       queryClient.invalidateQueries(['transfers']);
+      queryClient.invalidateQueries(['pending-transfers-count']);
       setShowCreateModal(false);
       resetForm();
-      toast.success('تم إنشاء طلب التوريد بنجاح');
+      toast.success('تم إنشاء طلب التوريد بنجاح (في انتظار تأكيد الشحن)');
     },
     onError: (error) => {
       toast.error(error.response?.data?.error || 'حدث خطأ ما');
+    },
+  });
+
+  const confirmShippingMutation = useMutation({
+    mutationFn: (transferId) => transferAPI.confirmShipping(transferId),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['transfers']);
+      queryClient.invalidateQueries(['pending-transfers-count']);
+      queryClient.invalidateQueries(['source-inventory']);
+      toast.success('تم تأكيد الشحن وخصم الكمية من المخزن بنجاح 🚀');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'فشل تأكيد الشحن');
     },
   });
 
@@ -104,10 +117,11 @@ export default function Transfers() {
     mutationFn: ({ transferId, data }) => api.post(`/transfers/${transferId}/complete-receiving`, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['transfers']);
+      queryClient.invalidateQueries(['pending-transfers-count']);
       queryClient.invalidateQueries(['source-inventory']);
       setShowReceiveModal(false);
       setSelectedTransfer(null);
-      toast.success('تم استلام التوريد بنجاح');
+      toast.success('تم استلام التوريد وإضافته لمخزن الفرع بنجاح 🎉');
     },
     onError: (error) => {
       toast.error(error.response?.data?.error || 'حدث خطأ ما');
@@ -118,7 +132,7 @@ export default function Transfers() {
     setFormData({
       fromBranchId: '',
       toBranchId: '',
-      items: [{ productId: '', quantity: 1 }],
+      items: [{ productId: '', quantity: 1, costPrice: 0, sellingPrice: 0 }],
       notes: '',
     });
   };
@@ -126,7 +140,7 @@ export default function Transfers() {
   const addItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { productId: '', quantity: 1 }],
+      items: [...formData.items, { productId: '', quantity: 1, costPrice: 0, sellingPrice: 0 }],
     });
   };
 
@@ -138,6 +152,15 @@ export default function Transfers() {
   const updateItem = (index, field, value) => {
     const newItems = [...formData.items];
     newItems[index][field] = value;
+
+    if (field === 'productId') {
+      const p = products.find(prod => prod.id === value);
+      if (p) {
+        newItems[index].costPrice = p.costPrice || 0;
+        newItems[index].sellingPrice = p.sellingPrice || 0;
+      }
+    }
+
     setFormData({ ...formData, items: newItems });
   };
 
@@ -149,7 +172,9 @@ export default function Transfers() {
       notes: formData.notes,
       items: formData.items.map(item => ({
         productId: item.productId,
-        quantity: parseInt(item.quantity)
+        quantity: parseInt(item.quantity),
+        costPrice: parseFloat(item.costPrice || 0),
+        sellingPrice: parseFloat(item.sellingPrice || 0),
       }))
     });
   };
@@ -177,12 +202,6 @@ export default function Transfers() {
 
   const handleReceiveSubmit = (e) => {
     e.preventDefault();
-    
-    console.log('Submitting receive form:', {
-      transferId: selectedTransfer.id,
-      data: receiveForm
-    });
-    
     receiveMutation.mutate({
       transferId: selectedTransfer.id,
       data: receiveForm
@@ -191,15 +210,15 @@ export default function Transfers() {
 
   const getStatusBadge = (status) => {
     const badges = {
-      PENDING: { text: 'قيد الانتظار', class: 'bg-yellow-100 text-yellow-800', icon: Package },
-      IN_TRANSIT: { text: 'قيد النقل', class: 'bg-blue-100 text-blue-800', icon: Truck },
-      DELIVERED: { text: 'تم التسليم', class: 'bg-green-100 text-green-800', icon: CheckCircle },
-      CANCELLED: { text: 'ملغي', class: 'bg-red-100 text-red-800', icon: XCircle }
+      PENDING: { text: 'في انتظار الشحن', class: 'bg-amber-100 text-amber-800 border border-amber-300', icon: Clock },
+      IN_TRANSIT: { text: 'تم الشحن (قيد النقل)', class: 'bg-blue-100 text-blue-800 border border-blue-300', icon: Truck },
+      DELIVERED: { text: 'تم الاستلام', class: 'bg-emerald-100 text-emerald-800 border border-emerald-300', icon: CheckCircle },
+      CANCELLED: { text: 'ملغي', class: 'bg-rose-100 text-rose-800 border border-rose-300', icon: XCircle }
     };
     const badge = badges[status] || badges.PENDING;
     const Icon = badge.icon;
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${badge.class}`}>
+      <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${badge.class}`}>
         <Icon size={14} />
         {badge.text}
       </span>
@@ -220,18 +239,33 @@ export default function Transfers() {
     });
   };
 
+  // Financial calculations
+  const calculateTransferTotals = (transfer) => {
+    const totalSelling = transfer.totalSellingPrice || transfer.items?.reduce((sum, i) => 
+      sum + ((i.sellingPrice || i.product?.sellingPrice || 0) * (i.quantityRequested || 0)), 0) || 0;
+    
+    const totalCost = transfer.totalCost || transfer.items?.reduce((sum, i) => 
+      sum + ((i.costPrice || i.product?.costPrice || 0) * (i.quantityRequested || 0)), 0) || 0;
+
+    const profit = totalSelling - totalCost;
+    return { totalSelling, totalCost, profit };
+  };
+
   if (isLoading) {
-    return <div className="flex justify-center items-center h-screen">جاري التحميل...</div>;
+    return <div className="flex justify-center items-center h-screen font-bold text-slate-600">جاري التحميل...</div>;
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">التوريدات</h1>
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">إدارة التوريدات</h1>
+          <p className="text-sm text-slate-500 mt-1 font-medium">متابعة التوريدات وشحن واستلام البضاعة بين الفروع والمصنع</p>
+        </div>
         {isAdmin && (
           <button
             onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-700 font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/25 transition-all"
           >
             <Plus size={20} />
             إنشاء توريد جديد
@@ -240,107 +274,150 @@ export default function Transfers() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 bg-slate-200/70 p-1.5 rounded-2xl w-fit">
         {isAdmin && (
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+            className={`px-5 py-2 rounded-xl font-bold text-sm transition-all ${activeTab === 'all' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            الكل
+            الكل ({transfers.length})
           </button>
         )}
         <button
           onClick={() => setActiveTab('inbox')}
-          className={`px-4 py-2 rounded-lg ${activeTab === 'inbox' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          className={`px-5 py-2 rounded-xl font-bold text-sm transition-all ${activeTab === 'inbox' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
         >
-          الواردة
+          الواردة (تأكيد الاستلام)
         </button>
         <button
           onClick={() => setActiveTab('outbox')}
-          className={`px-4 py-2 rounded-lg ${activeTab === 'outbox' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          className={`px-5 py-2 rounded-xl font-bold text-sm transition-all ${activeTab === 'outbox' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
         >
-          الصادرة
+          الصادرة (تأكيد الشحن)
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-lg ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          className={`px-5 py-2 rounded-xl font-bold text-sm transition-all ${activeTab === 'history' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
         >
-          السجل
+          السجل المكتمل
         </button>
       </div>
 
       {/* Transfers Table */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">رقم التوريد</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">من</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">إلى</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الأصناف</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الحالة</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">التاريخ</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">إجراءات</th>
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">رقم التوريد</th>
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">من</th>
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">إلى</th>
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">الأصناف</th>
+              {isAdmin ? (
+                <>
+                  <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">تكلفة البضاعة</th>
+                  <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">سعر البيع</th>
+                  <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">المكسب المتوقع</th>
+                </>
+              ) : (
+                <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">قيمة البضاعة</th>
+              )}
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">الحالة</th>
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">التاريخ</th>
+              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">إجراءات</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredTransfers.map((transfer) => (
-              <tr key={transfer.id} className="hover:bg-gray-50">
-                <td className="px-4 py-4 whitespace-nowrap font-mono text-sm">{transfer.transferNumber}</td>
-                <td className="px-4 py-4 whitespace-nowrap">{transfer.fromBranch?.name || 'المخزن الرئيسي'}</td>
-                <td className="px-4 py-4 whitespace-nowrap">{transfer.toBranch?.name}</td>
-                <td className="px-4 py-4">
-                  {transfer.items?.length || 0} صنف
-                </td>
-                <td className="px-4 py-4 whitespace-nowrap">{getStatusBadge(transfer.status)}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm">
-                  {new Date(transfer.sentAt).toLocaleDateString('ar-EG')}
-                </td>
-                <td className="px-4 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    {transfer.status === 'PENDING' && activeTab === 'inbox' && (
+          <tbody className="bg-white divide-y divide-slate-100">
+            {filteredTransfers.map((transfer) => {
+              const { totalSelling, totalCost, profit } = calculateTransferTotals(transfer);
+              const isSenderBranch = transfer.fromBranchId === user?.branchId || (isAdmin && !transfer.fromBranchId);
+              const isReceiverBranch = transfer.toBranchId === user?.branchId;
+
+              return (
+                <tr key={transfer.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-5 py-4 whitespace-nowrap font-mono text-sm font-bold text-slate-900">{transfer.transferNumber}</td>
+                  <td className="px-5 py-4 whitespace-nowrap font-semibold text-slate-700">{transfer.fromBranch?.name || 'المخزن الرئيسي'}</td>
+                  <td className="px-5 py-4 whitespace-nowrap font-semibold text-slate-700">{transfer.toBranch?.name}</td>
+                  <td className="px-5 py-4 whitespace-nowrap text-sm font-medium">
+                    {transfer.items?.length || 0} صنف ({transfer.items?.reduce((sum, i) => sum + (i.quantityRequested || 0), 0)} قطعة)
+                  </td>
+                  {isAdmin ? (
+                    <>
+                      <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-slate-600">{totalCost.toLocaleString('ar-EG')} ج.م</td>
+                      <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">{totalSelling.toLocaleString('ar-EG')} ج.م</td>
+                      <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-teal-700">+{profit.toLocaleString('ar-EG')} ج.م</td>
+                    </>
+                  ) : (
+                    <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">{totalSelling.toLocaleString('ar-EG')} ج.م</td>
+                  )}
+                  <td className="px-5 py-4 whitespace-nowrap">{getStatusBadge(transfer.status)}</td>
+                  <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold text-slate-500">
+                    {new Date(transfer.sentAt || transfer.createdAt).toLocaleDateString('ar-EG')}
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {/* Step 1: Sender confirms shipping */}
+                      {transfer.status === 'PENDING' && (isSenderBranch || isAdmin) && (
+                        <button
+                          onClick={() => confirmShippingMutation.mutate(transfer.id)}
+                          disabled={confirmShippingMutation.isLoading}
+                          className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                          title="تأكيد خروج البضاعة والشحن للفرع الآخر"
+                        >
+                          <Send size={14} />
+                          تأكيد الشحن
+                        </button>
+                      )}
+
+                      {/* Step 2: Receiver confirms receipt */}
+                      {transfer.status === 'IN_TRANSIT' && (isReceiverBranch || isAdmin) && (
+                        <button
+                          onClick={() => handleOpenReceiveModal(transfer)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                          title="تأكيد وصول البضاعة وإضافتها للمخزن"
+                        >
+                          <CheckCircle size={14} />
+                          تأكيد الاستلام
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => handleOpenReceiveModal(transfer)}
-                        className="text-green-600 hover:text-green-900 text-sm"
+                        onClick={() => handleOpenDetailModal(transfer)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
+                        title="عرض التفاصيل"
                       >
-                        استلام
+                        <Eye size={14} />
+                        تفاصيل
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleOpenDetailModal(transfer)}
-                      className="text-blue-600 hover:text-blue-900 text-sm flex items-center gap-1"
-                      title="عرض التفاصيل"
-                    >
-                      <Eye size={16} />
-                      تفاصيل
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
         {filteredTransfers.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            لا توجد توريدات في هذا القسم
+          <div className="text-center py-16 text-slate-400 font-semibold">
+            لا توجد توريدات في هذا القسم حالياً
           </div>
         )}
       </div>
 
       {/* Create Transfer Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg p-6 w-full max-w-3xl my-8">
-            <h2 className="text-2xl font-bold mb-4">إنشاء توريد جديد</h2>
-            <form onSubmit={handleCreateSubmit}>
-              <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-3xl my-8 shadow-2xl border border-slate-100">
+            <h2 className="text-2xl font-black text-slate-900 mb-1">إنشاء طلب توريد جديد</h2>
+            <p className="text-xs text-slate-500 mb-6 font-medium">سيتم إنشاء الطلب وتنبيه الفرع المُرسل لتأكيد خروج البضاعة</p>
+            
+            <form onSubmit={handleCreateSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 mb-2">من الفرع *</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1.5">من الفرع (المُرسل) *</label>
                   <select
                     value={formData.fromBranchId}
                     onChange={(e) => setFormData({ ...formData, fromBranchId: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500/20"
                   >
                     <option value="">المخزن الرئيسي</option>
                     {branches.filter(b => b.code !== 'MAIN').map(branch => (
@@ -349,14 +426,14 @@ export default function Transfers() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-gray-700 mb-2">إلى الفرع *</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1.5">إلى الفرع (المستقبل) *</label>
                   <select
                     value={formData.toBranchId}
                     onChange={(e) => setFormData({ ...formData, toBranchId: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500/20"
                     required
                   >
-                    <option value="">اختر الفرع</option>
+                    <option value="">اختر الفرع المستلم</option>
                     {branches.filter(b => b.code !== 'MAIN' && b.id !== formData.fromBranchId).map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
                     ))}
@@ -364,88 +441,102 @@ export default function Transfers() {
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-2 font-semibold">الأصناف</label>
-                {formData.items.map((item, index) => {
-                  const product = products.find(p => p.id === item.productId);
-                  const inventory = sourceInventory.find(inv => inv.productId === item.productId);
-                  const availableQty = inventory?.quantity || 0;
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">الأصناف المطلوبة</label>
+                <div className="space-y-3">
+                  {formData.items.map((item, index) => {
+                    const product = products.find(p => p.id === item.productId);
+                    const inventory = sourceInventory.find(inv => inv.productId === item.productId);
+                    const availableQty = inventory?.quantity || 0;
 
-                  return (
-                    <div key={index} className="flex gap-2 mb-2 items-start">
-                      <div className="flex-1">
-                        <select
-                          value={item.productId}
-                          onChange={(e) => updateItem(index, 'productId', e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2"
-                          required
-                        >
-                          <option value="">اختر المنتج</option>
-                          {products.map(product => (
-                            <option key={product.id} value={product.id}>
-                              {product.name} - {product.sku}
-                            </option>
-                          ))}
-                        </select>
+                    return (
+                      <div key={index} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col gap-2">
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <select
+                              value={item.productId}
+                              onChange={(e) => updateItem(index, 'productId', e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800"
+                              required
+                            >
+                              <option value="">اختر المنتج</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-center"
+                              placeholder="الكمية"
+                              required
+                            />
+                          </div>
+                          {formData.items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeItem(index)}
+                              className="text-rose-600 hover:text-rose-800 p-2"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
+                        </div>
+
                         {product && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            متاح: {availableQty} قطعة
-                          </p>
+                          <div className="flex justify-between items-center text-xs px-1 text-slate-600 font-semibold bg-white p-2 rounded-lg border border-slate-100">
+                            <span>المتاح بمخزن المصدر: <strong className="text-emerald-700">{availableQty} قطعة</strong></span>
+                            {isAdmin ? (
+                              <span>
+                                التكلفة: <strong className="text-slate-800">{item.costPrice} ج.م</strong> | البيع: <strong className="text-emerald-700">{item.sellingPrice} ج.م</strong>
+                              </span>
+                            ) : (
+                              <span>سعر البيع للقطعة: <strong className="text-emerald-700">{item.sellingPrice} ج.م</strong></span>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                        className="w-24 border border-gray-300 rounded-lg px-4 py-2"
-                        placeholder="الكمية"
-                        required
-                      />
-                      {formData.items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(index)}
-                          className="text-red-600 hover:text-red-800 p-2"
-                        >
-                          <Trash2 size={20} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+                
                 <button
                   type="button"
                   onClick={addItem}
-                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 mt-2"
+                  className="text-emerald-600 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 mt-3"
                 >
                   <Plus size={16} />
-                  إضافة صنف
+                  إضافة صنف آخر
                 </button>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-2">ملاحظات</label>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1.5">ملاحظات التوريد</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                  className="w-full border border-slate-300 rounded-xl px-4 py-2 text-sm"
                   rows="2"
+                  placeholder="أي تعليمات أو ملاحظات إضافية..."
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
                   disabled={createMutation.isLoading}
+                  className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20"
                 >
-                  {createMutation.isLoading ? 'جاري الإنشاء...' : 'إنشاء التوريد'}
+                  {createMutation.isLoading ? 'جاري الإنشاء...' : 'إرسال طلب التوريد'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+                  className="px-6 bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all"
                 >
                   إلغاء
                 </button>
@@ -457,97 +548,96 @@ export default function Transfers() {
 
       {/* Receive Transfer Modal */}
       {showReceiveModal && selectedTransfer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl my-8">
-            <h2 className="text-2xl font-bold mb-4">استلام التوريد</h2>
-            <div className="bg-gray-100 p-3 rounded-lg mb-4">
-              <div className="flex justify-between mb-1">
-                <span>رقم التوريد:</span>
-                <span className="font-mono">{selectedTransfer.transferNumber}</span>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl my-8 shadow-2xl border border-slate-100">
+            <h2 className="text-2xl font-black text-slate-900 mb-1">تأكيد استلام التوريد</h2>
+            <p className="text-xs text-slate-500 mb-4 font-medium">قم بمراجعة الكميات الواصلة وتأكيد إضافتها لمخزون الفرع</p>
+            
+            <div className="bg-slate-50 p-4 rounded-xl mb-4 border border-slate-200/80 text-sm space-y-1 font-medium">
+              <div className="flex justify-between">
+                <span className="text-slate-500">رقم التوريد:</span>
+                <span className="font-mono font-bold text-slate-900">{selectedTransfer.transferNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span>من:</span>
-                <span>{selectedTransfer.fromBranch?.name || 'المخزن الرئيسي'}</span>
+                <span className="text-slate-500">من فرع:</span>
+                <span className="font-bold text-slate-800">{selectedTransfer.fromBranch?.name || 'المخزن الرئيسي'}</span>
               </div>
             </div>
 
-            <form onSubmit={handleReceiveSubmit}>
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-2 font-semibold">الأصناف المستلمة</label>
-                {receiveForm.items.map((item, index) => {
-                  const product = products.find(p => p.id === item.productId);
-                  return (
-                    <div key={index} className="flex gap-2 mb-2 items-center border-b pb-2">
-                      <div className="flex-1">
-                        <p className="font-medium">{product?.name}</p>
-                        <p className="text-xs text-gray-500">المطلوب: {item.quantityRequested}</p>
+            <form onSubmit={handleReceiveSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-800 mb-2">الكميات المستلمة فعلياً</label>
+                <div className="space-y-2">
+                  {receiveForm.items.map((item, index) => {
+                    const product = products.find(p => p.id === item.productId);
+                    return (
+                      <div key={index} className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900 text-sm">{product?.name}</p>
+                          <p className="text-xs text-slate-500 font-semibold">المطلوب المشحون: {item.quantityRequested} قطعة</p>
+                        </div>
+                        <div className="w-32">
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">المستلم الفعلي</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.quantityReceived}
+                            onChange={(e) => {
+                              const newItems = [...receiveForm.items];
+                              newItems[index].quantityReceived = parseInt(e.target.value) || 0;
+                              setReceiveForm({ ...receiveForm, items: newItems });
+                            }}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-bold text-center"
+                            required
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-600">الكمية المستلمة</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.quantityReceived}
-                          onChange={(e) => {
-                            const newItems = [...receiveForm.items];
-                            newItems[index].quantityReceived = parseInt(e.target.value);
-                            setReceiveForm({ ...receiveForm, items: newItems });
-                          }}
-                          className="w-24 border border-gray-300 rounded-lg px-4 py-2"
-                          required
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-2">ملاحظات</label>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">ملاحظات المستلم</label>
                 <textarea
                   value={receiveForm.receiverNotes}
                   onChange={(e) => setReceiveForm({ ...receiveForm, receiverNotes: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                  className="w-full border border-slate-300 rounded-xl px-4 py-2 text-sm"
                   rows="2"
-                  placeholder="أي ملاحظات إضافية..."
+                  placeholder="أي ملاحظات حول حالة الشحنة..."
                 />
               </div>
 
-              {/* Auto-calculated discrepancies */}
+              {/* Auto Discrepancies Alert */}
               {receiveForm.items.some(item => item.quantityReceived !== item.quantityRequested) && (
-                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h3 className="font-bold text-yellow-900 mb-2">⚠️ فروقات تم اكتشافها:</h3>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <h3 className="font-bold text-amber-900 text-sm mb-1">⚠️ تم اكتشاف فروقات في الكميات:</h3>
                   {receiveForm.items.map((item, index) => {
                     const product = products.find(p => p.id === item.productId);
                     const diff = item.quantityReceived - item.quantityRequested;
                     if (diff === 0) return null;
                     
                     return (
-                      <div key={index} className="text-sm mb-1">
-                        <span className="font-medium">{product?.name}:</span>
-                        {diff > 0 ? (
-                          <span className="text-green-700"> +{diff} قطعة (زيادة - ستُضاف للفرع)</span>
-                        ) : (
-                          <span className="text-red-700"> {diff} قطعة (نقص - سترجع للمخزن الرئيسي)</span>
-                        )}
+                      <div key={index} className="text-xs font-semibold text-amber-800">
+                        • {product?.name}: {diff > 0 ? `+${diff} زيادة (ستضاف لمخزنكم)` : `${diff} نقص (سترجع للمصدر)`}
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
                   disabled={receiveMutation.isLoading}
+                  className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20"
                 >
-                  {receiveMutation.isLoading ? 'جاري الاستلام...' : 'تأكيد الاستلام'}
+                  {receiveMutation.isLoading ? 'جاري التحديث...' : 'تأكيد الاستلام وإضافة للمخزون'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowReceiveModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+                  className="px-6 bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold hover:bg-slate-300 transition-all"
                 >
                   إلغاء
                 </button>
@@ -557,27 +647,58 @@ export default function Transfers() {
         </div>
       )}
 
-      {/* Transfer Detail Modal */}
+      {/* Detail Modal */}
       {showDetailModal && selectedTransfer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg p-6 w-full max-w-3xl my-8">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-3xl my-8 shadow-2xl border border-slate-100">
             {/* Header */}
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-2xl font-bold mb-1">تفاصيل التوريد</h2>
-                <p className="font-mono text-gray-500">{selectedTransfer.transferNumber}</p>
+                <h2 className="text-2xl font-black text-slate-900 mb-1">تفاصيل طلب التوريد</h2>
+                <p className="font-mono text-xs text-slate-500 font-semibold">{selectedTransfer.transferNumber}</p>
               </div>
               <div>{getStatusBadge(selectedTransfer.status)}</div>
             </div>
 
+            {/* Financial Summary Box */}
+            <div className="mb-6 grid grid-cols-3 gap-3">
+              {isAdmin ? (
+                <>
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <p className="text-xs font-semibold text-slate-500 mb-0.5">تكلفة البضاعة الإجمالية</p>
+                    <p className="text-lg font-black text-slate-800">
+                      {(selectedTransfer.totalCost || calculateTransferTotals(selectedTransfer).totalCost).toLocaleString('ar-EG')} ج.م
+                    </p>
+                  </div>
+                  <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
+                    <p className="text-xs font-semibold text-emerald-600 mb-0.5">سعر البيع الإجمالي</p>
+                    <p className="text-lg font-black text-emerald-700">
+                      {(selectedTransfer.totalSellingPrice || calculateTransferTotals(selectedTransfer).totalSelling).toLocaleString('ar-EG')} ج.م
+                    </p>
+                  </div>
+                  <div className="bg-teal-50 p-3.5 rounded-xl border border-teal-200">
+                    <p className="text-xs font-semibold text-teal-600 mb-0.5">المكسب المتوقع</p>
+                    <p className="text-lg font-black text-teal-700">
+                      +{(calculateTransferTotals(selectedTransfer).profit).toLocaleString('ar-EG')} ج.م
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="col-span-3 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
+                  <p className="text-xs font-semibold text-emerald-600 mb-0.5">إجمالي قيمة البضاعة بسعر البيع</p>
+                  <p className="text-xl font-black text-emerald-700">
+                    {(selectedTransfer.totalSellingPrice || calculateTransferTotals(selectedTransfer).totalSelling).toLocaleString('ar-EG')} ج.م
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Status Timeline */}
-            <div className="mb-6">
+            <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between relative">
-                {/* Progress bar background */}
-                <div className="absolute top-5 right-5 left-5 h-1 bg-gray-200 rounded"></div>
-                {/* Progress bar fill */}
+                <div className="absolute top-5 right-5 left-5 h-1 bg-slate-200 rounded"></div>
                 <div 
-                  className="absolute top-5 right-5 h-1 bg-blue-500 rounded transition-all"
+                  className="absolute top-5 right-5 h-1 bg-emerald-500 rounded transition-all"
                   style={{ 
                     width: selectedTransfer.status === 'CANCELLED' ? '0%' :
                            selectedTransfer.status === 'PENDING' ? '0%' : 
@@ -586,25 +707,25 @@ export default function Transfers() {
                 ></div>
                 
                 {[
-                  { key: 'PENDING', label: 'تم الإنشاء', icon: FileText, date: selectedTransfer.createdAt },
-                  { key: 'IN_TRANSIT', label: 'قيد النقل', icon: Truck, date: selectedTransfer.sentAt },
-                  { key: 'DELIVERED', label: 'تم الاستلام', icon: CheckCircle, date: selectedTransfer.receivedAt }
-                ].map((step, idx) => {
+                  { key: 'PENDING', label: 'طلب التوريد', icon: FileText, date: selectedTransfer.createdAt },
+                  { key: 'IN_TRANSIT', label: 'تم الشحن والخروج', icon: Truck, date: selectedTransfer.sentAt },
+                  { key: 'DELIVERED', label: 'تم الاستلام بالمخزن', icon: CheckCircle, date: selectedTransfer.receivedAt }
+                ].map((step) => {
                   const currentStep = getStatusStep(selectedTransfer.status);
                   const isActive = getStatusStep(step.key) <= currentStep && selectedTransfer.status !== 'CANCELLED';
                   const Icon = step.icon;
                   return (
                     <div key={step.key} className="flex flex-col items-center z-10 relative">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        isActive ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-400'
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                        isActive ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-200 text-slate-400'
                       }`}>
-                        <Icon size={20} />
+                        <Icon size={18} />
                       </div>
-                      <p className={`text-xs mt-2 font-medium ${isActive ? 'text-blue-700' : 'text-gray-400'}`}>
+                      <p className={`text-xs mt-2 font-bold ${isActive ? 'text-emerald-700' : 'text-slate-400'}`}>
                         {step.label}
                       </p>
                       {step.date && isActive && (
-                        <p className="text-xs text-gray-400 mt-1">{formatDate(step.date)}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{formatDate(step.date)}</p>
                       )}
                     </div>
                   );
@@ -612,123 +733,49 @@ export default function Transfers() {
               </div>
             </div>
 
-            {/* Transfer Info Cards */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-gray-600 mb-2">
-                  <MapPin size={16} />
-                  <span className="text-sm font-medium">من</span>
-                </div>
-                <p className="font-semibold">{selectedTransfer.fromBranch?.name || 'المخزن الرئيسي'}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-gray-600 mb-2">
-                  <MapPin size={16} />
-                  <span className="text-sm font-medium">إلى</span>
-                </div>
-                <p className="font-semibold">{selectedTransfer.toBranch?.name}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-gray-600 mb-2">
-                  <User size={16} />
-                  <span className="text-sm font-medium">المُرسل</span>
-                </div>
-                <p className="font-semibold">{selectedTransfer.sentByUser?.fullName || selectedTransfer.sentByUser?.username || '-'}</p>
-                <p className="text-xs text-gray-400">{formatDate(selectedTransfer.sentAt)}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-gray-600 mb-2">
-                  <User size={16} />
-                  <span className="text-sm font-medium">المُستلم</span>
-                </div>
-                {selectedTransfer.receivedByUser ? (
-                  <>
-                    <p className="font-semibold">{selectedTransfer.receivedByUser?.fullName || selectedTransfer.receivedByUser?.username}</p>
-                    <p className="text-xs text-gray-400">{formatDate(selectedTransfer.receivedAt)}</p>
-                  </>
-                ) : (
-                  <p className="text-gray-400 text-sm">لم يتم الاستلام بعد</p>
-                )}
-              </div>
-            </div>
-
-            {/* Notes */}
-            {selectedTransfer.notes && (
-              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-gray-600 font-medium mb-1">ملاحظات الإرسال:</p>
-                <p className="text-sm">{selectedTransfer.notes}</p>
-              </div>
-            )}
-            {selectedTransfer.receiverNotes && (
-              <div className="mb-4 p-3 bg-green-50 rounded-lg">
-                <p className="text-sm text-gray-600 font-medium mb-1">ملاحظات المُستلم:</p>
-                <p className="text-sm">{selectedTransfer.receiverNotes}</p>
-              </div>
-            )}
-
-            {/* Discrepancy Alert */}
-            {selectedTransfer.hasDiscrepancy && (
-              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle size={18} className="text-red-600" />
-                  <h3 className="font-bold text-red-800">يوجد فروقات في الاستلام</h3>
-                </div>
-                {selectedTransfer.discrepancyType && (
-                  <p className="text-sm text-red-700 mb-1">
-                    النوع: {selectedTransfer.discrepancyType === 'SHORTAGE' ? 'نقص' : 'زيادة'}
-                  </p>
-                )}
-                {selectedTransfer.discrepancyNotes && (
-                  <p className="text-sm text-red-700">{selectedTransfer.discrepancyNotes}</p>
-                )}
-              </div>
-            )}
-
             {/* Items Table */}
             <div className="mb-6">
-              <h3 className="font-bold text-lg mb-3">الأصناف</h3>
-              <div className="bg-gray-50 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
+              <h3 className="font-bold text-slate-900 mb-2 text-sm">تفاصيل الأصناف</h3>
+              <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-100">
                     <tr>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">المنتج</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الكمية المطلوبة</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الكمية المستلمة</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الفرق</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الحالة</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">المنتج</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">الكمية المشحونة</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">الكمية المستلمة</th>
+                      {isAdmin ? (
+                        <>
+                          <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">التكلفة</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">البيع</th>
+                        </>
+                      ) : (
+                        <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">سعر القطعة</th>
+                      )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-slate-200 bg-white">
                     {selectedTransfer.items?.map((item) => {
-                      const diff = item.quantityReceived != null 
-                        ? item.quantityReceived - (item.quantityRequested || 0) 
-                        : null;
+                      const cost = item.costPrice || item.product?.costPrice || 0;
+                      const selling = item.sellingPrice || item.product?.sellingPrice || 0;
+
                       return (
                         <tr key={item.id}>
-                          <td className="px-4 py-3 text-sm">
-                            <p className="font-medium">{item.product?.name || '-'}</p>
-                            <p className="text-xs text-gray-400">{item.product?.sku}</p>
+                          <td className="px-4 py-2.5 text-xs font-bold text-slate-800">
+                            {item.product?.name}
+                            <span className="block text-[10px] font-normal text-slate-400">{item.product?.sku}</span>
                           </td>
-                          <td className="px-4 py-3 text-sm font-medium">{item.quantityRequested || '-'}</td>
-                          <td className="px-4 py-3 text-sm font-medium">
-                            {item.quantityReceived != null ? item.quantityReceived : (
-                              <span className="text-gray-400">-</span>
-                            )}
+                          <td className="px-4 py-2.5 text-xs font-bold text-slate-700">{item.quantityRequested} قطعة</td>
+                          <td className="px-4 py-2.5 text-xs font-bold text-emerald-700">
+                            {item.quantityReceived != null ? `${item.quantityReceived} قطعة` : '-'}
                           </td>
-                          <td className="px-4 py-3 text-sm">
-                            {diff != null ? (
-                              <span className={`font-bold ${
-                                diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-600'
-                              }`}>
-                                {diff === 0 ? '✓ مطابق' : diff > 0 ? `+${diff} زيادة` : `${diff} نقص`}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            {getStatusBadge(item.status)}
-                          </td>
+                          {isAdmin ? (
+                            <>
+                              <td className="px-4 py-2.5 text-xs font-semibold text-slate-600">{cost} ج.م</td>
+                              <td className="px-4 py-2.5 text-xs font-bold text-emerald-600">{selling} ج.م</td>
+                            </>
+                          ) : (
+                            <td className="px-4 py-2.5 text-xs font-bold text-emerald-600">{selling} ج.م</td>
+                          )}
                         </tr>
                       );
                     })}
@@ -737,49 +784,10 @@ export default function Transfers() {
               </div>
             </div>
 
-            {/* Summary for delivered transfers */}
-            {selectedTransfer.status === 'DELIVERED' && (
-              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle size={18} className="text-green-600" />
-                  <h3 className="font-bold text-green-800">ملخص الاستلام</h3>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-600">إجمالي المطلوب</p>
-                    <p className="font-bold text-lg">
-                      {selectedTransfer.items?.reduce((sum, i) => sum + (i.quantityRequested || 0), 0)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">إجمالي المستلم</p>
-                    <p className="font-bold text-lg">
-                      {selectedTransfer.items?.reduce((sum, i) => sum + (i.quantityReceived || 0), 0)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">الفرق الكلي</p>
-                    {(() => {
-                      const totalDiff = selectedTransfer.items?.reduce((sum, i) => 
-                        sum + ((i.quantityReceived || 0) - (i.quantityRequested || 0)), 0);
-                      return (
-                        <p className={`font-bold text-lg ${
-                          totalDiff === 0 ? 'text-green-600' : totalDiff > 0 ? 'text-blue-600' : 'text-red-600'
-                        }`}>
-                          {totalDiff === 0 ? '✓ مطابق' : totalDiff > 0 ? `+${totalDiff}` : totalDiff}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Close Button */}
             <div className="flex justify-end">
               <button
                 onClick={() => { setShowDetailModal(false); setSelectedTransfer(null); }}
-                className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300"
+                className="bg-slate-200 text-slate-700 px-6 py-2 rounded-xl font-bold hover:bg-slate-300 transition-all text-sm"
               >
                 إغلاق
               </button>

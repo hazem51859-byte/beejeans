@@ -19,10 +19,26 @@ import { useAuthStore } from '../store/authStore';
 import { authAPI } from '../services/api';
 import { toast } from 'react-hot-toast';
 
+import { useQuery } from '@tanstack/react-query';
+import { transferAPI } from '../services/api';
+
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+
+  // Fetch pending transfers count for notification badge
+  const { data: pendingCountResponse } = useQuery({
+    queryKey: ['pending-transfers-count'],
+    queryFn: async () => {
+      const res = await transferAPI.getPendingCount();
+      return res.data;
+    },
+    refetchInterval: 15000, // Refresh every 15 seconds
+    enabled: !!user,
+  });
+
+  const pendingCount = pendingCountResponse?.count || 0;
 
   const handleLogout = async () => {
     const currentRole = user?.role;
@@ -56,7 +72,7 @@ export default function Layout() {
     { name: 'نقطة البيع', path: '/pos', icon: ShoppingCart, roles: ['MANAGER', 'CASHIER'] },
     { name: 'منتجاتي', path: '/my-products', icon: Package, roles: ['CASHIER', 'MANAGER'] },
     { name: 'المخزون', path: '/inventory', icon: Warehouse, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
-    { name: 'التوريدات', path: '/transfers', icon: Truck, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
+    { name: 'التوريدات', path: '/transfers', icon: Truck, roles: ['ADMIN', 'MANAGER', 'CASHIER'], badge: pendingCount },
     { name: 'الفواتير', path: '/invoices', icon: FileText, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
     { name: 'التقارير', path: '/reports', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
     
@@ -177,9 +193,16 @@ export default function Layout() {
                     )}
                     <span>{item.name}</span>
                   </div>
-                  {active && (
-                    <span className="w-1.5 h-4 bg-white/90 rounded-full shadow-sm"></span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {item.badge > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50">
+                        {item.badge}
+                      </span>
+                    )}
+                    {active && (
+                      <span className="w-1.5 h-4 bg-white/90 rounded-full shadow-sm"></span>
+                    )}
+                  </div>
                 </Link>
               );
             })}

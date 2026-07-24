@@ -6,6 +6,9 @@ const { authenticate, authorize} = require('../middleware/auth');
 // All routes require authentication
 router.use(authenticate);
 
+// Get pending transfers count (الإشعارات)
+router.get('/pending-count', transferController.getPendingCount);
+
 // Get all transfers with filters
 router.get('/', transferController.getAllTransfers);
 
@@ -23,6 +26,9 @@ router.post('/:transferId/scan/send', transferController.scanBarcodeForSending);
 
 // Scan barcode to RECEIVE item (الفرع المستقبل)
 router.post('/:transferId/scan/receive', transferController.scanBarcodeForReceiving);
+
+// Confirm shipping (تأكيد الشحن من الفرع المرسل)
+router.post('/:transferId/confirm-shipping', transferController.confirmShipping);
 
 // Complete transfer receiving with final notes and discrepancies
 router.post('/:transferId/complete-receiving', transferController.completeTransferReceiving);

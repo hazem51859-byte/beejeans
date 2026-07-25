@@ -272,7 +272,7 @@ export default function Suppliers() {
   };
 
   return (
-    <div>
+    <div className="pb-16">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">الموردين</h1>
@@ -371,12 +371,18 @@ export default function Suppliers() {
               )}
 
               <div className="flex gap-2">
-                {balance.remaining > 0 && (
-                  <button onClick={() => openPaymentModal(supplier)} className="btn-primary flex-1">
-                    <DollarSign size={16} />
-                    دفع
-                  </button>
-                )}
+                <button 
+                  onClick={() => openPaymentModal(supplier)} 
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm transition-all ${
+                    balance.remaining > 0 
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm' 
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                  }`}
+                  disabled={balance.remaining <= 0}
+                >
+                  <DollarSign size={16} />
+                  {balance.remaining > 0 ? 'دفع' : 'لا يوجد مستحقات'}
+                </button>
               </div>
             </div>
           );

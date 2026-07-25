@@ -5,6 +5,21 @@ import { Plus, Package, CheckCircle, XCircle, ArrowLeftRight, Truck, Trash2, Eye
 import api, { transferAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
+// Helper function for clear currency formatting (Pounds + Piastres)
+const formatMoney = (amount) => {
+  if (amount === undefined || amount === null || isNaN(amount)) return '0 ج.م';
+  const num = Number(amount);
+  const pounds = Math.floor(Math.abs(num));
+  const piastres = Math.round((Math.abs(num) - pounds) * 100);
+  const formattedPounds = pounds.toLocaleString('en-US');
+  
+  const sign = num < 0 ? '-' : '';
+  if (piastres > 0) {
+    return `${sign}${formattedPounds}.${piastres.toString().padStart(2, '0')} ج.م`;
+  }
+  return `${sign}${formattedPounds} ج.م`;
+};
+
 export default function Transfers() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -303,27 +318,27 @@ export default function Transfers() {
         </button>
       </div>
 
-      {/* Transfers Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-        <table className="min-w-full divide-y divide-slate-200">
+      {/* Transfers Table with Horizontal Scroll Support */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-x-auto">
+        <table className="w-full min-w-[1000px] divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">رقم التوريد</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">من</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">إلى</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">الأصناف</th>
+              <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">رقم التوريد</th>
+              <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">من</th>
+              <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">إلى</th>
+              <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">الأصناف</th>
               {isAdmin ? (
                 <>
-                  <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">تكلفة البضاعة</th>
-                  <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">سعر البيع</th>
-                  <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">المكسب المتوقع</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">تكلفة البضاعة</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">سعر البيع</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">المكسب المتوقع</th>
                 </>
               ) : (
-                <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">قيمة البضاعة</th>
+                <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">قيمة البضاعة</th>
               )}
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">الحالة</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">التاريخ</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">إجراءات</th>
+              <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">الحالة</th>
+              <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-500 uppercase whitespace-nowrap">التاريخ</th>
+              <th className="px-4 py-3.5 text-center text-xs font-bold text-slate-500 uppercase whitespace-nowrap">إجراءات والتفاصيل</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-100">
@@ -334,27 +349,37 @@ export default function Transfers() {
 
               return (
                 <tr key={transfer.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-5 py-4 whitespace-nowrap font-mono text-sm font-bold text-slate-900">{transfer.transferNumber}</td>
-                  <td className="px-5 py-4 whitespace-nowrap font-semibold text-slate-700">{transfer.fromBranch?.name || 'المخزن الرئيسي'}</td>
-                  <td className="px-5 py-4 whitespace-nowrap font-semibold text-slate-700">{transfer.toBranch?.name}</td>
-                  <td className="px-5 py-4 whitespace-nowrap text-sm font-medium">
+                  <td className="px-4 py-3.5 whitespace-nowrap font-mono text-sm font-bold text-slate-900">{transfer.transferNumber}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap font-semibold text-slate-700">{transfer.fromBranch?.name || 'المخزن الرئيسي'}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap font-semibold text-slate-700">{transfer.toBranch?.name}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap text-sm font-medium">
                     {transfer.items?.length || 0} صنف ({transfer.items?.reduce((sum, i) => sum + (i.quantityRequested || 0), 0)} قطعة)
                   </td>
                   {isAdmin ? (
                     <>
-                      <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-slate-600">{totalCost.toLocaleString('ar-EG')} ج.م</td>
-                      <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">{totalSelling.toLocaleString('ar-EG')} ج.م</td>
-                      <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-teal-700">+{profit.toLocaleString('ar-EG')} ج.م</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-sm font-bold text-slate-600" dir="ltr">
+                        {formatMoney(totalCost)}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-sm font-bold text-emerald-600" dir="ltr">
+                        {formatMoney(totalSelling)}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-sm font-bold text-teal-700" dir="ltr">
+                        +{formatMoney(profit)}
+                      </td>
                     </>
                   ) : (
-                    <td className="px-5 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">{totalSelling.toLocaleString('ar-EG')} ج.م</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-sm font-bold text-emerald-600" dir="ltr">
+                      {formatMoney(totalSelling)}
+                    </td>
                   )}
-                  <td className="px-5 py-4 whitespace-nowrap">{getStatusBadge(transfer.status)}</td>
-                  <td className="px-5 py-4 whitespace-nowrap text-xs font-semibold text-slate-500">
-                    {new Date(transfer.sentAt || transfer.createdAt).toLocaleDateString('ar-EG')}
+                  <td className="px-4 py-3.5 whitespace-nowrap">{getStatusBadge(transfer.status)}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap text-xs font-semibold text-slate-600 dir-rtl">
+                    {new Date(transfer.sentAt || transfer.createdAt).toLocaleDateString('ar-EG', {
+                      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })}
                   </td>
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
+                  <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                    <div className="flex items-center justify-center gap-2">
                       {/* Step 1: Sender confirms shipping */}
                       {transfer.status === 'PENDING' && (isSenderBranch || isAdmin) && (
                         <button
@@ -380,13 +405,14 @@ export default function Transfers() {
                         </button>
                       )}
 
+                      {/* Prominent Details Button for Admin and Branch */}
                       <button
                         onClick={() => handleOpenDetailModal(transfer)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
-                        title="عرض التفاصيل"
+                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                        title="عرض كامل التفاصيل ومتابعة الشحنة"
                       >
-                        <Eye size={14} />
-                        تفاصيل
+                        <Eye size={15} className="text-indigo-600" />
+                        تفاصيل الشحنة
                       </button>
                     </div>
                   </td>
@@ -492,10 +518,10 @@ export default function Transfers() {
                             <span>المتاح بمخزن المصدر: <strong className="text-emerald-700">{availableQty} قطعة</strong></span>
                             {isAdmin ? (
                               <span>
-                                التكلفة: <strong className="text-slate-800">{item.costPrice} ج.م</strong> | البيع: <strong className="text-emerald-700">{item.sellingPrice} ج.م</strong>
+                                التكلفة: <strong className="text-slate-800">{formatMoney(item.costPrice)}</strong> | البيع: <strong className="text-emerald-700">{formatMoney(item.sellingPrice)}</strong>
                               </span>
                             ) : (
-                              <span>سعر البيع للقطعة: <strong className="text-emerald-700">{item.sellingPrice} ج.م</strong></span>
+                              <span>سعر البيع للقطعة: <strong className="text-emerald-700">{formatMoney(item.sellingPrice)}</strong></span>
                             )}
                           </div>
                         )}
@@ -654,7 +680,7 @@ export default function Transfers() {
             {/* Header */}
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 mb-1">تفاصيل طلب التوريد</h2>
+                <h2 className="text-2xl font-black text-slate-900 mb-1">تفاصيل طلب التوريد للشحنة</h2>
                 <p className="font-mono text-xs text-slate-500 font-semibold">{selectedTransfer.transferNumber}</p>
               </div>
               <div>{getStatusBadge(selectedTransfer.status)}</div>
@@ -666,28 +692,28 @@ export default function Transfers() {
                 <>
                   <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                     <p className="text-xs font-semibold text-slate-500 mb-0.5">تكلفة البضاعة الإجمالية</p>
-                    <p className="text-lg font-black text-slate-800">
-                      {(selectedTransfer.totalCost || calculateTransferTotals(selectedTransfer).totalCost).toLocaleString('ar-EG')} ج.م
+                    <p className="text-lg font-black text-slate-800" dir="ltr">
+                      {formatMoney(selectedTransfer.totalCost || calculateTransferTotals(selectedTransfer).totalCost)}
                     </p>
                   </div>
                   <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
                     <p className="text-xs font-semibold text-emerald-600 mb-0.5">سعر البيع الإجمالي</p>
-                    <p className="text-lg font-black text-emerald-700">
-                      {(selectedTransfer.totalSellingPrice || calculateTransferTotals(selectedTransfer).totalSelling).toLocaleString('ar-EG')} ج.م
+                    <p className="text-lg font-black text-emerald-700" dir="ltr">
+                      {formatMoney(selectedTransfer.totalSellingPrice || calculateTransferTotals(selectedTransfer).totalSelling)}
                     </p>
                   </div>
                   <div className="bg-teal-50 p-3.5 rounded-xl border border-teal-200">
                     <p className="text-xs font-semibold text-teal-600 mb-0.5">المكسب المتوقع</p>
-                    <p className="text-lg font-black text-teal-700">
-                      +{(calculateTransferTotals(selectedTransfer).profit).toLocaleString('ar-EG')} ج.م
+                    <p className="text-lg font-black text-teal-700" dir="ltr">
+                      +{formatMoney(calculateTransferTotals(selectedTransfer).profit)}
                     </p>
                   </div>
                 </>
               ) : (
                 <div className="col-span-3 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
                   <p className="text-xs font-semibold text-emerald-600 mb-0.5">إجمالي قيمة البضاعة بسعر البيع</p>
-                  <p className="text-xl font-black text-emerald-700">
-                    {(selectedTransfer.totalSellingPrice || calculateTransferTotals(selectedTransfer).totalSelling).toLocaleString('ar-EG')} ج.م
+                  <p className="text-xl font-black text-emerald-700" dir="ltr">
+                    {formatMoney(selectedTransfer.totalSellingPrice || calculateTransferTotals(selectedTransfer).totalSelling)}
                   </p>
                 </div>
               )}
@@ -735,7 +761,7 @@ export default function Transfers() {
 
             {/* Items Table */}
             <div className="mb-6">
-              <h3 className="font-bold text-slate-900 mb-2 text-sm">تفاصيل الأصناف</h3>
+              <h3 className="font-bold text-slate-900 mb-2 text-sm">تفاصيل الأصناف المشحونة</h3>
               <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-200">
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead className="bg-slate-100">
@@ -745,8 +771,8 @@ export default function Transfers() {
                       <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">الكمية المستلمة</th>
                       {isAdmin ? (
                         <>
-                          <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">التكلفة</th>
-                          <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">البيع</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">التكلفة للقطعة</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">البيع للقطعة</th>
                         </>
                       ) : (
                         <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-500">سعر القطعة</th>
@@ -770,11 +796,11 @@ export default function Transfers() {
                           </td>
                           {isAdmin ? (
                             <>
-                              <td className="px-4 py-2.5 text-xs font-semibold text-slate-600">{cost} ج.م</td>
-                              <td className="px-4 py-2.5 text-xs font-bold text-emerald-600">{selling} ج.م</td>
+                              <td className="px-4 py-2.5 text-xs font-semibold text-slate-600" dir="ltr">{formatMoney(cost)}</td>
+                              <td className="px-4 py-2.5 text-xs font-bold text-emerald-600" dir="ltr">{formatMoney(selling)}</td>
                             </>
                           ) : (
-                            <td className="px-4 py-2.5 text-xs font-bold text-emerald-600">{selling} ج.م</td>
+                            <td className="px-4 py-2.5 text-xs font-bold text-emerald-600" dir="ltr">{formatMoney(selling)}</td>
                           )}
                         </tr>
                       );

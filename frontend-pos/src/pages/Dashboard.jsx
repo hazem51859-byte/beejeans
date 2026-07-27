@@ -40,6 +40,24 @@ export default function Dashboard() {
     },
     enabled: !!user,
   });
+
+  // Get office invoices dashboard (only for admin)
+  const { data: officeInvoicesDashboard } = useQuery({
+    queryKey: ['office-invoices-dashboard'],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/v1/office-invoices/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch office invoices dashboard');
+      }
+      return response.json();
+    },
+    enabled: isAdmin,
+  });
   
   const closeShiftMutation = useMutation({
     mutationFn: (data) => shiftAPI.close(shiftData?.data?.data?.id, data),
@@ -65,6 +83,9 @@ export default function Dashboard() {
 
   // Normalize the daily report data
   const reportData = dailyReport?.data?.data || dailyReport?.data || {};
+  const officeInvoicesData = officeInvoicesDashboard || {};
+  
+  console.log('Office Invoices Dashboard Data:', officeInvoicesData);
   
   const stats = [
     {
@@ -74,6 +95,14 @@ export default function Dashboard() {
       icon: DollarSign,
       color: 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-lg shadow-emerald-500/25',
     },
+    ...(isAdmin ? [{
+      name: 'مبيعات الجملة',
+      value: (officeInvoicesData.totalCollected || 0).toFixed(2),
+      unit: 'جنيه',
+      icon: Package,
+      color: 'bg-gradient-to-tr from-purple-600 to-pink-500 shadow-lg shadow-purple-500/25',
+      subtitle: `${officeInvoicesData.invoiceCount || 0} فاتورة • ربح ${(officeInvoicesData.totalProfit || 0).toFixed(0)} ج`
+    }] : []),
     {
       name: 'عدد المعاملات',
       value: reportData.transactionCount || 0,
@@ -171,6 +200,9 @@ export default function Dashboard() {
                     {stat.value}
                   </p>
                   <span className="inline-block mt-1 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{stat.unit}</span>
+                  {stat.subtitle && (
+                    <p className="text-xs text-slate-600 mt-2">{stat.subtitle}</p>
+                  )}
                 </div>
                 <div className={`${stat.color} w-13 h-13 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
                   <Icon className="text-white" size={24} />

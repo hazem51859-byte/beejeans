@@ -70,6 +70,7 @@ export default function Manufacturing() {
       const response = await axios.get(`${API_URL}/fabric/types`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('📦 Fabric Types:', response.data.data);
       setFabricTypes(response.data.data);
     } catch (error) {
       console.error('Error fetching fabric types:', error);
@@ -139,6 +140,9 @@ export default function Manufacturing() {
 
   const selectedFabric = fabricTypes.find(f => f.id === sendForm.fabricTypeId);
   const fabricCost = selectedFabric ? (parseFloat(sendForm.metersUsed) || 0) * selectedFabric.pricePerMeter : 0;
+  const availableMeters = selectedFabric?.fabricStock?.[0]?.availableMeters || 0;
+  const metersUsed = parseFloat(sendForm.metersUsed) || 0;
+  const remainingMeters = availableMeters - metersUsed;
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -300,10 +304,15 @@ export default function Manufacturing() {
                     <option value="">اختر نوع القماش</option>
                     {fabricTypes.map((fabric) => (
                       <option key={fabric.id} value={fabric.id}>
-                        {fabric.name} - {fabric.pricePerMeter} ج/متر
+                        {fabric.name} - {fabric.pricePerMeter} ج/متر ({fabric.fabricStock?.[0]?.availableMeters || 0} متر متاح)
                       </option>
                     ))}
                   </select>
+                  {selectedFabric && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      متوفر: <span className="font-bold text-green-600">{availableMeters} متر</span>
+                    </p>
+                  )}
                 </div>
                 <div className="mb-4 col-span-2">
                   <label className="block text-gray-700 mb-2">عدد الأمتار المستخدمة *</label>
@@ -319,11 +328,34 @@ export default function Manufacturing() {
               </div>
 
               {fabricCost > 0 && (
-                <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                <div className="bg-blue-50 p-4 rounded-lg mb-4 space-y-2">
                   <div className="flex justify-between">
                     <span>تكلفة القماش الإجمالية:</span>
                     <span className="font-bold text-blue-600">{fabricCost.toFixed(2)} ج</span>
                   </div>
+                  {metersUsed > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span>الأمتار المتاحة:</span>
+                        <span className="font-medium">{availableMeters.toFixed(2)} متر</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>سيتم استخدام:</span>
+                        <span className="font-medium text-orange-600">{metersUsed.toFixed(2)} متر</span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t pt-2">
+                        <span>المتبقي بعد الإرسال:</span>
+                        <span className={`font-bold ${remainingMeters < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {remainingMeters.toFixed(2)} متر
+                        </span>
+                      </div>
+                      {remainingMeters < 0 && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                          ⚠️ الكمية المطلوبة أكبر من المتوفر!
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 

@@ -132,6 +132,17 @@ export default function MonthlyReport() {
     },
   });
 
+  // بيانات فواتير المكتب (المخزن الرئيسي)
+  const { data: officeInvoicesData } = useQuery({
+    queryKey: ['office-invoices-report', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/reports/office-invoices', { 
+        params: { startDate, endDate: endDateString } 
+      });
+      return response.data;
+    },
+  });
+
   // حساب الإجماليات - normalize data format
   const salesData = Array.isArray(sales?.data) ? sales.data : (Array.isArray(sales?.data?.data) ? sales.data.data : []);
   const purchasesData = purchases?.data?.data?.purchases || purchases?.data?.purchases || (Array.isArray(purchases?.data) ? purchases.data : (Array.isArray(purchases?.data?.data) ? purchases.data.data : []));
@@ -148,6 +159,12 @@ export default function MonthlyReport() {
   const fabricPurchases = fabricPurchasesData?.data || [];
   const manufacturingOrders = manufacturingOrdersData?.data || [];
   const washingOrders = washingOrdersData?.data || [];
+  
+  // بيانات فواتير المكتب
+  const officeInvoices = officeInvoicesData?.data || {};
+  const officeInvoicesTotalSales = officeInvoices.totalSales || 0;
+  const officeInvoicesProfit = officeInvoices.totalProfit || 0;
+  const officeInvoicesCollected = officeInvoices.totalCollected || 0;
 
   // حسابات الإنتاج
   const totalFabricPurchases = fabricPurchases.reduce((sum, purchase) => sum + (purchase.totalCost || 0), 0);
@@ -195,18 +212,20 @@ export default function MonthlyReport() {
   // الربح من مبيعات العملاء (كل المبيعات - حتى لو مش مدفوعة)
   const customerSalesProfit = totalCustomerSales - customerSalesCost;
   
-  // الإيرادات = مبيعات الفروع فقط (مبيعات العملاء مش إيراد - دي مجرد بيع بضاعة موجودة)
-  const totalRevenue = netSales; // مبيعات الفروع فقط
+  // الإيرادات = مبيعات الفروع + مبيعات الجملة (المكتب) المحصلة
+  const totalRevenue = netSales + officeInvoicesCollected;
   
   // تكلفة البضاعة المباعة (COGS)
-  // فقط تكلفة مبيعات الفروع (لأن مبيعات العملاء = بضاعة موجودة مش إنتاج جديد)
+  // تكلفة مبيعات الفروع + تكلفة مبيعات الجملة (المكتب)
   const branchSalesCost = salesData.reduce((sum, sale) => {
     return sum + (sale.items?.reduce((itemSum, item) => {
       return itemSum + ((item.product?.costPrice || 0) * item.quantity);
     }, 0) || 0);
   }, 0);
+  
+  const officeInvoicesCost = officeInvoices.totalCost || 0;
 
-  const costOfGoodsSold = branchSalesCost;
+  const costOfGoodsSold = branchSalesCost + officeInvoicesCost;
 
   // صافي الربح (على أساس الاستحقاق)
   const grossProfit = totalRevenue - costOfGoodsSold;
@@ -214,7 +233,8 @@ export default function MonthlyReport() {
   const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100) : 0;
   
   // التدفق النقدي (Cash Flow)
-  const cashInflow = totalSales + totalCustomerSalesPaid - totalReturns; // الإيرادات النقدية المدفوعة فقط
+  // الإيرادات النقدية = مبيعات الفروع + مبيعات الجملة (المكتب) المحصلة
+  const cashInflow = totalSales + officeInvoicesCollected - totalReturns;
   const cashOutflow = totalExpenses + totalProductionPaid; // المصروفات النقدية (مصروفات + إنتاج فقط)
   const netCashFlow = cashInflow - cashOutflow;
 
@@ -286,18 +306,32 @@ export default function MonthlyReport() {
           )}
         </div>
 
-        {/* مبيعات الجملة */}
+        {/* مبيعات الجملة (المكتب) */}
         <div className="card bg-gradient-to-br from-purple-50 to-purple-100">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium text-gray-700">مبيعات الجملة</h3>
             <Users className="text-purple-600" size={24} />
           </div>
-          <p className="text-2xl font-bold text-purple-700">{totalCustomerSales.toFixed(2)} ج.م</p>
+          <p className="text-2xl font-bold text-purple-700">{officeInvoicesTotalSales.toFixed(2)} ج.م</p>
           <div className="flex justify-between text-xs mt-1">
-            <span className="text-green-600">مدفوع: {totalCustomerSalesPaid.toFixed(2)}</span>
-            <span className="text-orange-600">متبقي: {totalCustomerSalesRemaining.toFixed(2)}</span>
+            <span className="text-green-600">محصل: {officeInvoicesCollected.toFixed(2)}</span>
+            <span className="text-orange-600">متبقي: {(officeInvoicesTotalSales - officeInvoicesCollected).toFixed(2)}</span>
           </div>
-          <p className="text-xs text-gray-600 mt-1">{customerSalesCount} فاتورة • ربح: {customerSalesProfit.toFixed(2)} ج.م</p>
+          <p className="text-xs text-gray-600 mt-1">{officeInvoices.totalInvoices || 0} فاتورة • ربح: {officeInvoicesProfit.toFixed(2)} ج.م</p>
+          <div className="text-xs text-gray-500 mt-2 space-y-1">
+            <div className="flex justify-between">
+              <span>زباين: {officeInvoices.byType?.regular?.count || 0}</span>
+              <span>{(officeInvoices.byType?.regular?.sales || 0).toFixed(0)} ج</span>
+            </div>
+            <div className="flex justify-between">
+              <span>شحن: {officeInvoices.byType?.shipment?.count || 0}</span>
+              <span>{(officeInvoices.byType?.shipment?.sales || 0).toFixed(0)} ج</span>
+            </div>
+            <div className="flex justify-between">
+              <span>عملاء: {officeInvoices.byType?.client?.count || 0}</span>
+              <span>{(officeInvoices.byType?.client?.sales || 0).toFixed(0)} ج</span>
+            </div>
+          </div>
         </div>
 
         <div className="card bg-gradient-to-br from-red-50 to-red-100">
@@ -352,6 +386,11 @@ export default function MonthlyReport() {
                 <span className="font-medium text-green-700">{totalSales.toFixed(2)}</span>
               </div>
               
+              <div className="flex justify-between items-center pb-2 border-b border-green-200">
+                <span className="text-sm">مبيعات الجملة (المكتب)</span>
+                <span className="font-medium text-green-700">{officeInvoicesCollected.toFixed(2)}</span>
+              </div>
+              
               {totalReturns > 0 && (
                 <div className="flex justify-between items-center pb-2 border-b border-green-200">
                   <span className="text-sm text-gray-600">- المرتجعات</span>
@@ -371,7 +410,12 @@ export default function MonthlyReport() {
               
               <div className="flex justify-between items-center pb-2 border-b border-red-200">
                 <span className="text-sm">تكلفة البضاعة المباعة (فروع)</span>
-                <span className="font-medium text-red-700">{costOfGoodsSold.toFixed(2)}</span>
+                <span className="font-medium text-red-700">{branchSalesCost.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                <span className="text-sm">تكلفة البضاعة المباعة (جملة)</span>
+                <span className="font-medium text-red-700">{officeInvoicesCost.toFixed(2)}</span>
               </div>
               
               <div className="flex justify-between items-center pb-2 border-b border-red-200">
@@ -397,29 +441,40 @@ export default function MonthlyReport() {
               </span>
             </div>
             
-            {/* ملاحظة مبيعات العملاء */}
-            {totalCustomerSales > 0 && (
-              <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mt-3">
-                <p className="text-xs font-bold text-yellow-900 mb-1">📦 مبيعات العملاء (حساب منفصل):</p>
+            {/* ملاحظة مبيعات الجملة بالتفصيل */}
+            {officeInvoicesTotalSales > 0 && (
+              <div className="bg-purple-50 p-3 rounded border border-purple-200 mt-3">
+                <p className="text-xs font-bold text-purple-900 mb-1">📦 تفاصيل مبيعات الجملة:</p>
                 <div className="text-xs text-gray-700 space-y-1">
                   <div className="flex justify-between">
-                    <span>إجمالي المبيعات:</span>
-                    <span className="font-medium">{totalCustomerSales.toFixed(2)} ج.م</span>
+                    <span>• زباين ({officeInvoices.byType?.regular?.count || 0} فاتورة):</span>
+                    <span className="font-medium">{(officeInvoices.byType?.regular?.sales || 0).toFixed(2)} ج.م</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>المدفوع:</span>
-                    <span className="font-medium text-green-700">{totalCustomerSalesPaid.toFixed(2)} ج.م</span>
+                    <span>• شحن ({officeInvoices.byType?.shipment?.count || 0} فاتورة):</span>
+                    <span className="font-medium">{(officeInvoices.byType?.shipment?.sales || 0).toFixed(2)} ج.م</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>المتبقي (ديون):</span>
-                    <span className="font-medium text-orange-700">{totalCustomerSalesRemaining.toFixed(2)} ج.م</span>
+                    <span>• عملاء دائمين ({officeInvoices.byType?.client?.count || 0} فاتورة):</span>
+                    <span className="font-medium">{(officeInvoices.byType?.client?.sales || 0).toFixed(2)} ج.م</span>
                   </div>
-                  <div className="flex justify-between border-t border-yellow-300 pt-1 mt-1">
-                    <span className="font-bold">الربح المتوقع:</span>
-                    <span className="font-bold text-purple-700">{customerSalesProfit.toFixed(2)} ج.م</span>
+                  <div className="flex justify-between border-t border-purple-300 pt-1 mt-1">
+                    <span className="font-bold">إجمالي المبيعات:</span>
+                    <span className="font-bold">{officeInvoicesTotalSales.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">المحصل:</span>
+                    <span className="font-medium text-green-700">{officeInvoicesCollected.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-orange-700">المتبقي:</span>
+                    <span className="font-medium text-orange-700">{(officeInvoicesTotalSales - officeInvoicesCollected).toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between border-t border-purple-300 pt-1 mt-1">
+                    <span className="font-bold">الربح:</span>
+                    <span className="font-bold text-purple-700">{officeInvoicesProfit.toFixed(2)} ج.م</span>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2 italic">* لا يُحسب في صافي الربح حتى يتم التحصيل</p>
               </div>
             )}
           </div>
@@ -449,21 +504,38 @@ export default function MonthlyReport() {
                 </div>
                 
                 <div className="border-t pt-2">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-700 font-medium">مبيعات العملاء (المدفوع نقدي)</span>
-                    <span className="font-bold text-green-700">+{totalCustomerSalesPaid.toFixed(2)}</span>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-700 font-medium">مبيعات الجملة (المحصل نقدي)</span>
+                    <span className="font-bold text-green-700">+{officeInvoicesCollected.toFixed(2)}</span>
+                  </div>
+                  
+                  {/* تفصيل مبيعات الجملة */}
+                  <div className="bg-purple-50 p-2 rounded mb-2 border border-purple-200">
+                    <div className="flex justify-between items-center text-xs px-2 mb-1">
+                      <span className="text-gray-600">• زباين ({officeInvoices.byType?.regular?.count || 0})</span>
+                      <span className="text-gray-700">{(officeInvoices.byType?.regular?.collected || 0).toFixed(2)} ج</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs px-2 mb-1">
+                      <span className="text-gray-600">• شحن ({officeInvoices.byType?.shipment?.count || 0})</span>
+                      <span className="text-gray-700">{(officeInvoices.byType?.shipment?.collected || 0).toFixed(2)} ج</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs px-2">
+                      <span className="text-gray-600">• عملاء دائمين ({officeInvoices.byType?.client?.count || 0})</span>
+                      <span className="text-gray-700">{(officeInvoices.byType?.client?.collected || 0).toFixed(2)} ج</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-500">• إجمالي المبيعات</span>
+                    <span className="text-gray-600">{officeInvoicesTotalSales.toFixed(2)} ج.م</span>
                   </div>
                   <div className="flex justify-between items-center text-xs px-2">
-                    <span className="text-gray-500">• إجمالي الفواتير</span>
-                    <span className="text-gray-600">{totalCustomerSales.toFixed(2)} ج.م</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs px-2">
-                    <span className="text-blue-600">• المدفوع</span>
-                    <span className="text-green-600 font-semibold">{totalCustomerSalesPaid.toFixed(2)} ج.م</span>
+                    <span className="text-blue-600">• المحصل</span>
+                    <span className="text-green-600 font-semibold">{officeInvoicesCollected.toFixed(2)} ج.م</span>
                   </div>
                   <div className="flex justify-between items-center text-xs px-2">
                     <span className="text-orange-600">• المتبقي (ديون لنا)</span>
-                    <span className="text-orange-700 font-semibold">{totalCustomerSalesRemaining.toFixed(2)} ج.م</span>
+                    <span className="text-orange-700 font-semibold">{(officeInvoicesTotalSales - officeInvoicesCollected).toFixed(2)} ج.م</span>
                   </div>
                 </div>
                 
@@ -760,6 +832,167 @@ export default function MonthlyReport() {
           </div>
         )}
       </div>
+
+      {/* قسم فواتير المكتب/المخزن الرئيسي */}
+      {officeInvoices && (officeInvoices.totalInvoices > 0 || officeInvoicesTotalSales > 0) && (
+        <div className="card mt-6">
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <FileText size={20} className="text-blue-600" />
+            فواتير المكتب (المخزن الرئيسي)
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">إجمالي المبيعات</p>
+              <p className="text-xl font-bold text-blue-700">{officeInvoicesTotalSales.toFixed(2)} ج.م</p>
+            </div>
+            
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">الأرباح</p>
+              <p className="text-xl font-bold text-green-700">{officeInvoicesProfit.toFixed(2)} ج.م</p>
+            </div>
+            
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">المحصل</p>
+              <p className="text-xl font-bold text-purple-700">{officeInvoicesCollected.toFixed(2)} ج.م</p>
+            </div>
+            
+            <div className="bg-orange-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">عدد الفواتير</p>
+              <p className="text-xl font-bold text-orange-700">{officeInvoices.totalInvoices}</p>
+            </div>
+          </div>
+
+          {/* تحليل حسب النوع */}
+          {officeInvoices.byType && (
+            <div className="mt-4">
+              <h3 className="font-bold mb-3">تحليل حسب النوع</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* زبائن عاديين */}
+                <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-white">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">🛒</span>
+                    <h4 className="font-bold text-blue-900">زبائن عاديين</h4>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between pb-1 border-b">
+                      <span className="text-gray-600">العدد:</span>
+                      <span className="font-medium">{officeInvoices.byType.regular?.count || 0} فاتورة</span>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">التكلفة:</span>
+                      <span className="font-medium text-gray-700">
+                        {((officeInvoices.byType.regular?.sales || 0) - (officeInvoices.byType.regular?.profit || 0)).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b">
+                      <span className="text-gray-600">المبيعات:</span>
+                      <span className="font-bold text-blue-700">{(officeInvoices.byType.regular?.sales || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1 bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">الربح:</span>
+                      <span className="font-bold text-green-700">{(officeInvoices.byType.regular?.profit || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b border-gray-300 mb-2"></div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">المحصل:</span>
+                      <span className="font-medium text-green-600">{(officeInvoices.byType.regular?.collected || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">المتبقي:</span>
+                      <span className="font-medium text-orange-600">
+                        {((officeInvoices.byType.regular?.sales || 0) - (officeInvoices.byType.regular?.collected || 0)).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* شحنات */}
+                <div className="border rounded-lg p-4 bg-gradient-to-br from-purple-50 to-white">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">📦</span>
+                    <h4 className="font-bold text-purple-900">شحنات</h4>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between pb-1 border-b">
+                      <span className="text-gray-600">العدد:</span>
+                      <span className="font-medium">{officeInvoices.byType.shipment?.count || 0} شحنة</span>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">التكلفة:</span>
+                      <span className="font-medium text-gray-700">
+                        {((officeInvoices.byType.shipment?.sales || 0) - (officeInvoices.byType.shipment?.profit || 0)).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b">
+                      <span className="text-gray-600">المبيعات:</span>
+                      <span className="font-bold text-purple-700">{(officeInvoices.byType.shipment?.sales || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1 bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">الربح:</span>
+                      <span className="font-bold text-green-700">{(officeInvoices.byType.shipment?.profit || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b border-gray-300 mb-2"></div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">المحصل:</span>
+                      <span className="font-medium text-green-600">{(officeInvoices.byType.shipment?.collected || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">المتبقي:</span>
+                      <span className="font-medium text-orange-600">
+                        {((officeInvoices.byType.shipment?.sales || 0) - (officeInvoices.byType.shipment?.collected || 0)).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t">
+                      <span className="text-gray-600 text-xs">تم التسليم:</span>
+                      <span className="font-medium text-blue-600 text-xs">{officeInvoices.byType.shipment?.delivered || 0} من {officeInvoices.byType.shipment?.count || 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* عملاء */}
+                <div className="border rounded-lg p-4 bg-gradient-to-br from-teal-50 to-white">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">👤</span>
+                    <h4 className="font-bold text-teal-900">عملاء دائمين</h4>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between pb-1 border-b">
+                      <span className="text-gray-600">العدد:</span>
+                      <span className="font-medium">{officeInvoices.byType.client?.count || 0} فاتورة</span>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">التكلفة:</span>
+                      <span className="font-medium text-gray-700">
+                        {((officeInvoices.byType.client?.sales || 0) - (officeInvoices.byType.client?.profit || 0)).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b">
+                      <span className="text-gray-600">المبيعات:</span>
+                      <span className="font-bold text-teal-700">{(officeInvoices.byType.client?.sales || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1 bg-green-50 px-2 py-1 rounded">
+                      <span className="text-gray-600">الربح:</span>
+                      <span className="font-bold text-green-700">{(officeInvoices.byType.client?.profit || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b border-gray-300 mb-2"></div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">المحصل:</span>
+                      <span className="font-medium text-green-600">{(officeInvoices.byType.client?.collected || 0).toFixed(2)} ج.م</span>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <span className="text-gray-600">المتبقي:</span>
+                      <span className="font-medium text-orange-600">
+                        {((officeInvoices.byType.client?.sales || 0) - (officeInvoices.byType.client?.collected || 0)).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* حصص الشركاء */}
       <div className="card mt-6">

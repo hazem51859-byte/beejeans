@@ -53,7 +53,7 @@ export default function WashingOrders() {
   const { data: productsData } = useQuery({
     queryKey: ['products-master'],
     queryFn: async () => {
-      const response = await api.get('/products', { params: { status: 'DRAFT' } });
+      const response = await api.get('/products', { params: { status: 'ACTIVE' } });
       return response.data;
     }
   });

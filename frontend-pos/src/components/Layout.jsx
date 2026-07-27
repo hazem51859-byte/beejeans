@@ -98,6 +98,12 @@ export default function Layout() {
     { name: 'المصروفات', path: '/expenses', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'العملاء', path: '/customers', icon: User, roles: ['ADMIN'] },
     { name: 'الشركاء', path: '/partners', icon: User, roles: ['ADMIN'] },
+    
+    { name: '--- فواتير المكتب ---', path: '#office-header', icon: FileText, roles: ['ADMIN'], isHeader: true },
+    { name: 'فواتير المكتب', path: '/office-invoices', icon: FileText, roles: ['ADMIN'] },
+    { name: 'حالة الشحنات', path: '/shipments', icon: Truck, roles: ['ADMIN'] },
+    
+    { name: '--- التقارير ---', path: '#reports-header', icon: BarChart3, roles: ['ADMIN'], isHeader: true },
     { name: 'التقرير الشهري', path: '/monthly-report', icon: FileText, roles: ['ADMIN'] },
     
     { name: 'الإعدادات', path: '/settings', icon: Settings, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },

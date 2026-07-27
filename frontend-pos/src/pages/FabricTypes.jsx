@@ -121,7 +121,7 @@ export default function FabricTypes() {
                 <td className="px-6 py-4 whitespace-nowrap font-medium">{fabric.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{fabric.pricePerMeter} ج</td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {fabric.fabricStock?.availableMeters?.toFixed(2) || 0} متر
+                  {fabric.fabricStock?.[0]?.availableMeters?.toFixed(2) || 0} متر
                 </td>
                 <td className="px-6 py-4">{fabric.description || '-'}</td>
                 <td className="px-6 py-4 whitespace-nowrap">

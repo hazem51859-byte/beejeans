@@ -6,6 +6,15 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import './index.css';
 
+// Unregister any existing service workers
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for (let registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

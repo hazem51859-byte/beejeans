@@ -75,7 +75,7 @@ export default function ProductMaster() {
           description: formData.description,
           costPrice: 0,
           sellingPrice: parseFloat(formData.sellingPrice) || 0,
-          status: 'DRAFT' // Draft until production completes
+          status: 'ACTIVE' // Active by default
         }, {
           headers: { Authorization: `Bearer ${token}` }
         });

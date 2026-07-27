@@ -24,7 +24,8 @@ exports.getDashboardOverview = async (req, res) => {
       activeUsers,
       openShifts,
       todaySales,
-      todayReturns
+      todayReturns,
+      officeInvoices
     ] = await Promise.all([
       prisma.branch.count(),
       prisma.user.count(),
@@ -46,6 +47,18 @@ exports.getDashboardOverview = async (req, res) => {
           isReturn: true
         },
         _sum: { total: true },
+        _count: true
+      }),
+      prisma.officeInvoice.aggregate({
+        where: {
+          ...dateFilter,
+          status: { not: 'CANCELLED' }
+        },
+        _sum: {
+          total: true,
+          paidAmount: true,
+          profit: true
+        },
         _count: true
       })
     ]);
@@ -130,6 +143,12 @@ exports.getDashboardOverview = async (req, res) => {
         returns: {
           total: Math.abs(todayReturns._sum.total || 0),
           count: todayReturns._count || 0
+        },
+        officeInvoices: {
+          total: officeInvoices._sum.total || 0,
+          collected: officeInvoices._sum.paidAmount || 0,
+          profit: officeInvoices._sum.profit || 0,
+          count: officeInvoices._count || 0
         },
         salesByBranch: branchesData,
         topProducts: topProductsData

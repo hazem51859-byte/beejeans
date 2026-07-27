@@ -33,6 +33,10 @@ import ProductMaster from './pages/ProductMaster';
 import Manufacturing from './pages/Manufacturing';
 import WashingOrders from './pages/WashingOrders';
 import ProductionDashboard from './pages/ProductionDashboard';
+import CreateOfficeInvoice from './pages/CreateOfficeInvoice';
+import OfficeInvoices from './pages/OfficeInvoices';
+import OfficeInvoicePrint from './pages/OfficeInvoicePrint';
+import Shipments from './pages/Shipments';
 
 
 function ProtectedRoute({ children }) {
@@ -69,6 +73,8 @@ function App() {
       
       {/* Print Routes - No Layout */}
       <Route path="/print/customer-invoice/:invoiceId" element={<CustomerInvoicePrint />} />
+      <Route path="/office-invoice-print/:id" element={<OfficeInvoicePrint />} />
+      <Route path="/office-invoices/:id/print" element={<OfficeInvoicePrint />} />
       
       {/* Public Login Routes */}
       <Route 
@@ -123,6 +129,9 @@ function App() {
             <Route path="manufacturing" element={<Manufacturing />} />
             <Route path="washing-orders" element={<WashingOrders />} />
             <Route path="production-dashboard" element={<ProductionDashboard />} />
+            <Route path="office-invoices" element={<OfficeInvoices />} />
+            <Route path="office-invoices/create" element={<CreateOfficeInvoice />} />
+            <Route path="shipments" element={<Shipments />} />
           </>
         )}
       </Route>

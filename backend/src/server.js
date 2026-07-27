@@ -30,6 +30,8 @@ const serialRoutes = require('./routes/serial.routes');
 const vaultRoutes = require('./routes/vault.routes');
 const fabricRoutes = require('./routes/fabric.routes');
 const manufacturingRoutes = require('./routes/manufacturing.routes');
+const officeInvoiceRoutes = require('./routes/officeInvoice.routes');
+const shipmentRoutes = require('./routes/shipment.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { rateLimiter } = require('./middleware/rateLimiter');
 const initMainBranch = require('./utils/initMainBranch');
@@ -97,6 +99,8 @@ app.use(`${API_PREFIX}/serials`, serialRoutes);
 app.use(`${API_PREFIX}/vault`, vaultRoutes);
 app.use(`${API_PREFIX}/fabric`, fabricRoutes);
 app.use(`${API_PREFIX}/production`, manufacturingRoutes);
+app.use(`${API_PREFIX}/office-invoices`, officeInvoiceRoutes);
+app.use(`${API_PREFIX}/shipments`, shipmentRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

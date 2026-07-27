@@ -51,6 +51,7 @@ exports.getAllManufacturingOrders = async (req, res) => {
       include: {
         supplier: true,
         fabricType: true,
+        product: true,
         washingOrders: true
       },
       orderBy: { sentDate: 'desc' }
@@ -79,6 +80,7 @@ exports.getManufacturingOrderById = async (req, res) => {
       include: {
         supplier: true,
         fabricType: true,
+        product: true,
         washingOrders: {
           include: {
             supplier: true
@@ -114,10 +116,22 @@ exports.createManufacturingOrder = async (req, res) => {
       orderNumber,
       supplierId,
       fabricTypeId,
+      productId,
       metersUsed,
       sentDate,
       notes
     } = req.body;
+    
+    // Debug log
+    console.log('📝 Create Manufacturing Order Request:', {
+      orderNumber,
+      supplierId,
+      fabricTypeId,
+      productId,
+      metersUsed,
+      sentDate,
+      notes
+    });
 
     // Check fabric stock availability
     const fabricStock = await prisma.fabricStock.findUnique({
@@ -149,6 +163,7 @@ exports.createManufacturingOrder = async (req, res) => {
           orderNumber,
           supplierId,
           fabricTypeId,
+          productId,
           metersUsed: metersFloat,
           fabricCostPerMeter: fabricStock.fabricType.pricePerMeter,
           status: 'SENT',
@@ -158,7 +173,8 @@ exports.createManufacturingOrder = async (req, res) => {
         },
         include: {
           supplier: true,
-          fabricType: true
+          fabricType: true,
+          product: true
         }
       });
 
@@ -499,12 +515,11 @@ exports.completeWashingOrder = async (req, res) => {
       const serialsToCreate = [];
       for (let i = 0; i < piecesInt; i++) {
         serialsToCreate.push({
-          serialNumber: product.sku, // نفس الـ SKU لكل القطع
+          serialNumber: product.sku, // نفس الـ SKU لكل القطع عشان الكاشير يقدر يبيع بالباركود
           productId: product.id,
           branchId: mainBranch.id,
           status: 'AVAILABLE',
-          costPrice: finalCostPrice,
-          sellingPrice: productData.sellingPrice ? parseFloat(productData.sellingPrice) : product.sellingPrice
+          registeredBy: req.user.id
         });
       }
 

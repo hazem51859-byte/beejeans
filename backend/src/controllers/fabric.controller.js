@@ -297,14 +297,32 @@ exports.createFabricPurchase = async (req, res) => {
         }
       });
 
-      // Update fabric stock
-      await tx.fabricStock.update({
-        where: { fabricTypeId },
-        data: {
-          availableMeters: { increment: metersFloat },
-          totalPurchased: { increment: metersFloat }
-        }
+      // Update or create fabric stock
+      const existingStock = await tx.fabricStock.findUnique({
+        where: { fabricTypeId }
       });
+
+      if (existingStock) {
+        await tx.fabricStock.update({
+          where: { fabricTypeId },
+          data: {
+            availableMeters: { increment: metersFloat },
+            totalPurchased: { increment: metersFloat },
+            lastUpdated: new Date()
+          }
+        });
+      } else {
+        await tx.fabricStock.create({
+          data: {
+            fabricTypeId,
+            availableMeters: metersFloat,
+            totalPurchased: metersFloat,
+            totalUsed: 0,
+            reservedMeters: 0,
+            lastUpdated: new Date()
+          }
+        });
+      }
 
       // Update supplier balance
       await tx.supplier.update({

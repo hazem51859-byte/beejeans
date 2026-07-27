@@ -108,11 +108,11 @@ body {
   background: #94a3b8;
 }
 
-/* Print Styles - Landscape Professional */
+/* Print Styles - Portrait for Office Invoices */
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 0.5cm;
+    size: A4 portrait;
+    margin: 15mm;
   }
 
   /* Hide EVERYTHING except report content */
@@ -140,7 +140,20 @@ body {
     padding: 0 !important;
   }
 
-  /* Hide UI elements */
+  /* Show office invoice print content */
+  .office-invoice-print,
+  .office-invoice-print * {
+    visibility: visible !important;
+  }
+
+  .office-invoice-print {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Hide UI elements and buttons */
   nav,
   aside,
   header,

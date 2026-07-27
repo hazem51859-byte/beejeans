@@ -159,7 +159,7 @@ model Product {
   
   reorderLevel  Int           @default(10)
   
-  status        String        @default("DRAFT") // DRAFT, ACTIVE, INACTIVE
+  status        String        @default("ACTIVE") // DRAFT, ACTIVE, INACTIVE
   
   imageUrl      String?
   
@@ -170,6 +170,7 @@ model Product {
   productSerials ProductSerial[]
   manufacturingOrders ManufacturingOrder[]
   returnItems   ReturnItem[]
+  officeInvoiceItems OfficeInvoiceItem[]
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -188,7 +189,7 @@ model ProductSerial {
   productId     String
   product       Product   @relation(fields: [productId], references: [id])
   
-  serialNumber  String    @unique // السيريال الفريد
+  serialNumber  String // السيريال (نفس الرقم لكل قطع المنتج)
   
   branchId      String?
   branch        Branch?   @relation(fields: [branchId], references: [id])
@@ -733,6 +734,7 @@ model Customer {
   
   sales           Sale[]
   payments        CustomerPayment[]
+  officeInvoices  OfficeInvoice[]
   
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -1104,4 +1106,144 @@ model ReturnItem {
   @@index([returnId])
   @@index([productId])
   @@map("return_items")
+}
+
+// =====================
+// Office Invoices Management (فواتير المكتب/المخزن الرئيسي)
+// =====================
+
+model OfficeInvoice {
+  id                String              @id @default(uuid())
+  invoiceNumber     String              @unique // OF-YYYYMMDD-XXXXX
+  
+  type              String              // REGULAR (زبون عادي), SHIPMENT (شحن), CLIENT (عميل)
+  
+  // بيانات العميل
+  customerId        String?
+  customer          Customer?           @relation(fields: [customerId], references: [id])
+  
+  customerName      String              // اسم العميل/الزبون
+  customerPhone     String?             // رقم الهاتف
+  
+  // بيانات الشحن (إذا كان Type = SHIPMENT)
+  shipmentCompany   String?             // اسم شركة الشحن
+  shipmentBill      String?             // رقم بوليصة الشحن
+  
+  // الأصناف
+  items             OfficeInvoiceItem[]
+  
+  // المبالغ
+  subtotal          Float               // المجموع قبل الخصم
+  discountAmount    Float               @default(0) // الخصم
+  total             Float               // الإجمالي النهائي
+  
+  // التكلفة (للحسابات الداخلية)
+  totalCost         Float               // إجمالي التكلفة
+  profit            Float               // الربح (total - totalCost)
+  
+  // الدفع
+  paymentMethod     String              // CASH (نقدي), CARD (فيزا), CREDIT (آجل)
+  paidAmount        Float               @default(0) // المبلغ المدفوع
+  remainingAmount   Float               @default(0) // المبلغ المتبقي
+  
+  status            String              @default("PENDING") 
+  // PENDING (معلقة), COMPLETED (مكتملة), CANCELLED (ملغاة)
+  // للشحن: SHIPPED (تم الشحن), DELIVERED (تم التسليم)
+  
+  // ربط بالشحنة إذا كان شحن
+  shipment          Shipment?
+  
+  // ملاحظات
+  notes             String?
+  
+  // من قام بالإنشاء (الأدمن)
+  createdBy         String
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@index([type])
+  @@index([customerId])
+  @@index([status])
+  @@index([invoiceNumber])
+  @@index([createdAt])
+  @@map("office_invoices")
+}
+
+model OfficeInvoiceItem {
+  id                String              @id @default(uuid())
+  
+  invoiceId         String
+  invoice           OfficeInvoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  productId         String
+  product           Product             @relation(fields: [productId], references: [id])
+  
+  quantity          Int
+  size              String?
+  
+  // السعر (الأدمن يحدده)
+  unitCostPrice     Float               // سعر التكلفة
+  unitSalePrice     Float               // سعر البيع (يحدده الأدمن)
+  totalCost         Float               // إجمالي التكلفة
+  totalSale         Float               // إجمالي البيع
+  
+  createdAt         DateTime            @default(now())
+  
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("office_invoice_items")
+}
+
+// =====================
+// Shipment Tracking (تتبع الشحنات)
+// =====================
+
+model Shipment {
+  id                String              @id @default(uuid())
+  shipmentNumber    String              @unique // SH-YYYYMMDD-XXXXX
+  
+  // الفاتورة المرتبطة
+  invoiceId         String              @unique
+  invoice           OfficeInvoice       @relation(fields: [invoiceId], references: [id])
+  
+  // بيانات الشحن
+  shipmentCompany   String              // شركة الشحن
+  shipmentBill      String              // رقم بوليصة الشحن
+  
+  // بيانات العميل
+  customerName      String
+  customerPhone     String?
+  customerAddress   String?
+  
+  // حالة الشحن
+  status            String              @default("PENDING")
+  // PENDING (قيد الإنتظار), SHIPPED (تم الشحن), IN_TRANSIT (في الطريق), 
+  // DELIVERED (تم التسليم), RETURNED (تم الإرجاع)
+  
+  // تواريخ
+  shippedAt         DateTime?           // تاريخ الشحن
+  estimatedDelivery DateTime?           // التاريخ المتوقع للتسليم
+  deliveredAt       DateTime?           // تاريخ التسليم الفعلي
+  
+  // الدفع
+  paymentCollected  Boolean             @default(false) // هل تم تحصيل المبلغ من شركة الشحن؟
+  paymentCollectedAt DateTime?          // تاريخ التحصيل
+  collectedAmount   Float?              // المبلغ المحصل
+  
+  // ملاحظات
+  notes             String?
+  trackingNotes     String?             // ملاحظات التتبع
+  
+  // من قام بالتحديث
+  updatedBy         String?
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@index([status])
+  @@index([shipmentNumber])
+  @@index([shipmentCompany])
+  @@index([shippedAt])
+  @@map("shipments")
 }

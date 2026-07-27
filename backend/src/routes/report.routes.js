@@ -12,5 +12,6 @@ router.get('/cashier-performance/:cashierId', authorize('MANAGER', 'ADMIN'), rep
 router.get('/top-products/:branchId', reportController.getTopProducts);
 router.get('/inventory-status/:branchId', authorize('MANAGER', 'ADMIN'), reportController.getInventoryStatus);
 router.get('/branch-transfers', authorize('ADMIN'), reportController.getBranchTransfersReport);
+router.get('/office-invoices', authorize('ADMIN'), reportController.getOfficeInvoicesReport);
 
 module.exports = router;

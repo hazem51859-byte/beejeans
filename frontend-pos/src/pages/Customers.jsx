@@ -13,11 +13,9 @@ export default function Customers() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showStatementModal, setShowStatementModal] = useState(false);
-  const [showPrintModal, setShowPrintModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [expandedSaleId, setExpandedSaleId] = useState(null);
-  const [selectedSaleForPrint, setSelectedSaleForPrint] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -61,7 +59,7 @@ export default function Customers() {
   const { data: products } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {
-      const response = await api.get('/products');
+      const response = await api.get('/products', { params: { status: 'ACTIVE' } });
       return response.data;
     },
   });
@@ -163,18 +161,39 @@ export default function Customers() {
       const response = await api.get(`/customers/${customer.id}`);
       const customerData = response.data.data;
       
-      // جلب الفواتير المستحقة (اللي لسه عليها فلوس)
-      const unpaidInvoices = customerData.sales?.filter(sale => sale.total > sale.amountPaid) || [];
+      // جلب فواتير التقسيط المستحقة (اللي لسه عليها فلوس)
+      const unpaidSales = customerData.sales?.filter(sale => sale.total > sale.amountPaid) || [];
+      
+      // جلب فواتير المكتب المستحقة
+      const unpaidOfficeInvoices = customerData.officeInvoices?.filter(inv => inv.total > inv.paidAmount) || [];
       
       // إعداد توزيع افتراضي للفواتير
-      const allocations = unpaidInvoices.map(sale => ({
-        saleId: sale.id,
-        invoiceNumber: sale.invoiceNumber,
-        total: sale.total,
-        amountPaid: sale.amountPaid,
-        remaining: sale.total - sale.amountPaid,
-        allocation: 0, // المبلغ اللي هيتدفع من هذه الفاتورة
-      }));
+      const allocations = [
+        ...unpaidSales.map(sale => ({
+          saleId: sale.id,
+          invoiceType: 'sale',
+          invoiceNumber: sale.invoiceNumber,
+          description: 'فاتورة تقسيط',
+          total: sale.total,
+          amountPaid: sale.amountPaid,
+          remaining: sale.total - sale.amountPaid,
+          allocation: 0,
+        })),
+        ...unpaidOfficeInvoices.map(invoice => ({
+          officeInvoiceId: invoice.id,
+          invoiceType: 'office',
+          invoiceNumber: invoice.invoiceNumber,
+          description: `فاتورة مكتب (${
+            invoice.type === 'REGULAR' ? 'زبون عادي' :
+            invoice.type === 'SHIPMENT' ? 'شحن' :
+            invoice.type === 'CLIENT' ? 'عميل دائم' : invoice.type
+          })`,
+          total: invoice.total,
+          amountPaid: invoice.paidAmount,
+          remaining: invoice.total - invoice.paidAmount,
+          allocation: 0,
+        }))
+      ];
       
       setSelectedCustomer(customerData);
       setPaymentData({
@@ -493,11 +512,18 @@ export default function Customers() {
       return;
     }
     
-    // فلترة الفواتير اللي تم توزيع مبالغ عليها فقط
-    const allocatedInvoices = paymentData.invoiceAllocations
-      .filter(inv => inv.allocation > 0)
+    // فلترة وتقسيم الفواتير حسب النوع
+    const salesAllocations = paymentData.invoiceAllocations
+      .filter(inv => inv.invoiceType === 'sale' && inv.allocation > 0)
       .map(inv => ({
         saleId: inv.saleId,
+        amount: parseFloat(inv.allocation),
+      }));
+    
+    const officeInvoicesAllocations = paymentData.invoiceAllocations
+      .filter(inv => inv.invoiceType === 'office' && inv.allocation > 0)
+      .map(inv => ({
+        officeInvoiceId: inv.officeInvoiceId,
         amount: parseFloat(inv.allocation),
       }));
     
@@ -508,7 +534,8 @@ export default function Customers() {
         paymentMethod: paymentData.paymentMethod,
         referenceNumber: paymentData.referenceNumber,
         notes: paymentData.notes,
-        invoiceAllocations: allocatedInvoices,
+        invoiceAllocations: salesAllocations,
+        officeInvoicesAllocations: officeInvoicesAllocations,
       },
     });
   };
@@ -910,6 +937,7 @@ export default function Customers() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
+                          <th className="p-2 text-right">نوع</th>
                           <th className="p-2 text-right">رقم الفاتورة</th>
                           <th className="p-2 text-right">الإجمالي</th>
                           <th className="p-2 text-right">المدفوع</th>
@@ -919,7 +947,14 @@ export default function Customers() {
                       </thead>
                       <tbody>
                         {paymentData.invoiceAllocations.map((invoice, index) => (
-                          <tr key={invoice.saleId} className="border-t">
+                          <tr key={`${invoice.invoiceType}-${invoice.saleId || invoice.officeInvoiceId}`} className="border-t">
+                            <td className="p-2">
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                invoice.invoiceType === 'office' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {invoice.description}
+                              </span>
+                            </td>
                             <td className="p-2 font-medium">{invoice.invoiceNumber}</td>
                             <td className="p-2">{invoice.total.toFixed(2)} ج.م</td>
                             <td className="p-2 text-green-700">{invoice.amountPaid.toFixed(2)} ج.م</td>
@@ -1063,12 +1098,77 @@ export default function Customers() {
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-xs text-gray-600 mb-1">عدد الفواتير</p>
-                <p className="text-xl font-bold text-gray-700">{selectedCustomer.sales?.length || 0}</p>
+                <p className="text-xl font-bold text-gray-700">
+                  {(selectedCustomer.sales?.length || 0) + (selectedCustomer.officeInvoices?.length || 0)}
+                </p>
               </div>
             </div>
 
+            {/* فواتير المكتب */}
+            {selectedCustomer.officeInvoices && selectedCustomer.officeInvoices.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3 flex items-center gap-2">
+                  <FileText size={18} className="text-purple-600" />
+                  فواتير المكتب (الجملة)
+                </h3>
+                <div className="space-y-3">
+                  {selectedCustomer.officeInvoices.map((invoice) => {
+                    const remaining = invoice.total - invoice.paidAmount;
+                    const invoiceTypeLabel = 
+                      invoice.type === 'REGULAR' ? 'زبون عادي' :
+                      invoice.type === 'SHIPMENT' ? 'شحن' :
+                      invoice.type === 'CLIENT' ? 'عميل دائم' : invoice.type;
+                    
+                    return (
+                      <div key={invoice.id} className="border rounded-lg overflow-hidden bg-purple-50">
+                        <div className="bg-purple-100 p-3 flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-6 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم الفاتورة</p>
+                              <p className="font-bold text-sm">{invoice.invoiceNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">النوع</p>
+                              <p className="text-sm font-medium">{invoiceTypeLabel}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{dayjs(invoice.createdAt).format('DD/MM/YYYY')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الإجمالي</p>
+                              <p className="text-sm font-bold">{invoice.total.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المدفوع</p>
+                              <p className="text-sm text-green-700 font-bold">{invoice.paidAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المتبقي</p>
+                              <p className={`text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {remaining.toFixed(2)} ج.م
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => window.open(`/office-invoice-print/${invoice.id}`, '_blank')}
+                              className="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 flex items-center gap-1"
+                            >
+                              <Receipt size={14} />
+                              طباعة
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mb-6">
-              <h3 className="font-bold mb-3">الفواتير</h3>
+              <h3 className="font-bold mb-3">فواتير التقسيط</h3>
               <div className="space-y-3">
                 {selectedCustomer.sales?.map((sale) => {
                   const remaining = sale.total - sale.amountPaid;
@@ -1220,19 +1320,40 @@ export default function Customers() {
               {(() => {
                 const transactions = [];
                 
+                // إضافة فواتير التقسيط
                 selectedCustomer.sales?.forEach(sale => {
                   transactions.push({
                     type: 'sale',
                     date: sale.createdAt,
-                    description: `فاتورة ${sale.invoiceNumber}`,
+                    description: `فاتورة تقسيط ${sale.invoiceNumber}`,
                     amount: sale.total,
                     amountPaid: sale.amountPaid,
                     saleId: sale.id,
                     items: sale.items || [],
-                    sale: sale // حفظ الـ sale object كامل للطباعة
+                    sale: sale
                   });
                 });
                 
+                // إضافة فواتير المكتب
+                selectedCustomer.officeInvoices?.forEach(invoice => {
+                  const invoiceTypeLabel = 
+                    invoice.type === 'REGULAR' ? 'زبون عادي' :
+                    invoice.type === 'SHIPMENT' ? 'شحن' :
+                    invoice.type === 'CLIENT' ? 'عميل دائم' : invoice.type;
+                  
+                  transactions.push({
+                    type: 'office-invoice',
+                    date: invoice.createdAt,
+                    description: `فاتورة مكتب (${invoiceTypeLabel}) ${invoice.invoiceNumber}`,
+                    amount: invoice.total,
+                    amountPaid: invoice.paidAmount,
+                    saleId: invoice.id,
+                    items: invoice.items || [],
+                    invoice: invoice
+                  });
+                });
+                
+                // إضافة الدفعات
                 selectedCustomer.payments?.forEach(payment => {
                   transactions.push({
                     type: 'payment',
@@ -1248,23 +1369,30 @@ export default function Customers() {
                 
                 return transactions.map((item, index) => {
                   const isExpanded = expandedSaleId === item.saleId;
+                  const bgColor = item.type === 'office-invoice' ? 'bg-purple-50 border-purple-500' :
+                                  item.type === 'sale' ? 'bg-red-50 border-red-500' : 
+                                  'bg-green-50 border-green-500';
+                  const iconColor = item.type === 'office-invoice' ? 'text-purple-600' :
+                                   item.type === 'sale' ? 'text-red-600' : 
+                                   'text-green-600';
+                  const textColor = item.type === 'office-invoice' ? 'text-purple-700' :
+                                   item.type === 'sale' ? 'text-red-700' : 
+                                   'text-green-700';
                   
                   return (
-                    <div key={index} className={`rounded-lg border-r-4 overflow-hidden ${
-                      item.type === 'sale' ? 'bg-red-50 border-red-500' : 'bg-green-50 border-green-500'
-                    }`}>
+                    <div key={`${item.type}-${index}`} className={`rounded-lg border-r-4 overflow-hidden ${bgColor}`}>
                       <div className="p-4 flex justify-between items-start"
-                           onClick={() => item.type === 'sale' && setExpandedSaleId(isExpanded ? null : item.saleId)}
-                           style={{ cursor: item.type === 'sale' ? 'pointer' : 'default' }}>
+                           onClick={() => (item.type === 'sale' || item.type === 'office-invoice') && setExpandedSaleId(isExpanded ? null : item.saleId)}
+                           style={{ cursor: (item.type === 'sale' || item.type === 'office-invoice') ? 'pointer' : 'default' }}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            {item.type === 'sale' ? (
-                              <Receipt className="text-red-600" size={18} />
+                            {item.type === 'payment' ? (
+                              <DollarSign className={iconColor} size={18} />
                             ) : (
-                              <DollarSign className="text-green-600" size={18} />
+                              <Receipt className={iconColor} size={18} />
                             )}
                             <span className="font-bold">{item.description}</span>
-                            {item.type === 'sale' && item.items && item.items.length > 0 && (
+                            {(item.type === 'sale' || item.type === 'office-invoice') && item.items && item.items.length > 0 && (
                               <span className={`text-gray-500 text-xs transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
                                 ▼
                               </span>
@@ -1273,7 +1401,7 @@ export default function Customers() {
                           <p className="text-xs text-gray-600">
                             {dayjs(item.date).format('DD/MM/YYYY - h:mm A')}
                           </p>
-                          {item.type === 'sale' && (
+                          {(item.type === 'sale' || item.type === 'office-invoice') && (
                             <div className="mt-2 text-xs">
                               <span className="text-green-700 font-bold">مدفوع: {item.amountPaid.toFixed(2)} ج.م</span>
                               <span className="mx-2">•</span>
@@ -1292,17 +1420,15 @@ export default function Customers() {
                           )}
                         </div>
                         <div className="text-left">
-                          <p className={`text-2xl font-bold ${
-                            item.type === 'sale' ? 'text-red-700' : 'text-green-700'
-                          }`}>
+                          <p className={`text-2xl font-bold ${textColor}`}>
                             {item.amount.toFixed(2)} ج.م
                           </p>
-                          {item.type === 'sale' ? (
-                            <p className="text-xs text-red-600">تم التحميل ✓</p>
-                          ) : (
+                          {item.type === 'payment' ? (
                             <p className="text-xs text-green-600">تم التحصيل ✓</p>
+                          ) : (
+                            <p className={`text-xs ${item.type === 'office-invoice' ? 'text-purple-600' : 'text-red-600'}`}>تم التحميل ✓</p>
                           )}
-                          {item.type === 'sale' && (
+                          {item.type === 'sale' && item.sale && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1313,11 +1439,22 @@ export default function Customers() {
                               طباعة الفاتورة
                             </button>
                           )}
+                          {item.type === 'office-invoice' && item.invoice && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`/office-invoice-print/${item.invoice.id}`, '_blank');
+                              }}
+                              className="text-xs text-purple-600 hover:underline mt-1 block"
+                            >
+                              طباعة الفاتورة
+                            </button>
+                          )}
                         </div>
                       </div>
                       
-                      {item.type === 'sale' && isExpanded && item.items && item.items.length > 0 && (
-                        <div className="px-4 pb-4 bg-white border-t border-red-200">
+                      {(item.type === 'sale' || item.type === 'office-invoice') && isExpanded && item.items && item.items.length > 0 && (
+                        <div className={`px-4 pb-4 bg-white border-t ${item.type === 'office-invoice' ? 'border-purple-200' : 'border-red-200'}`}>
                           <h4 className="font-bold text-sm mb-2 mt-2">المنتجات:</h4>
                           <table className="w-full text-xs">
                             <thead className="bg-gray-100">
@@ -1335,7 +1472,7 @@ export default function Customers() {
                               {item.items.map((saleItem, idx) => (
                                 <tr key={idx} className="border-t">
                                   <td className="p-2">{idx + 1}</td>
-                                  <td className="p-2 font-medium">{saleItem.product?.name || 'غير محدد'}</td>
+                                  <td className="p-2 font-medium">{saleItem.product?.name || saleItem.productName || 'غير محدد'}</td>
                                   <td className="p-2">{saleItem.size || '-'}</td>
                                   <td className="p-2">{saleItem.color || '-'}</td>
                                   <td className="p-2">{saleItem.quantity}</td>

@@ -15,20 +15,29 @@ exports.getAllCustomers = async (req, res) => {
           where: { customerId: customer.id, status: 'COMPLETED' }
         });
         
+        const officeInvoices = await prisma.officeInvoice.findMany({
+          where: { 
+            customerId: customer.id,
+            status: { not: 'CANCELLED' }
+          }
+        });
+        
         const payments = await prisma.customerPayment.findMany({
           where: { customerId: customer.id }
         });
         
         const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
         const totalPaidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
+        const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
+        const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
         const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
         
-        const balance = totalSales - totalPaidOnSales - totalPayments;
+        const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPaidOnOfficeInvoices - totalPayments;
         
         return {
           ...customer,
-          totalSales,
-          totalPaid: totalPaidOnSales + totalPayments,
+          totalSales: totalSales + totalOfficeInvoices,
+          totalPaid: totalPaidOnSales + totalPaidOnOfficeInvoices + totalPayments,
           balance: parseFloat(balance.toFixed(2))
         };
       })
@@ -73,6 +82,20 @@ exports.getCustomerById = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     
+    // جلب فواتير المكتب للعميل
+    const officeInvoices = await prisma.officeInvoice.findMany({
+      where: { 
+        customerId: id,
+        status: { not: 'CANCELLED' }
+      },
+      include: {
+        items: {
+          include: { product: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
     const payments = await prisma.customerPayment.findMany({
       where: { customerId: id },
       orderBy: { paymentDate: 'desc' }
@@ -81,16 +104,22 @@ exports.getCustomerById = async (req, res) => {
     const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
     const totalPaidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
     const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-    const balance = totalSales - totalPaidOnSales - totalPayments;
+    
+    // إضافة فواتير المكتب للحسابات
+    const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
+    const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
+    
+    const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPaidOnOfficeInvoices - totalPayments;
     
     res.json({
       success: true,
       data: {
         ...customer,
-        totalSales,
-        totalPaid: totalPaidOnSales + totalPayments,
+        totalSales: totalSales + totalOfficeInvoices,
+        totalPaid: totalPaidOnSales + totalPaidOnOfficeInvoices + totalPayments,
         balance: parseFloat(balance.toFixed(2)),
         sales,
+        officeInvoices, // إضافة فواتير المكتب
         payments
       }
     });
@@ -384,7 +413,7 @@ exports.createCustomerSale = async (req, res) => {
 exports.recordCustomerPayment = async (req, res) => {
   try {
     const { id: customerId } = req.params;
-    const { amount, paymentMethod = 'CASH', referenceNumber, notes, invoiceAllocations } = req.body;
+    const { amount, paymentMethod = 'CASH', referenceNumber, notes, invoiceAllocations, officeInvoicesAllocations } = req.body;
     const createdBy = req.user.id;
     
     const customer = await prisma.customer.findUnique({
@@ -398,7 +427,7 @@ exports.recordCustomerPayment = async (req, res) => {
     }
     
     // إذا كان في توزيع على الفواتير، نستخدمه
-    if (invoiceAllocations && invoiceAllocations.length > 0) {
+    if ((invoiceAllocations && invoiceAllocations.length > 0) || (officeInvoicesAllocations && officeInvoicesAllocations.length > 0)) {
       await prisma.$transaction(async (tx) => {
         // تسجيل الدفعة الرئيسية
         const payment = await tx.customerPayment.create({
@@ -412,21 +441,43 @@ exports.recordCustomerPayment = async (req, res) => {
           }
         });
         
-        // توزيع المبلغ على الفواتير
-        for (const allocation of invoiceAllocations) {
-          const sale = await tx.sale.findUnique({
-            where: { id: allocation.saleId }
-          });
-          
-          if (!sale) continue;
-          
-          // تحديث المبلغ المدفوع في الفاتورة
-          await tx.sale.update({
-            where: { id: allocation.saleId },
-            data: {
-              amountPaid: sale.amountPaid + parseFloat(allocation.amount)
-            }
-          });
+        // توزيع المبلغ على فواتير التقسيط
+        if (invoiceAllocations && invoiceAllocations.length > 0) {
+          for (const allocation of invoiceAllocations) {
+            const sale = await tx.sale.findUnique({
+              where: { id: allocation.saleId }
+            });
+            
+            if (!sale) continue;
+            
+            // تحديث المبلغ المدفوع في الفاتورة
+            await tx.sale.update({
+              where: { id: allocation.saleId },
+              data: {
+                amountPaid: sale.amountPaid + parseFloat(allocation.amount)
+              }
+            });
+          }
+        }
+        
+        // توزيع المبلغ على فواتير المكتب
+        if (officeInvoicesAllocations && officeInvoicesAllocations.length > 0) {
+          for (const allocation of officeInvoicesAllocations) {
+            const officeInvoice = await tx.officeInvoice.findUnique({
+              where: { id: allocation.officeInvoiceId }
+            });
+            
+            if (!officeInvoice) continue;
+            
+            // تحديث المبلغ المدفوع في فاتورة المكتب
+            await tx.officeInvoice.update({
+              where: { id: allocation.officeInvoiceId },
+              data: {
+                paidAmount: officeInvoice.paidAmount + parseFloat(allocation.amount),
+                remainingAmount: officeInvoice.remainingAmount - parseFloat(allocation.amount)
+              }
+            });
+          }
         }
       });
     } else {

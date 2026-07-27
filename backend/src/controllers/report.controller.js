@@ -20,12 +20,12 @@ exports.getDailyReport = async (req, res, next) => {
       where.branchId = branchId;
     }
 
-    // حساب المبيعات - نستخدم amountPaid مش total عشان فواتير العملاء
+    // حساب المبيعات - نستخدم total (قيمة المبيعات الفعلية)
     const sales = await prisma.sale.aggregate({
       where,
       _sum: { 
-        amountPaid: true,  // المبلغ المدفوع فعلياً
-        total: true,       // الإجمالي الكلي
+        total: true,        // قيمة المبيعات الفعلية
+        amountPaid: true,   // المبلغ المدفوع فعلياً
         taxAmount: true, 
         discountAmount: true 
       },
@@ -44,8 +44,8 @@ exports.getDailyReport = async (req, res, next) => {
       success: true,
       data: {
         date,
-        totalSales: sales._sum.amountPaid || 0,  // المدفوع فعلياً
-        totalRevenue: sales._sum.total || 0,     // الإجمالي للمعلومات
+        totalSales: sales._sum.total || 0,       // قيمة المبيعات الفعلية
+        totalPaid: sales._sum.amountPaid || 0,   // المبلغ المدفوع
         totalTax: sales._sum.taxAmount || 0,
         totalDiscount: sales._sum.discountAmount || 0,
         transactionCount: sales._count,
@@ -362,6 +362,90 @@ exports.getBranchTransfersReport = async (req, res, next) => {
     res.json({
       success: true,
       data: branchReports
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/**
+ * Get Office Invoices Report (for monthly report)
+ * تقرير فواتير المكتب/المخزن الرئيسي
+ */
+exports.getOfficeInvoicesReport = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const start = startDate ? new Date(startDate) : dayjs().startOf('month').toDate();
+    const end = endDate ? new Date(endDate) : dayjs().endOf('month').toDate();
+
+    // Get all office invoices in the period
+    const invoices = await prisma.officeInvoice.findMany({
+      where: {
+        createdAt: {
+          gte: start,
+          lte: end
+        },
+        status: { not: 'CANCELLED' }
+      },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        },
+        shipment: true
+      }
+    });
+
+    // إجماليات عامة
+    const totalInvoices = invoices.length;
+    const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalCost = invoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
+    const totalProfit = invoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+    const totalCollected = invoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+    const totalRemaining = invoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0);
+
+    // تحليل حسب النوع
+    const regularInvoices = invoices.filter(inv => inv.type === 'REGULAR');
+    const shipmentInvoices = invoices.filter(inv => inv.type === 'SHIPMENT');
+    const clientInvoices = invoices.filter(inv => inv.type === 'CLIENT');
+
+    const byType = {
+      regular: {
+        count: regularInvoices.length,
+        sales: regularInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
+        profit: regularInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0),
+        collected: regularInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0)
+      },
+      shipment: {
+        count: shipmentInvoices.length,
+        sales: shipmentInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
+        profit: shipmentInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0),
+        collected: shipmentInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0),
+        delivered: shipmentInvoices.filter(inv => inv.shipment?.status === 'DELIVERED').length,
+        pending: shipmentInvoices.filter(inv => inv.shipment?.status === 'PENDING').length
+      },
+      client: {
+        count: clientInvoices.length,
+        sales: clientInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
+        profit: clientInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0),
+        collected: clientInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0)
+      }
+    };
+
+    res.json({
+      success: true,
+      data: {
+        totalInvoices,
+        totalSales,
+        totalCost,
+        totalProfit,
+        totalCollected,
+        totalRemaining,
+        byType
+      }
     });
   } catch (error) {
     next(error);

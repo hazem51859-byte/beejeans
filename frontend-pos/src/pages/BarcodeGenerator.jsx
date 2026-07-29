@@ -96,59 +96,109 @@ export default function BarcodeGenerator() {
         format: 'a4'
       });
 
-      const pageWidth = 210; // A4 width
-      const pageHeight = 297; // A4 height
+      const pageWidth = 210;
+      const pageHeight = 297;
       
       // إعدادات الباركود
-      const barcodeWidth = 80;
+      const barcodeWidth = 85;
       const barcodeHeight = 15;
       const startY = 50;
-      const spacingY = 28; // المسافة بين كل باركود
+      const spacingY = 35;
       
       let currentY = startY;
-      let pageCount = 0;
       
       for (let i = 0; i < data.length; i++) {
         const item = data[i];
         
         // إذا امتلأت الصفحة، أضف صفحة جديدة
-        if (currentY > pageHeight - 40) {
+        if (currentY > pageHeight - 50) {
           pdf.addPage();
           currentY = startY;
-          pageCount++;
         }
 
         // إنشاء canvas للباركود
-        const canvas = document.createElement('canvas');
+        const barcodeCanvas = document.createElement('canvas');
         try {
-          JsBarcode(canvas, item.serial, {
+          JsBarcode(barcodeCanvas, item.serial, {
             format: 'CODE128',
-            width: 2,
+            width: 2.5,
             height: 50,
-            displayValue: false, // لا نريد الرقم داخل الباركود
-            margin: 0,
-            quiet: 3
+            displayValue: false,
+            margin: 3
           });
 
           // حساب موضع الباركود (في المنتصف)
           const barcodeX = (pageWidth - barcodeWidth) / 2;
           
           // إضافة الباركود إلى PDF
-          const imgData = canvas.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', barcodeX, currentY, barcodeWidth, barcodeHeight);
+          const barcodeImgData = barcodeCanvas.toDataURL('image/png');
+          pdf.addImage(barcodeImgData, 'PNG', barcodeX, currentY, barcodeWidth, barcodeHeight);
 
-          // إضافة رقم السيريال أسفل الباركود (في المنتصف)
-          pdf.setFontSize(12);
-          pdf.setFont('helvetica', 'normal');
-          pdf.text(item.serial, pageWidth / 2, currentY + barcodeHeight + 5, { align: 'center' });
+          // إنشاء canvas للسيريال
+          const serialCanvas = document.createElement('canvas');
+          const serialCtx = serialCanvas.getContext('2d');
+          const serialFontSize = 28;
+          serialCtx.font = `bold ${serialFontSize}px Arial`;
+          const serialMetrics = serialCtx.measureText(item.serial);
+          const serialWidth = serialMetrics.width + 40;
+          
+          serialCanvas.width = serialWidth;
+          serialCanvas.height = serialFontSize + 20;
+          
+          // رسم السيريال
+          serialCtx.font = `bold ${serialFontSize}px Arial`;
+          serialCtx.textAlign = 'center';
+          serialCtx.textBaseline = 'middle';
+          serialCtx.fillStyle = '#000000';
+          serialCtx.fillText(item.serial, serialWidth / 2, (serialFontSize + 20) / 2);
+          
+          // إضافة السيريال كصورة
+          const serialImgData = serialCanvas.toDataURL('image/png');
+          const serialImgWidth = Math.min(serialWidth / 3.5, 80);
+          const serialImgHeight = (serialFontSize + 20) / 3.5;
+          const serialX = (pageWidth - serialImgWidth) / 2;
+          
+          pdf.addImage(
+            serialImgData, 
+            'PNG', 
+            serialX, 
+            currentY + barcodeHeight + 2, 
+            serialImgWidth, 
+            serialImgHeight
+          );
 
-          // إضافة اسم المنتج أسفل السيريال (في المنتصف)
-          pdf.setFontSize(10);
-          pdf.setFont('helvetica', 'normal');
-          const productName = item.productName.length > 40 
-            ? item.productName.substring(0, 40) + '...' 
-            : item.productName;
-          pdf.text(productName, pageWidth / 2, currentY + barcodeHeight + 10, { align: 'center' });
+          // إنشاء canvas لاسم المنتج
+          const productCanvas = document.createElement('canvas');
+          const productCtx = productCanvas.getContext('2d');
+          const productFontSize = 24;
+          productCtx.font = `${productFontSize}px Arial`;
+          const productMetrics = productCtx.measureText(item.productName);
+          const productWidth = Math.min(productMetrics.width + 40, 600);
+          
+          productCanvas.width = productWidth;
+          productCanvas.height = productFontSize + 20;
+          
+          // رسم اسم المنتج
+          productCtx.font = `${productFontSize}px Arial`;
+          productCtx.textAlign = 'center';
+          productCtx.textBaseline = 'middle';
+          productCtx.fillStyle = '#000000';
+          productCtx.fillText(item.productName, productWidth / 2, (productFontSize + 20) / 2);
+          
+          // إضافة اسم المنتج كصورة
+          const productImgData = productCanvas.toDataURL('image/png');
+          const productImgWidth = Math.min(productWidth / 3.5, 85);
+          const productImgHeight = (productFontSize + 20) / 3.5;
+          const productX = (pageWidth - productImgWidth) / 2;
+          
+          pdf.addImage(
+            productImgData, 
+            'PNG', 
+            productX, 
+            currentY + barcodeHeight + serialImgHeight + 4, 
+            productImgWidth, 
+            productImgHeight
+          );
 
           // الانتقال للباركود التالي
           currentY += spacingY;
@@ -174,31 +224,31 @@ export default function BarcodeGenerator() {
     <div className="max-w-6xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-lg">
         {/* Header */}
-        <div className="border-b p-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-t-lg">
+        <div className="border-b p-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-t-lg">
           <div className="flex items-center gap-3">
             <Barcode size={32} />
             <div>
               <h1 className="text-3xl font-bold">🏷️ توليد الباركود</h1>
-              <p className="text-purple-100 mt-1">رفع ملف Excel وإنشاء ملف PDF بالباركود</p>
+              <p className="text-emerald-100 mt-1">رفع ملف Excel وإنشاء ملف PDF بالباركود</p>
             </div>
           </div>
         </div>
 
         <div className="p-6 space-y-6">
           {/* تحميل Template */}
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-lg p-6">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <h3 className="font-bold text-lg text-blue-900 mb-2 flex items-center gap-2">
-                  <FileSpreadsheet size={24} className="text-blue-600" />
+                <h3 className="font-bold text-lg text-emerald-900 mb-2 flex items-center gap-2">
+                  <FileSpreadsheet size={24} className="text-emerald-600" />
                   الخطوة 1: تحميل Template Excel
                 </h3>
-                <p className="text-blue-700 text-sm mb-4">
+                <p className="text-emerald-700 text-sm mb-4">
                   قم بتحميل ملف Excel الجاهز، املأ البيانات (Serial و Product Name)، ثم ارفعه مرة أخرى
                 </p>
                 <button
                   onClick={downloadTemplate}
-                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition-colors"
+                  className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition-colors"
                 >
                   <Download size={20} />
                   تحميل Template
@@ -209,21 +259,21 @@ export default function BarcodeGenerator() {
           </div>
 
           {/* رفع ملف Excel */}
-          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6">
-            <h3 className="font-bold text-lg text-green-900 mb-4 flex items-center gap-2">
-              <Upload size={24} className="text-green-600" />
+          <div className="bg-teal-50 border-2 border-teal-200 rounded-lg p-6">
+            <h3 className="font-bold text-lg text-teal-900 mb-4 flex items-center gap-2">
+              <Upload size={24} className="text-teal-600" />
               الخطوة 2: رفع ملف Excel
             </h3>
             
             <div className="flex items-center gap-4">
               <label className="flex-1 cursor-pointer">
-                <div className="border-2 border-dashed border-green-300 rounded-lg p-8 hover:bg-green-100 transition-colors">
+                <div className="border-2 border-dashed border-teal-300 rounded-lg p-8 hover:bg-teal-100 transition-colors">
                   <div className="text-center">
-                    <Upload size={48} className="mx-auto text-green-600 mb-3" />
-                    <p className="text-green-900 font-bold mb-2">
+                    <Upload size={48} className="mx-auto text-teal-600 mb-3" />
+                    <p className="text-teal-900 font-bold mb-2">
                       {file ? `✓ ${file.name}` : 'اضغط لرفع ملف Excel'}
                     </p>
-                    <p className="text-green-600 text-sm">
+                    <p className="text-teal-600 text-sm">
                       يدعم: .xlsx, .xls
                     </p>
                   </div>
@@ -244,8 +294,8 @@ export default function BarcodeGenerator() {
             )}
 
             {data.length > 0 && (
-              <div className="mt-4 p-4 bg-green-100 border border-green-300 rounded-lg">
-                <p className="text-green-800 font-bold">
+              <div className="mt-4 p-4 bg-emerald-100 border border-emerald-300 rounded-lg">
+                <p className="text-emerald-800 font-bold">
                   ✅ تم قراءة {data.length} سيريال بنجاح
                 </p>
               </div>
@@ -254,21 +304,21 @@ export default function BarcodeGenerator() {
 
           {/* معاينة البيانات */}
           {data.length > 0 && (
-            <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-6">
-              <h3 className="font-bold text-lg text-gray-900 mb-4">📋 معاينة البيانات</h3>
+            <div className="bg-slate-50 border-2 border-slate-200 rounded-lg p-6">
+              <h3 className="font-bold text-lg text-slate-900 mb-4">📋 معاينة البيانات</h3>
               <div className="overflow-auto max-h-96">
                 <table className="min-w-full bg-white rounded-lg overflow-hidden shadow">
-                  <thead className="bg-gray-800 text-white">
+                  <thead className="bg-slate-800 text-white">
                     <tr>
                       <th className="px-4 py-3 text-right">#</th>
                       <th className="px-4 py-3 text-right">السيريال</th>
                       <th className="px-4 py-3 text-right">اسم المنتج</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-slate-200">
                     {data.slice(0, 10).map((item) => (
-                      <tr key={item.index} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-600">{item.index}</td>
+                      <tr key={item.index} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-600">{item.index}</td>
                         <td className="px-4 py-3 font-mono font-bold">{item.serial}</td>
                         <td className="px-4 py-3">{item.productName}</td>
                       </tr>
@@ -276,7 +326,7 @@ export default function BarcodeGenerator() {
                   </tbody>
                 </table>
                 {data.length > 10 && (
-                  <p className="text-center text-gray-500 mt-3 text-sm">
+                  <p className="text-center text-slate-500 mt-3 text-sm">
                     ... و {data.length - 10} سيريال آخر
                   </p>
                 )}
@@ -286,16 +336,16 @@ export default function BarcodeGenerator() {
 
           {/* توليد PDF */}
           {data.length > 0 && (
-            <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-6">
-              <h3 className="font-bold text-lg text-purple-900 mb-4 flex items-center gap-2">
-                <Barcode size={24} className="text-purple-600" />
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-lg p-6">
+              <h3 className="font-bold text-lg text-emerald-900 mb-4 flex items-center gap-2">
+                <Barcode size={24} className="text-emerald-600" />
                 الخطوة 3: توليد ملف PDF
               </h3>
               
               <button
                 onClick={generatePDF}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg transition-all transform hover:scale-105"
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg transition-all transform hover:scale-[1.02] shadow-lg"
               >
                 {loading ? (
                   <>
@@ -310,23 +360,11 @@ export default function BarcodeGenerator() {
                 )}
               </button>
 
-              <p className="text-purple-700 text-sm mt-3 text-center">
+              <p className="text-emerald-700 text-sm mt-3 text-center">
                 💡 سيتم إنشاء ملف PDF يحتوي على جميع الباركود مع السيريال واسم المنتج
               </p>
             </div>
           )}
-
-          {/* معلومات إضافية */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h4 className="font-bold text-yellow-900 mb-2">📝 ملاحظات هامة:</h4>
-            <ul className="text-yellow-800 text-sm space-y-1 list-disc list-inside">
-              <li>تأكد أن ملف Excel يحتوي على عمودين: <strong>Serial</strong> و <strong>Product Name</strong></li>
-              <li>الباركود يظهر في منتصف الصفحة مع السيريال واسم المنتج أسفله</li>
-              <li>كل باركود في سطر منفصل (عمود واحد في الصفحة)</li>
-              <li>الباركود بصيغة CODE128 للتوافق مع معظم قارئات الباركود</li>
-              <li>يمكنك طباعة ملف PDF مباشرة على ملصقات الباركود</li>
-            </ul>
-          </div>
         </div>
       </div>
     </div>

@@ -128,59 +128,88 @@ exports.createOfficeInvoice = async (req, res) => {
 
     // خصم من المخزن الرئيسي
     const mainWarehouse = await prisma.branch.findFirst({
-      where: { code: 'MAIN' }
+      where: { 
+        OR: [
+          { code: 'MAIN' },
+          { id: '1' }
+        ]
+      }
     });
 
-    if (mainWarehouse) {
-      for (const item of invoiceItems) {
-        const inventory = await prisma.inventory.findFirst({
-          where: {
-            productId: item.productId,
-            branchId: mainWarehouse.id
-          }
-        });
+    if (!mainWarehouse) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'المخزن الرئيسي غير موجود' 
+      });
+    }
 
-        if (inventory) {
-          await prisma.inventory.update({
-            where: { id: inventory.id },
-            data: {
-              quantity: inventory.quantity - item.quantity
-            }
+    // خصم الكمية من المخزن
+    for (const item of invoiceItems) {
+      const inventory = await prisma.inventory.findFirst({
+        where: {
+          productId: item.productId,
+          branchId: mainWarehouse.id
+        }
+      });
+
+      if (inventory) {
+        if (inventory.quantity < item.quantity) {
+          return res.status(400).json({ 
+            success: false,
+            error: `الكمية المتاحة في المخزن غير كافية للمنتج ${item.productId}` 
           });
         }
+
+        await prisma.inventory.update({
+          where: { id: inventory.id },
+          data: {
+            quantity: inventory.quantity - item.quantity
+          }
+        });
+      } else {
+        return res.status(400).json({ 
+          success: false,
+          error: `المنتج ${item.productId} غير موجود في المخزن الرئيسي` 
+        });
       }
     }
 
     // إضافة للخزينة فقط إذا لم يكن شحن (الشحن يتم إضافته عند تأكيد الاستلام)
     if (type !== 'SHIPMENT' && (paymentMethod === 'CASH' || paymentMethod === 'CARD') && actualPaidAmount > 0) {
-      if (mainWarehouse) {
-        const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : 'cardVaultBalance';
-        
-        await prisma.branch.update({
-          where: { id: mainWarehouse.id },
-          data: {
-            [vaultField]: {
-              increment: actualPaidAmount
-            }
+      const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : 'cardVaultBalance';
+      
+      // جلب الرصيد الحالي
+      const currentWarehouse = await prisma.branch.findUnique({
+        where: { id: mainWarehouse.id }
+      });
+      
+      const balanceBefore = currentWarehouse[vaultField] || 0;
+      const balanceAfter = balanceBefore + actualPaidAmount;
+      
+      await prisma.branch.update({
+        where: { id: mainWarehouse.id },
+        data: {
+          [vaultField]: {
+            increment: actualPaidAmount
           }
-        });
+        }
+      });
 
-        await prisma.vaultTransaction.create({
-          data: {
-            branchId: mainWarehouse.id,
-            type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : 'CARD_PAYMENT',
-            amount: actualPaidAmount,
-            description: `فاتورة مكتب ${invoiceNumber}`,
-            notes: `دفعة من ${customerName}`,
-            createdBy,
-            balanceBefore: mainWarehouse[vaultField],
-            balanceAfter: mainWarehouse[vaultField] + actualPaidAmount
-          }
-        });
-      }
+      await prisma.vaultTransaction.create({
+        data: {
+          branchId: mainWarehouse.id,
+          type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : 'CARD_PAYMENT',
+          amount: actualPaidAmount,
+          description: `فاتورة مكتب ${invoiceNumber}`,
+          notes: `دفعة من ${customerName}`,
+          createdBy,
+          balanceBefore,
+          balanceAfter
+        }
+      });
     }
 
-    res.status(201).json(invoice);
+    res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     console.error('Error creating office invoice:', error);
     res.status(500).json({ error: 'Failed to create office invoice' });

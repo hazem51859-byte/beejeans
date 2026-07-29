@@ -37,10 +37,11 @@ export default function InventoryAudit() {
     try {
       const response = await api.get('/branches');
       if (response.data.success) {
-        setBranches(response.data.branches);
+        setBranches(response.data.branches || []);
       }
     } catch (error) {
       console.error('Error fetching branches:', error);
+      setBranches([]); // Set empty array on error
     }
   };
 
@@ -48,6 +49,21 @@ export default function InventoryAudit() {
     try {
       setLoading(true);
       const params = {};
+      if (filterBranch) params.branchId = filterBranch;
+      if (filterStatus) params.status = filterStatus;
+
+      const response = await api.get('/audits', { params });
+      
+      if (response.data.success) {
+        setAudits(response.data.audits || []);
+      }
+    } catch (error) {
+      console.error('Error fetching audits:', error);
+      setAudits([]); // Set empty array on error
+    } finally {
+      setLoading(false);
+    }
+  };
       if (filterBranch) params.branchId = filterBranch;
       if (filterStatus) params.status = filterStatus;
 

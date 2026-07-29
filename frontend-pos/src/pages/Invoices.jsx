@@ -6,11 +6,19 @@ import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
 // Component لتحليل مبيعات المنتجات
-function ProductSalesAnalysis({ sales }) {
+function ProductSalesAnalysis({ sales = [] }) {
   const [expandedProduct, setExpandedProduct] = useState(null);
   
   // تجميع المنتجات من كل الفواتير
   const productAnalysis = {};
+  
+  if (!Array.isArray(sales)) {
+    return (
+      <div className="bg-yellow-50 p-4 rounded-lg text-center">
+        <p className="text-yellow-800">لا توجد بيانات للتحليل</p>
+      </div>
+    );
+  }
   
   sales.forEach(sale => {
     sale.items?.forEach(item => {

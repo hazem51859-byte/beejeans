@@ -98,30 +98,25 @@ export default function BarcodeGenerator() {
 
       const pageWidth = 210; // A4 width
       const pageHeight = 297; // A4 height
-      const barcodeWidth = 70;
-      const barcodeHeight = 20;
-      const itemHeight = 40; // Height for each barcode item
-      const margin = 20;
-      const columns = 2;
-      const itemsPerPage = 14; // 2 columns x 7 rows
-
-      let currentPage = 0;
+      
+      // إعدادات الباركود
+      const barcodeWidth = 80;
+      const barcodeHeight = 15;
+      const startY = 50;
+      const spacingY = 28; // المسافة بين كل باركود
+      
+      let currentY = startY;
+      let pageCount = 0;
       
       for (let i = 0; i < data.length; i++) {
         const item = data[i];
-        const itemIndex = i % itemsPerPage;
         
-        // إضافة صفحة جديدة إذا لزم الأمر
-        if (itemIndex === 0 && i > 0) {
+        // إذا امتلأت الصفحة، أضف صفحة جديدة
+        if (currentY > pageHeight - 40) {
           pdf.addPage();
-          currentPage++;
+          currentY = startY;
+          pageCount++;
         }
-
-        // حساب موضع الباركود
-        const col = itemIndex % columns;
-        const row = Math.floor(itemIndex / columns);
-        const x = margin + (col * (barcodeWidth + 15));
-        const y = margin + (row * itemHeight);
 
         // إنشاء canvas للباركود
         const canvas = document.createElement('canvas');
@@ -130,26 +125,33 @@ export default function BarcodeGenerator() {
             format: 'CODE128',
             width: 2,
             height: 50,
-            displayValue: false,
-            margin: 0
+            displayValue: false, // لا نريد الرقم داخل الباركود
+            margin: 0,
+            quiet: 3
           });
 
-          // إضافة الباركود إلى PDF (في المنتصف)
+          // حساب موضع الباركود (في المنتصف)
+          const barcodeX = (pageWidth - barcodeWidth) / 2;
+          
+          // إضافة الباركود إلى PDF
           const imgData = canvas.toDataURL('image/png');
-          pdf.addImage(imgData, 'PNG', x, y, barcodeWidth, barcodeHeight);
+          pdf.addImage(imgData, 'PNG', barcodeX, currentY, barcodeWidth, barcodeHeight);
 
-          // إضافة رقم السيريال (تحت الباركود مباشرة)
-          pdf.setFontSize(11);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(item.serial, x + (barcodeWidth / 2), y + barcodeHeight + 5, { align: 'center' });
-
-          // إضافة اسم المنتج (تحت السيريال)
-          pdf.setFontSize(9);
+          // إضافة رقم السيريال أسفل الباركود (في المنتصف)
+          pdf.setFontSize(12);
           pdf.setFont('helvetica', 'normal');
-          const productName = item.productName.length > 25 
-            ? item.productName.substring(0, 25) + '...' 
+          pdf.text(item.serial, pageWidth / 2, currentY + barcodeHeight + 5, { align: 'center' });
+
+          // إضافة اسم المنتج أسفل السيريال (في المنتصف)
+          pdf.setFontSize(10);
+          pdf.setFont('helvetica', 'normal');
+          const productName = item.productName.length > 40 
+            ? item.productName.substring(0, 40) + '...' 
             : item.productName;
-          pdf.text(productName, x + (barcodeWidth / 2), y + barcodeHeight + 10, { align: 'center' });
+          pdf.text(productName, pageWidth / 2, currentY + barcodeHeight + 10, { align: 'center' });
+
+          // الانتقال للباركود التالي
+          currentY += spacingY;
 
         } catch (err) {
           console.error('Error generating barcode for:', item.serial, err);
@@ -157,7 +159,8 @@ export default function BarcodeGenerator() {
       }
 
       // حفظ ملف PDF
-      pdf.save(`barcodes_${new Date().toISOString().split('T')[0]}.pdf`);
+      const fileName = `barcodes_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
       
       alert(`✅ تم إنشاء ${data.length} باركود بنجاح!`);
     } catch (err) {
@@ -318,9 +321,9 @@ export default function BarcodeGenerator() {
             <h4 className="font-bold text-yellow-900 mb-2">📝 ملاحظات هامة:</h4>
             <ul className="text-yellow-800 text-sm space-y-1 list-disc list-inside">
               <li>تأكد أن ملف Excel يحتوي على عمودين: <strong>Serial</strong> و <strong>Product Name</strong></li>
-              <li>كل صفحة A4 تحتوي على 14 باركود (2 عمود × 7 صفوف)</li>
+              <li>الباركود يظهر في منتصف الصفحة مع السيريال واسم المنتج أسفله</li>
+              <li>كل باركود في سطر منفصل (عمود واحد في الصفحة)</li>
               <li>الباركود بصيغة CODE128 للتوافق مع معظم قارئات الباركود</li>
-              <li>السيريال واسم المنتج يظهران تحت الباركود مباشرة</li>
               <li>يمكنك طباعة ملف PDF مباشرة على ملصقات الباركود</li>
             </ul>
           </div>

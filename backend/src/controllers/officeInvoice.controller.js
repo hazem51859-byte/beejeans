@@ -140,30 +140,26 @@ exports.createOfficeInvoice = async (req, res) => {
       });
     }
 
-    // خصم من المخزن الرئيسي
-    const mainWarehouse = await prisma.branch.findFirst({
-      where: { 
-        OR: [
-          { code: 'MAIN' },
-          { id: '1' }
-        ]
-      }
+    // خصم من المخزن الرئيسي - Try multiple methods to find it
+    let mainWarehouse = await prisma.branch.findFirst({
+      where: { code: 'MAIN' }
     });
+
+    // If not found by code, try to find first branch (usually the main one)
+    if (!mainWarehouse) {
+      const branches = await prisma.branch.findMany({
+        orderBy: { createdAt: 'asc' },
+        take: 1
+      });
+      mainWarehouse = branches[0];
+    }
 
     console.log('🏢 Main Warehouse:', mainWarehouse);
 
-    if (!mainWarehouse) {
+    if (!mainWarehouse || !mainWarehouse.id) {
       return res.status(400).json({ 
         success: false,
         error: 'المخزن الرئيسي غير موجود' 
-      });
-    }
-
-    if (!mainWarehouse.id) {
-      console.error('❌ Main warehouse found but ID is undefined!', mainWarehouse);
-      return res.status(400).json({ 
-        success: false,
-        error: 'خطأ في معرف المخزن الرئيسي' 
       });
     }
 

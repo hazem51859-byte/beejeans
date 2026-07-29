@@ -145,10 +145,12 @@ exports.createOfficeInvoice = async (req, res) => {
 
     // خصم الكمية من المخزن
     for (const item of invoiceItems) {
-      const inventory = await prisma.inventory.findFirst({
+      const inventory = await prisma.inventory.findUnique({
         where: {
-          productId: item.productId,
-          branchId: mainWarehouse.id
+          branchId_productId: {
+            branchId: mainWarehouse.id,
+            productId: item.productId
+          }
         }
       });
 
@@ -161,7 +163,12 @@ exports.createOfficeInvoice = async (req, res) => {
         }
 
         await prisma.inventory.update({
-          where: { id: inventory.id },
+          where: {
+            branchId_productId: {
+              branchId: mainWarehouse.id,
+              productId: item.productId
+            }
+          },
           data: {
             quantity: inventory.quantity - item.quantity
           }

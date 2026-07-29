@@ -29,6 +29,7 @@ import Vault from './pages/Vault';
 import ReturnsManagement from './pages/ReturnsManagement';
 import CreateReturn from './pages/CreateReturn';
 import CustomerInvoicePrint from './pages/CustomerInvoicePrint';
+import CustomerStatementPrint from './pages/CustomerStatementPrint';
 import FabricTypes from './pages/FabricTypes';
 import FabricWarehouse from './pages/FabricWarehouse';
 import ProductMaster from './pages/ProductMaster';
@@ -79,6 +80,7 @@ function App() {
       
       {/* Print Routes - No Layout */}
       <Route path="/print/customer-invoice/:invoiceId" element={<CustomerInvoicePrint />} />
+      <Route path="/print/customer-statement/:customerId" element={<CustomerStatementPrint />} />
       <Route path="/office-invoice-print/:id" element={<OfficeInvoicePrint />} />
       <Route path="/office-invoices/:id/print" element={<OfficeInvoicePrint />} />
       

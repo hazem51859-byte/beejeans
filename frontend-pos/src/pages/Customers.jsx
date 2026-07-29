@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer } from 'lucide-react';
 import api from '../services/api';
 import dayjs from 'dayjs';
 
@@ -1078,9 +1078,18 @@ export default function Customers() {
           <div className="bg-white rounded-lg p-6 w-full max-w-5xl my-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">تفاصيل العميل - {selectedCustomer.name}</h2>
-              <button onClick={() => setShowDetailsModal(false)} className="text-gray-600 hover:text-gray-800">
-                <X size={24} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => window.open(`/print/customer-statement/${selectedCustomer.id}`, '_blank')}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                >
+                  <Printer size={18} />
+                  طباعة كشف الحساب
+                </button>
+                <button onClick={() => setShowDetailsModal(false)} className="text-gray-600 hover:text-gray-800">
+                  <X size={24} />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-4 gap-4 mb-6">

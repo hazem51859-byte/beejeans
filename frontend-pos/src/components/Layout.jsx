@@ -115,7 +115,15 @@ export default function Layout() {
   );
 
   const isActive = (path) => {
-    return location.pathname === path;
+    // For exact home page match
+    if (path === '/' && location.pathname === '/') {
+      return true;
+    }
+    // For other pages, check if current path starts with the menu path
+    if (path !== '/' && location.pathname.startsWith(path)) {
+      return true;
+    }
+    return false;
   };
 
   return (

@@ -70,29 +70,21 @@ export default function Layout() {
   };
 
   const navigation = [
+    // الصفحات الأساسية (للـ Managers والـ Cashiers)
     { name: 'الرئيسية', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
     { name: 'نقطة البيع', path: '/pos', icon: ShoppingCart, roles: ['MANAGER', 'CASHIER'] },
-    { name: 'منتجاتي', path: '/my-products', icon: Package, roles: ['CASHIER', 'MANAGER'] },
-    { name: 'المخزون', path: '/inventory', icon: Warehouse, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
-    { name: 'التوريدات', path: '/transfers', icon: Truck, roles: ['ADMIN', 'MANAGER', 'CASHIER'], badge: pendingCount },
-    { name: 'الفواتير', path: '/invoices', icon: FileText, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
-    { name: 'التقارير', path: '/reports', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
-    
-    // Admin and Manager
-    { name: 'الخزينة', path: '/vault', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'الخزينة', path: '/vault', icon: DollarSign, roles: ['MANAGER'] },
     { name: 'إدارة الشيفتات', path: '/shift-management', icon: Clock, roles: ['MANAGER'] },
-    { name: 'المرتجعات', path: '/returns-management', icon: RotateCcw, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
+    { name: 'المرتجعات', path: '/returns-management', icon: RotateCcw, roles: ['MANAGER', 'CASHIER'] },
     
     // شغل المكتب
     { name: '--- شغل المكتب ---', path: '#office-header', icon: Building2, roles: ['ADMIN'], isHeader: true },
     { name: 'فواتير المكتب', path: '/office-invoices', icon: FileText, roles: ['ADMIN'] },
-    { name: 'التوريدات', path: '/transfers', icon: Package, roles: ['ADMIN'] },
     { name: 'حالة الشحنات', path: '/shipments', icon: Truck, roles: ['ADMIN'] },
-    { name: 'الخزنة', path: '/vault-management', icon: DollarSign, roles: ['ADMIN'] },
+    { name: 'الخزينة', path: '/vault-management', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'مصروفات المكتب', path: '/office-expenses', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'العملاء', path: '/customers', icon: User, roles: ['ADMIN'] },
     { name: 'الموردين', path: '/suppliers', icon: DollarSign, roles: ['ADMIN'] },
-    { name: 'المخزون', path: '/inventory', icon: Package, roles: ['ADMIN'] },
     { name: 'الشركاء', path: '/partners', icon: User, roles: ['ADMIN'] },
     { name: 'الأصناف (Master)', path: '/product-master', icon: Package, roles: ['ADMIN'] },
     { name: 'مخزن القماش', path: '/fabric-warehouse', icon: Warehouse, roles: ['ADMIN'] },
@@ -104,10 +96,12 @@ export default function Layout() {
     // شغل الفروع
     { name: '--- شغل الفروع ---', path: '#branches-header', icon: Building2, roles: ['ADMIN'], isHeader: true },
     { name: 'الفروع', path: '/branches', icon: Building2, roles: ['ADMIN'] },
-    { name: 'تقارير الفروع', path: '/reports', icon: BarChart3, roles: ['ADMIN'] },
+    { name: 'المخزون', path: '/inventory', icon: Warehouse, roles: ['ADMIN'] },
+    { name: 'التوريدات', path: '/transfers', icon: Truck, roles: ['ADMIN'], badge: pendingCount },
+    { name: 'الفواتير', path: '/invoices', icon: FileText, roles: ['ADMIN'] },
+    { name: 'التقارير', path: '/reports', icon: BarChart3, roles: ['ADMIN'] },
     { name: 'مصروفات الفروع', path: '/expenses', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'تقييم الكاشيرات', path: '/cashier-performance', icon: Award, roles: ['ADMIN'] },
-    { name: 'الفواتير', path: '/invoices', icon: FileText, roles: ['ADMIN'] },
     { name: 'الجرد', path: '/audit', icon: ClipboardCheck, roles: ['ADMIN'] },
     
     // الإعدادات
@@ -249,11 +243,11 @@ export default function Layout() {
               <div className="h-3.5 w-px bg-slate-700"></div>
               
               <div className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 text-emerald-400 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                <svg className="w-3.5 h-3.5 text-pink-400 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                 </svg>
-                <a href="tel:01139395961" className="hover:text-emerald-300 transition-colors font-semibold tracking-wide">
-                  01139395961
+                <a href="https://instagram.com/zo__tech" target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors font-semibold tracking-wide">
+                  @zo__tech
                 </a>
               </div>
               

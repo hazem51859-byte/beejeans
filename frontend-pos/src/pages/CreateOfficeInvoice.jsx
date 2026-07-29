@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Save, Printer } from 'lucide-react';
+import { Plus, Trash2, Save, Search } from 'lucide-react';
 import api from '../services/api';
 
 export default function CreateOfficeInvoice() {
@@ -8,6 +8,8 @@ export default function CreateOfficeInvoice() {
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   
   // بيانات الفاتورة
   const [invoiceType, setInvoiceType] = useState('REGULAR'); // REGULAR, SHIPMENT, CLIENT
@@ -22,7 +24,7 @@ export default function CreateOfficeInvoice() {
   
   // الأصناف
   const [items, setItems] = useState([
-    { productId: '', quantity: 1, size: '', unitSalePrice: 0 }
+    { productId: '', productCode: '', quantity: 1, unitSalePrice: 0 }
   ]);
 
   useEffect(() => {
@@ -33,7 +35,6 @@ export default function CreateOfficeInvoice() {
   const fetchProducts = async () => {
     try {
       const response = await api.get('/products', { params: { status: 'ACTIVE' } });
-      // Handle different response structures
       const productData = response.data?.data || response.data;
       setProducts(Array.isArray(productData) ? productData : []);
     } catch (error) {
@@ -45,7 +46,6 @@ export default function CreateOfficeInvoice() {
   const fetchCustomers = async () => {
     try {
       const response = await api.get('/customers');
-      // Handle different response structures
       const customerData = response.data?.data || response.data;
       const customers = Array.isArray(customerData) ? customerData : [];
       setCustomers(customers.filter(c => c.isActive));
@@ -55,9 +55,48 @@ export default function CreateOfficeInvoice() {
     }
   };
 
+  // بحث المنتج بالكود
+  const handleProductCodeChange = (index, code) => {
+    const updated = [...items];
+    updated[index].productCode = code;
+    
+    // البحث عن المنتج بالكود
+    const product = products.find(p => 
+      p.code?.toLowerCase() === code.toLowerCase() ||
+      p.sku?.toLowerCase() === code.toLowerCase() ||
+      p.barcode === code
+    );
+    
+    if (product) {
+      updated[index].productId = product.id;
+      updated[index].unitSalePrice = product.sellingPrice || product.costPrice * 1.3;
+    } else {
+      updated[index].productId = '';
+      updated[index].unitSalePrice = 0;
+    }
+    
+    setItems(updated);
+  };
+
+  // البحث عن العملاء
+  const filteredCustomers = customers.filter(customer =>
+    customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (customer.phone && customer.phone.includes(customerSearch)) ||
+    (customer.code && customer.code.toLowerCase().includes(customerSearch.toLowerCase()))
+  );
+
+  // اختيار عميل
+  const selectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setCustomerId(customer.id);
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone || '');
+    setCustomerSearch('');
+  };
+
   // إضافة صنف جديد
   const addItem = () => {
-    setItems([...items, { productId: '', quantity: 1, size: '', unitSalePrice: 0 }]);
+    setItems([...items, { productId: '', productCode: '', quantity: 1, unitSalePrice: 0 }]);
   };
 
   // حذف صنف
@@ -71,16 +110,6 @@ export default function CreateOfficeInvoice() {
   const updateItem = (index, field, value) => {
     const updated = [...items];
     updated[index][field] = value;
-    
-    // إذا تغير المنتج، اجلب سعر التكلفة واقترح سعر بيع
-    if (field === 'productId') {
-      const product = products.find(p => p.id === value);
-      if (product) {
-        // اقترح سعر البيع الافتراضي
-        updated[index].unitSalePrice = product.sellingPrice || product.costPrice * 1.3;
-      }
-    }
-    
     setItems(updated);
   };
 
@@ -106,7 +135,6 @@ export default function CreateOfficeInvoice() {
     setLoading(true);
 
     try {
-      // التحقق من البيانات
       if (!customerName.trim()) {
         alert('من فضلك أدخل اسم العميل');
         setLoading(false);
@@ -149,8 +177,6 @@ export default function CreateOfficeInvoice() {
       };
 
       const response = await api.post('/office-invoices', invoiceData);
-      console.log('Create invoice response:', response.data);
-      
       const createdInvoice = response.data?.data || response.data;
       const invoiceId = createdInvoice?.id;
       
@@ -160,7 +186,6 @@ export default function CreateOfficeInvoice() {
       
       alert('✅ تم إنشاء الفاتورة بنجاح!');
       
-      // طباعة الفاتورة
       if (window.confirm('هل تريد طباعة الفاتورة؟')) {
         navigate(`/office-invoices/${invoiceId}/print`);
       } else {
@@ -174,7 +199,7 @@ export default function CreateOfficeInvoice() {
     }
   };
 
-  const { subtotal, discount, total } = calculateTotals();
+  const { subtotal, total } = calculateTotals();
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -195,7 +220,11 @@ export default function CreateOfficeInvoice() {
                   type="radio"
                   value="REGULAR"
                   checked={invoiceType === 'REGULAR'}
-                  onChange={(e) => setInvoiceType(e.target.value)}
+                  onChange={(e) => {
+                    setInvoiceType(e.target.value);
+                    setSelectedCustomer(null);
+                    setCustomerId('');
+                  }}
                   className="w-4 h-4"
                 />
                 <span className="text-lg">🛒 زبون عادي</span>
@@ -206,7 +235,11 @@ export default function CreateOfficeInvoice() {
                   type="radio"
                   value="SHIPMENT"
                   checked={invoiceType === 'SHIPMENT'}
-                  onChange={(e) => setInvoiceType(e.target.value)}
+                  onChange={(e) => {
+                    setInvoiceType(e.target.value);
+                    setSelectedCustomer(null);
+                    setCustomerId('');
+                  }}
                   className="w-4 h-4"
                 />
                 <span className="text-lg">📦 شحن</span>
@@ -228,28 +261,70 @@ export default function CreateOfficeInvoice() {
           {/* بيانات العميل */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {invoiceType === 'CLIENT' && (
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">العميل *</label>
-                <select
-                  value={customerId}
-                  onChange={(e) => {
-                    setCustomerId(e.target.value);
-                    const customer = customers.find(c => c.id === e.target.value);
-                    if (customer) {
-                      setCustomerName(customer.name);
-                      setCustomerPhone(customer.phone || '');
-                    }
-                  }}
-                  className="w-full p-3 border rounded-lg"
-                  required
-                >
-                  <option value="">-- اختر عميل --</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name} {customer.phone && `- ${customer.phone}`}
-                    </option>
-                  ))}
-                </select>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">بحث عن عميل *</label>
+                <div className="relative">
+                  <div className="relative">
+                    <Search className="absolute right-3 top-3 text-gray-400" size={20} />
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      placeholder="ابحث باسم العميل أو الهاتف أو الكود..."
+                      className="w-full p-3 pr-10 border rounded-lg"
+                      disabled={selectedCustomer}
+                    />
+                  </div>
+                  
+                  {/* نتائج البحث */}
+                  {customerSearch && !selectedCustomer && filteredCustomers.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredCustomers.map(customer => (
+                        <div
+                          key={customer.id}
+                          onClick={() => selectCustomer(customer)}
+                          className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0"
+                        >
+                          <div className="font-medium">{customer.name}</div>
+                          <div className="text-sm text-gray-600">
+                            {customer.phone && `📱 ${customer.phone}`}
+                            {customer.code && ` • ${customer.code}`}
+                          </div>
+                          <div className="text-sm font-bold text-red-600 mt-1">
+                            الرصيد: {customer.balance.toFixed(2)} ج
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* العميل المختار */}
+                  {selectedCustomer && (
+                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-bold text-green-800">{selectedCustomer.name}</div>
+                          <div className="text-sm text-gray-600">{selectedCustomer.phone}</div>
+                          <div className="text-sm font-bold text-red-600 mt-1">
+                            الرصيد المستحق: {selectedCustomer.balance.toFixed(2)} ج
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(null);
+                            setCustomerId('');
+                            setCustomerName('');
+                            setCustomerPhone('');
+                          }}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                        >
+                          ✕ إلغاء
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -263,7 +338,7 @@ export default function CreateOfficeInvoice() {
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="w-full p-3 border rounded-lg"
                 required
-                disabled={invoiceType === 'CLIENT' && customerId}
+                disabled={invoiceType === 'CLIENT' && selectedCustomer}
               />
             </div>
 
@@ -274,7 +349,7 @@ export default function CreateOfficeInvoice() {
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="w-full p-3 border rounded-lg"
-                disabled={invoiceType === 'CLIENT' && customerId}
+                disabled={invoiceType === 'CLIENT' && selectedCustomer}
               />
             </div>
           </div>
@@ -333,44 +408,35 @@ export default function CreateOfficeInvoice() {
                 return (
                   <div key={index} className="flex gap-3 items-start bg-gray-50 p-3 rounded-lg">
                     <div className="flex-1">
-                      <select
-                        value={item.productId}
-                        onChange={(e) => updateItem(index, 'productId', e.target.value)}
+                      <label className="text-xs text-gray-600 mb-1 block">كود المنتج</label>
+                      <input
+                        type="text"
+                        value={item.productCode}
+                        onChange={(e) => handleProductCodeChange(index, e.target.value)}
                         className="w-full p-2 border rounded"
-                        required
-                      >
-                        <option value="">-- اختر المنتج --</option>
-                        {products.map(product => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - تكلفة: {product.costPrice} ج
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="اكتب الكود..."
+                      />
+                      {product && (
+                        <div className="mt-1 text-xs text-green-600 font-medium">
+                          ✓ {product.name} - {item.unitSalePrice} ج
+                        </div>
+                      )}
                     </div>
 
                     <div className="w-24">
+                      <label className="text-xs text-gray-600 mb-1 block">الكمية</label>
                       <input
                         type="number"
                         min="1"
                         value={item.quantity}
                         onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)}
                         className="w-full p-2 border rounded"
-                        placeholder="الكمية"
                         required
                       />
                     </div>
 
                     <div className="w-32">
-                      <input
-                        type="text"
-                        value={item.size}
-                        onChange={(e) => updateItem(index, 'size', e.target.value)}
-                        className="w-full p-2 border rounded"
-                        placeholder="المقاس"
-                      />
-                    </div>
-
-                    <div className="w-32">
+                      <label className="text-xs text-gray-600 mb-1 block">السعر</label>
                       <input
                         type="number"
                         step="0.01"
@@ -378,12 +444,11 @@ export default function CreateOfficeInvoice() {
                         value={item.unitSalePrice}
                         onChange={(e) => updateItem(index, 'unitSalePrice', parseFloat(e.target.value) || 0)}
                         className="w-full p-2 border rounded"
-                        placeholder="السعر"
                         required
                       />
                     </div>
 
-                    <div className="w-28 text-center font-bold pt-2">
+                    <div className="w-28 text-center font-bold pt-6">
                       {itemTotal.toFixed(2)} ج
                     </div>
 
@@ -391,7 +456,7 @@ export default function CreateOfficeInvoice() {
                       <button
                         type="button"
                         onClick={() => removeItem(index)}
-                        className="p-2 text-red-600 hover:bg-red-100 rounded"
+                        className="p-2 text-red-600 hover:bg-red-100 rounded mt-5"
                       >
                         <Trash2 size={20} />
                       </button>

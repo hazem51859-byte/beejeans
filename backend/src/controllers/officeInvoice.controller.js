@@ -150,10 +150,20 @@ exports.createOfficeInvoice = async (req, res) => {
       }
     });
 
+    console.log('🏢 Main Warehouse:', mainWarehouse);
+
     if (!mainWarehouse) {
       return res.status(400).json({ 
         success: false,
         error: 'المخزن الرئيسي غير موجود' 
+      });
+    }
+
+    if (!mainWarehouse.id) {
+      console.error('❌ Main warehouse found but ID is undefined!', mainWarehouse);
+      return res.status(400).json({ 
+        success: false,
+        error: 'خطأ في معرف المخزن الرئيسي' 
       });
     }
 

@@ -31,7 +31,10 @@ exports.createOfficeInvoice = async (req, res) => {
       });
 
       if (!product) {
-        return res.status(404).json({ error: `Product not found: ${item.productId}` });
+        return res.status(404).json({ 
+          success: false,
+          error: `Product not found: ${item.productId}` 
+        });
       }
 
       const itemTotalCost = product.costPrice * item.quantity;
@@ -219,7 +222,10 @@ exports.createOfficeInvoice = async (req, res) => {
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     console.error('Error creating office invoice:', error);
-    res.status(500).json({ error: 'Failed to create office invoice' });
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to create office invoice' 
+    });
   }
 };
 

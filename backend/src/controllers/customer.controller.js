@@ -34,6 +34,15 @@ exports.getAllCustomers = async (req, res) => {
         
         const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPaidOnOfficeInvoices - totalPayments;
         
+        // Debug logging
+        if (customer.name) {
+          console.log(`\n💰 ${customer.name}:`);
+          console.log(`   فواتير التقسيط: ${totalSales} (مدفوع: ${totalPaidOnSales})`);
+          console.log(`   فواتير المكتب: ${totalOfficeInvoices} (مدفوع: ${totalPaidOnOfficeInvoices})`);
+          console.log(`   دفعات مباشرة: ${totalPayments}`);
+          console.log(`   الرصيد المحسوب: ${balance.toFixed(2)}`);
+        }
+        
         return {
           ...customer,
           totalSales: totalSales + totalOfficeInvoices,

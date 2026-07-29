@@ -25,6 +25,7 @@ import OfficeExpenses from './pages/OfficeExpenses';
 import CashierPerformance from './pages/CashierPerformance';
 import MyProducts from './pages/MyProducts';
 import VaultManagement from './pages/VaultManagement';
+import Vault from './pages/Vault';
 import ReturnsManagement from './pages/ReturnsManagement';
 import CreateReturn from './pages/CreateReturn';
 import CustomerInvoicePrint from './pages/CustomerInvoicePrint';
@@ -110,7 +111,7 @@ function App() {
         <Route path="my-products" element={<MyProducts />} />
         
         {/* Admin and Manager Routes */}
-        <Route path="vault" element={<VaultManagement />} />
+        <Route path="vault" element={<Vault />} />
         <Route path="shift-management" element={<ShiftManagement />} />
         <Route path="returns-management" element={<ReturnsManagement />} />
         <Route path="create-return" element={<CreateReturn />} />
@@ -118,6 +119,7 @@ function App() {
         {/* Admin Only Routes */}
         {isAdmin && (
           <>
+            <Route path="vault-management" element={<VaultManagement />} />
             <Route path="branches" element={<Branches />} />
             <Route path="users" element={<Users />} />
             <Route path="suppliers" element={<Suppliers />} />

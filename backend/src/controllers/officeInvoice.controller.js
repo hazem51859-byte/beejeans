@@ -103,14 +103,25 @@ exports.createOfficeInvoice = async (req, res) => {
 
     // تحديث رصيد العميل إذا كان موجود
     if (customerId && remainingAmount > 0) {
-      await prisma.customer.update({
-        where: { id: customerId },
-        data: {
-          balance: {
-            increment: remainingAmount
-          }
+      try {
+        const customerExists = await prisma.customer.findUnique({
+          where: { id: customerId }
+        });
+        
+        if (customerExists) {
+          await prisma.customer.update({
+            where: { id: customerId },
+            data: {
+              balance: {
+                increment: remainingAmount
+              }
+            }
+          });
         }
-      });
+      } catch (error) {
+        console.error('Error updating customer balance:', error);
+        // Don't fail the whole invoice creation if balance update fails
+      }
     }
 
     // إذا كان شحن، أنشئ Shipment

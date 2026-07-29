@@ -98,12 +98,12 @@ export default function BarcodeGenerator() {
 
       const pageWidth = 210; // A4 width
       const pageHeight = 297; // A4 height
-      const barcodeWidth = 80;
-      const barcodeHeight = 25;
-      const itemHeight = 45; // Height for each barcode item
-      const margin = 15;
+      const barcodeWidth = 70;
+      const barcodeHeight = 20;
+      const itemHeight = 40; // Height for each barcode item
+      const margin = 20;
       const columns = 2;
-      const itemsPerPage = 12; // 2 columns x 6 rows
+      const itemsPerPage = 14; // 2 columns x 7 rows
 
       let currentPage = 0;
       
@@ -120,7 +120,7 @@ export default function BarcodeGenerator() {
         // حساب موضع الباركود
         const col = itemIndex % columns;
         const row = Math.floor(itemIndex / columns);
-        const x = margin + (col * (barcodeWidth + 10));
+        const x = margin + (col * (barcodeWidth + 15));
         const y = margin + (row * itemHeight);
 
         // إنشاء canvas للباركود
@@ -129,25 +129,25 @@ export default function BarcodeGenerator() {
           JsBarcode(canvas, item.serial, {
             format: 'CODE128',
             width: 2,
-            height: 60,
+            height: 50,
             displayValue: false,
             margin: 0
           });
 
-          // إضافة الباركود إلى PDF
+          // إضافة الباركود إلى PDF (في المنتصف)
           const imgData = canvas.toDataURL('image/png');
           pdf.addImage(imgData, 'PNG', x, y, barcodeWidth, barcodeHeight);
 
-          // إضافة رقم السيريال
-          pdf.setFontSize(10);
+          // إضافة رقم السيريال (تحت الباركود مباشرة)
+          pdf.setFontSize(11);
           pdf.setFont('helvetica', 'bold');
           pdf.text(item.serial, x + (barcodeWidth / 2), y + barcodeHeight + 5, { align: 'center' });
 
-          // إضافة اسم المنتج
+          // إضافة اسم المنتج (تحت السيريال)
           pdf.setFontSize(9);
           pdf.setFont('helvetica', 'normal');
-          const productName = item.productName.length > 30 
-            ? item.productName.substring(0, 30) + '...' 
+          const productName = item.productName.length > 25 
+            ? item.productName.substring(0, 25) + '...' 
             : item.productName;
           pdf.text(productName, x + (barcodeWidth / 2), y + barcodeHeight + 10, { align: 'center' });
 
@@ -318,8 +318,9 @@ export default function BarcodeGenerator() {
             <h4 className="font-bold text-yellow-900 mb-2">📝 ملاحظات هامة:</h4>
             <ul className="text-yellow-800 text-sm space-y-1 list-disc list-inside">
               <li>تأكد أن ملف Excel يحتوي على عمودين: <strong>Serial</strong> و <strong>Product Name</strong></li>
-              <li>كل صفحة A4 تحتوي على 12 باركود (2 عمود × 6 صفوف)</li>
+              <li>كل صفحة A4 تحتوي على 14 باركود (2 عمود × 7 صفوف)</li>
               <li>الباركود بصيغة CODE128 للتوافق مع معظم قارئات الباركود</li>
+              <li>السيريال واسم المنتج يظهران تحت الباركود مباشرة</li>
               <li>يمكنك طباعة ملف PDF مباشرة على ملصقات الباركود</li>
             </ul>
           </div>

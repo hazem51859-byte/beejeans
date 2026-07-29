@@ -202,7 +202,7 @@ export default function OfficeInvoicePrint() {
       <div style={pageStyle}>
         {/* Header */}
         <div style={headerStyle}>
-          <h1 style={h1Style}>Biso & Gilan & Lavan</h1>
+          <h1 style={h1Style}>Biso & Gilan & Layan</h1>
           <p style={pStyle}>فاتورة مكتب - المخزن الرئيسي</p>
         </div>
 

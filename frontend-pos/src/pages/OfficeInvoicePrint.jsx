@@ -246,7 +246,6 @@ export default function OfficeInvoicePrint() {
             <tr style={{borderBottom: '2px solid #000'}}>
               <th style={thStyle}>المنتج</th>
               <th style={{...thStyle, width: '80px', textAlign: 'center'}}>الكمية</th>
-              <th style={{...thStyle, width: '80px', textAlign: 'center'}}>المقاس</th>
               <th style={{...thStyle, width: '120px'}}>السعر</th>
               <th style={{...thStyle, width: '120px'}}>الإجمالي</th>
             </tr>
@@ -256,7 +255,6 @@ export default function OfficeInvoicePrint() {
               <tr key={index}>
                 <td style={itemTdStyle}>{item.product?.name || 'غير محدد'}</td>
                 <td style={{...itemTdStyle, textAlign: 'center'}}>{item.quantity}</td>
-                <td style={{...itemTdStyle, textAlign: 'center'}}>{item.size || '-'}</td>
                 <td style={{...itemTdStyle, textAlign: 'right'}}>{item.unitSalePrice.toFixed(2)} ج</td>
                 <td style={{...itemTdStyle, textAlign: 'right', fontWeight: 'bold'}}>
                   {(item.quantity * item.unitSalePrice).toFixed(2)} ج

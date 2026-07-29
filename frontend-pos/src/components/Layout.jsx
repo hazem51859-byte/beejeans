@@ -15,7 +15,8 @@ import {
   Clock,
   RotateCcw,
   Building2,
-  ClipboardCheck
+  ClipboardCheck,
+  Barcode
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI } from '../services/api';
@@ -106,6 +107,7 @@ export default function Layout() {
     
     // الإعدادات
     { name: '--- الإعدادات ---', path: '#settings-header', icon: Settings, roles: ['ADMIN'], isHeader: true },
+    { name: 'التكويد', path: '/barcode-generator', icon: Barcode, roles: ['ADMIN'] },
     { name: 'المستخدمين', path: '/users', icon: User, roles: ['ADMIN'] },
     { name: 'الإعدادات', path: '/settings', icon: Settings, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
   ];

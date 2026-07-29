@@ -41,6 +41,7 @@ import OfficeInvoicePrint from './pages/OfficeInvoicePrint';
 import Shipments from './pages/Shipments';
 import InventoryAudit from './pages/InventoryAudit';
 import AuditDetails from './pages/AuditDetails';
+import BarcodeGenerator from './pages/BarcodeGenerator';
 
 
 function ProtectedRoute({ children }) {
@@ -140,6 +141,7 @@ function App() {
             <Route path="shipments" element={<Shipments />} />
             <Route path="audit" element={<InventoryAudit />} />
             <Route path="audit/:id" element={<AuditDetails />} />
+            <Route path="barcode-generator" element={<BarcodeGenerator />} />
           </>
         )}
       </Route>

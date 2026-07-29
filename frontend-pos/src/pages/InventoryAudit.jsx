@@ -55,7 +55,7 @@ export default function InventoryAudit() {
       const response = await api.get('/audits', { params });
       
       if (response.data.success) {
-        setAudits(response.data.data || []);
+        setAudits(response.data.audits || []);
       }
     } catch (error) {
       console.error('Error fetching audits:', error);
@@ -82,7 +82,7 @@ export default function InventoryAudit() {
         setNewAudit({ branchId: '', notes: '' });
         
         // الانتقال إلى صفحة الجرد
-        navigate(`/audit/${response.data.data.id}`);
+        navigate(`/audit/${response.data.audit.id}`);
       }
     } catch (error) {
       console.error('Error creating audit:', error);

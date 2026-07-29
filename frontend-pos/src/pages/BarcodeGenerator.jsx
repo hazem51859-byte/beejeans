@@ -9,6 +9,11 @@ export default function BarcodeGenerator() {
   const [file, setFile] = useState(null);
   const [data, setData] = useState([]);
   const [error, setError] = useState('');
+  
+  // Quick generate form
+  const [quickSerial, setQuickSerial] = useState('');
+  const [quickProductName, setQuickProductName] = useState('');
+  const [quickLoading, setQuickLoading] = useState(false);
 
   // تحميل Template Excel
   const downloadTemplate = () => {
@@ -77,6 +82,120 @@ export default function BarcodeGenerator() {
     };
 
     reader.readAsBinaryString(uploadedFile);
+  };
+
+  // توليد باركود واحد سريع
+  const generateQuickBarcode = async () => {
+    if (!quickSerial.trim() || !quickProductName.trim()) {
+      alert('⚠️ الرجاء إدخال السيريال واسم المنتج');
+      return;
+    }
+
+    setQuickLoading(true);
+
+    try {
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = 210;
+      const barcodeWidth = 85;
+      const barcodeHeight = 15;
+      const startY = 50;
+
+      // إنشاء canvas للباركود
+      const barcodeCanvas = document.createElement('canvas');
+      JsBarcode(barcodeCanvas, quickSerial, {
+        format: 'CODE128',
+        width: 2.5,
+        height: 50,
+        displayValue: false,
+        margin: 3
+      });
+
+      const barcodeX = (pageWidth - barcodeWidth) / 2;
+      const barcodeImgData = barcodeCanvas.toDataURL('image/png');
+      pdf.addImage(barcodeImgData, 'PNG', barcodeX, startY, barcodeWidth, barcodeHeight);
+
+      // إنشاء canvas للسيريال
+      const serialCanvas = document.createElement('canvas');
+      const serialCtx = serialCanvas.getContext('2d');
+      const serialFontSize = 28;
+      serialCtx.font = `bold ${serialFontSize}px Arial`;
+      const serialMetrics = serialCtx.measureText(quickSerial);
+      const serialWidth = serialMetrics.width + 40;
+      
+      serialCanvas.width = serialWidth;
+      serialCanvas.height = serialFontSize + 20;
+      
+      serialCtx.font = `bold ${serialFontSize}px Arial`;
+      serialCtx.textAlign = 'center';
+      serialCtx.textBaseline = 'middle';
+      serialCtx.fillStyle = '#000000';
+      serialCtx.fillText(quickSerial, serialWidth / 2, (serialFontSize + 20) / 2);
+      
+      const serialImgData = serialCanvas.toDataURL('image/png');
+      const serialImgWidth = Math.min(serialWidth / 3.5, 80);
+      const serialImgHeight = (serialFontSize + 20) / 3.5;
+      const serialX = (pageWidth - serialImgWidth) / 2;
+      
+      pdf.addImage(
+        serialImgData, 
+        'PNG', 
+        serialX, 
+        startY + barcodeHeight + 2, 
+        serialImgWidth, 
+        serialImgHeight
+      );
+
+      // إنشاء canvas لاسم المنتج
+      const productCanvas = document.createElement('canvas');
+      const productCtx = productCanvas.getContext('2d');
+      const productFontSize = 24;
+      
+      productCtx.font = `${productFontSize}px Arial`;
+      const productMetrics = productCtx.measureText(quickProductName);
+      const productWidth = Math.min(productMetrics.width + 40, 600);
+      
+      productCanvas.width = productWidth;
+      productCanvas.height = productFontSize + 20;
+      
+      productCtx.font = `${productFontSize}px Arial`;
+      productCtx.textAlign = 'center';
+      productCtx.textBaseline = 'middle';
+      productCtx.fillStyle = '#000000';
+      productCtx.fillText(quickProductName, productWidth / 2, (productFontSize + 20) / 2);
+      
+      const productImgData = productCanvas.toDataURL('image/png');
+      const productImgWidth = Math.min(productWidth / 3.5, 85);
+      const productImgHeight = (productFontSize + 20) / 3.5;
+      const productX = (pageWidth - productImgWidth) / 2;
+      
+      pdf.addImage(
+        productImgData, 
+        'PNG', 
+        productX, 
+        startY + barcodeHeight + serialImgHeight + 4, 
+        productImgWidth, 
+        productImgHeight
+      );
+
+      // حفظ ملف PDF
+      const fileName = `barcode_${quickSerial}_${new Date().getTime()}.pdf`;
+      pdf.save(fileName);
+      
+      alert(`✅ تم إنشاء الباركود بنجاح!`);
+      
+      // إعادة تعيين النموذج
+      setQuickSerial('');
+      setQuickProductName('');
+    } catch (err) {
+      alert('❌ خطأ في إنشاء الباركود: ' + err.message);
+    } finally {
+      setQuickLoading(false);
+    }
   };
 
   // توليد الباركود وإنشاء PDF
@@ -171,8 +290,10 @@ export default function BarcodeGenerator() {
           const productCanvas = document.createElement('canvas');
           const productCtx = productCanvas.getContext('2d');
           const productFontSize = 24;
+          const currentProductName = item.productName; // حفظ اسم المنتج الحالي
+          
           productCtx.font = `${productFontSize}px Arial`;
-          const productMetrics = productCtx.measureText(item.productName);
+          const productMetrics = productCtx.measureText(currentProductName);
           const productWidth = Math.min(productMetrics.width + 40, 600);
           
           productCanvas.width = productWidth;
@@ -183,7 +304,7 @@ export default function BarcodeGenerator() {
           productCtx.textAlign = 'center';
           productCtx.textBaseline = 'middle';
           productCtx.fillStyle = '#000000';
-          productCtx.fillText(item.productName, productWidth / 2, (productFontSize + 20) / 2);
+          productCtx.fillText(currentProductName, productWidth / 2, (productFontSize + 20) / 2);
           
           // إضافة اسم المنتج كصورة
           const productImgData = productCanvas.toDataURL('image/png');
@@ -235,6 +356,66 @@ export default function BarcodeGenerator() {
         </div>
 
         <div className="p-6 space-y-6">
+          {/* توليد سريع لباركود واحد */}
+          <div className="bg-gradient-to-br from-teal-50 to-emerald-50 border-2 border-teal-300 rounded-lg p-6">
+            <h3 className="font-bold text-lg text-teal-900 mb-4 flex items-center gap-2">
+              <Barcode size={24} className="text-teal-600" />
+              ⚡ توليد سريع - باركود واحد
+            </h3>
+            <p className="text-teal-700 text-sm mb-4">
+              أدخل السيريال واسم المنتج لتوليد باركود واحد مباشرة بدون ملف Excel
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-teal-900 mb-2">السيريال *</label>
+                <input
+                  type="text"
+                  value={quickSerial}
+                  onChange={(e) => setQuickSerial(e.target.value)}
+                  className="w-full p-3 border-2 border-teal-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="مثال: 12345"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-teal-900 mb-2">اسم المنتج *</label>
+                <input
+                  type="text"
+                  value={quickProductName}
+                  onChange={(e) => setQuickProductName(e.target.value)}
+                  className="w-full p-3 border-2 border-teal-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="مثال: بنطلون جينز أزرق"
+                />
+              </div>
+            </div>
+            
+            <button
+              onClick={generateQuickBarcode}
+              disabled={quickLoading}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-lg hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold transition-all transform hover:scale-[1.02]"
+            >
+              {quickLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  جاري التوليد...
+                </>
+              ) : (
+                <>
+                  <Barcode size={20} />
+                  توليد الباركود الآن
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* فاصل */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px bg-slate-300"></div>
+            <span className="text-slate-500 font-medium">أو</span>
+            <div className="flex-1 h-px bg-slate-300"></div>
+          </div>
+
           {/* تحميل Template */}
           <div className="bg-emerald-50 border-2 border-emerald-200 rounded-lg p-6">
             <div className="flex items-start justify-between">

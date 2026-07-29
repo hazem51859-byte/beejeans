@@ -42,6 +42,7 @@ import Shipments from './pages/Shipments';
 import InventoryAudit from './pages/InventoryAudit';
 import AuditDetails from './pages/AuditDetails';
 import BarcodeGenerator from './pages/BarcodeGenerator';
+import BranchVaults from './pages/BranchVaults';
 
 
 function ProtectedRoute({ children }) {
@@ -142,6 +143,7 @@ function App() {
             <Route path="audit" element={<InventoryAudit />} />
             <Route path="audit/:id" element={<AuditDetails />} />
             <Route path="barcode-generator" element={<BarcodeGenerator />} />
+            <Route path="branch-vaults" element={<BranchVaults />} />
           </>
         )}
       </Route>

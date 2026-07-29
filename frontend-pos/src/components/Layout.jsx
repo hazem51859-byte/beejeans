@@ -104,6 +104,7 @@ export default function Layout() {
     { name: 'مصروفات الفروع', path: '/expenses', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'تقييم الكاشيرات', path: '/cashier-performance', icon: Award, roles: ['ADMIN'] },
     { name: 'الجرد', path: '/audit', icon: ClipboardCheck, roles: ['ADMIN'] },
+    { name: 'خزائن الفروع', path: '/branch-vaults', icon: DollarSign, roles: ['ADMIN'] },
     
     // الإعدادات
     { name: '--- الإعدادات ---', path: '#settings-header', icon: Settings, roles: ['ADMIN'], isHeader: true },

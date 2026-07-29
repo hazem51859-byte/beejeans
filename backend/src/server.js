@@ -51,6 +51,9 @@ const io = new Server(server, {
 // Make io accessible in routes
 app.set('io', io);
 
+// Trust proxy for Railway deployment
+app.set('trust proxy', true);
+
 // Middleware
 app.use(helmet());
 app.use(compression());

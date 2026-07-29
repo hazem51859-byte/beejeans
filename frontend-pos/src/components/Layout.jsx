@@ -16,7 +16,8 @@ import {
   RotateCcw,
   Building2,
   ClipboardCheck,
-  Barcode
+  Barcode,
+  Layers
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI } from '../services/api';
@@ -88,6 +89,7 @@ export default function Layout() {
     { name: 'الموردين', path: '/suppliers', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'الشركاء', path: '/partners', icon: User, roles: ['ADMIN'] },
     { name: 'الأصناف (Master)', path: '/product-master', icon: Package, roles: ['ADMIN'] },
+    { name: 'الخامات', path: '/fabric-types', icon: Layers, roles: ['ADMIN'] },
     { name: 'مخزن القماش', path: '/fabric-warehouse', icon: Warehouse, roles: ['ADMIN'] },
     { name: 'لوحة الإنتاج', path: '/production-dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
     { name: 'أوامر التصنيع', path: '/manufacturing', icon: Truck, roles: ['ADMIN'] },

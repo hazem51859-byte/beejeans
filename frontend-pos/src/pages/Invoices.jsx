@@ -1,10 +1,161 @@
 import { useState } from 'react';
-
+import { useQuery, useMutation, useQueryClient } from '@tantml:function_calls>
+<invoke name="strReplace">
+<parameter name="newStr">import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { FileText, Search, Calendar, DollarSign, AlertCircle } from 'lucide-react';
+import { FileText, Search, Calendar, DollarSign, AlertCircle, Package, TrendingUp } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
+
+// Component لتحليل مبيعات المنتجات
+function ProductSalesAnalysis({ sales }) {
+  const [expandedProduct, setExpandedProduct] = useState(null);
+  
+  // تجميع المنتجات من كل الفواتير
+  const productAnalysis = {};
+  
+  sales.forEach(sale => {
+    sale.items?.forEach(item => {
+      const productKey = item.product?.id || item.productId;
+      const productName = item.product?.name || 'منتج غير معروف';
+      const branchName = sale.branch?.name || 'فرع غير معروف';
+      const branchId = sale.branch?.id;
+      
+      if (!productAnalysis[productKey]) {
+        productAnalysis[productKey] = {
+          productName,
+          totalQuantity: 0,
+          totalAmount: 0,
+          branches: {}
+        };
+      }
+      
+      productAnalysis[productKey].totalQuantity += item.quantity;
+      productAnalysis[productKey].totalAmount += item.total;
+      
+      if (!productAnalysis[productKey].branches[branchId]) {
+        productAnalysis[productKey].branches[branchId] = {
+          branchName,
+          quantity: 0,
+          amount: 0,
+          invoices: []
+        };
+      }
+      
+      productAnalysis[productKey].branches[branchId].quantity += item.quantity;
+      productAnalysis[productKey].branches[branchId].amount += item.total;
+      productAnalysis[productKey].branches[branchId].invoices.push({
+        invoiceNumber: sale.invoiceNumber,
+        date: sale.createdAt,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total
+      });
+    });
+  });
+  
+  // تحويل لـ array وترتيب حسب الكمية
+  const productsArray = Object.entries(productAnalysis)
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => b.totalQuantity - a.totalQuantity);
+  
+  return (
+    <div>
+      <div className="bg-blue-50 p-3 rounded-lg mb-4 text-sm">
+        <p className="text-blue-900">
+          📊 عرض تفصيلي لجميع المنتجات المباعة في الفترة المحددة مع توزيعها على الفروع
+        </p>
+      </div>
+      
+      <table className="w-full text-sm">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="text-right p-3 font-bold">المنتج</th>
+            <th className="text-center p-3 font-bold">إجمالي الكمية</th>
+            <th className="text-center p-3 font-bold">إجمالي المبلغ</th>
+            <th className="text-center p-3 font-bold">عدد الفروع</th>
+            <th className="text-center p-3 font-bold">التفاصيل</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productsArray.map((product) => (
+            <>
+              <tr key={product.id} className="border-b hover:bg-gray-50">
+                <td className="p-3 font-medium">{product.productName}</td>
+                <td className="p-3 text-center font-bold text-blue-600">{product.totalQuantity} قطعة</td>
+                <td className="p-3 text-center font-bold text-green-600">{product.totalAmount.toFixed(2)} ج</td>
+                <td className="p-3 text-center">{Object.keys(product.branches).length} فرع</td>
+                <td className="p-3 text-center">
+                  <button
+                    onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)}
+                    className="text-blue-600 hover:text-blue-800 font-medium text-xs px-3 py-1 bg-blue-50 rounded"
+                  >
+                    {expandedProduct === product.id ? '▲ إخفاء' : '▼ عرض التفاصيل'}
+                  </button>
+                </td>
+              </tr>
+              
+              {/* تفاصيل الفروع والفواتير */}
+              {expandedProduct === product.id && (
+                <tr>
+                  <td colSpan="5" className="p-4 bg-gray-50">
+                    <div className="space-y-4">
+                      {Object.entries(product.branches).map(([branchId, branchData]) => (
+                        <div key={branchId} className="bg-white p-4 rounded-lg border">
+                          <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                            <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                              <Package size={16} />
+                              {branchData.branchName}
+                            </h4>
+                            <div className="text-sm space-x-4 space-x-reverse">
+                              <span className="text-blue-600 font-medium">
+                                {branchData.quantity} قطعة
+                              </span>
+                              <span className="text-green-600 font-bold">
+                                {branchData.amount.toFixed(2)} ج
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* الفواتير */}
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-gray-600 mb-2">الفواتير ({branchData.invoices.length}):</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {branchData.invoices.map((invoice, idx) => (
+                                <div key={idx} className="bg-gray-50 p-2 rounded text-xs">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-mono font-medium text-blue-700">{invoice.invoiceNumber}</span>
+                                    <span className="text-gray-500">{new Date(invoice.date).toLocaleDateString('ar-EG')}</span>
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-gray-600">{invoice.quantity} × {invoice.unitPrice.toFixed(0)} ج</span>
+                                    <span className="font-bold text-green-700">{invoice.total.toFixed(2)} ج</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </>
+          ))}
+        </tbody>
+      </table>
+      
+      {productsArray.length === 0 && (
+        <div className="text-center py-8 text-gray-500">
+          <Package size={48} className="mx-auto mb-2 text-gray-300" />
+          <p>لا توجد منتجات مباعة في هذه الفترة</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Invoices() {
   const queryClient = useQueryClient();
@@ -120,6 +271,19 @@ export default function Invoices() {
           </div>
         </div>
       </div>
+
+      {/* تحليل المنتجات حسب الفروع */}
+      {salesList.length > 0 && (
+        <div className="card mb-6">
+          <h3 className="font-bold mb-4 text-lg flex items-center gap-2">
+            <FileText size={20} />
+            تحليل مبيعات المنتجات في الفروع
+          </h3>
+          <div className="overflow-x-auto">
+            <ProductSalesAnalysis sales={salesList} />
+          </div>
+        </div>
+      )}
 
       {/* قائمة الفواتير */}
       <div className="card">

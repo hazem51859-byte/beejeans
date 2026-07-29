@@ -33,6 +33,8 @@ model User {
   activityLogs      ActivityLog[]
   returnsCreated    Return[]      @relation("ReturnCreator")
   returnsManagerReviewed Return[] @relation("ReturnManagerReviewer")
+  auditsCreated       InventoryAudit[]    @relation("AuditCreator")
+  auditsSettled       InventoryAudit[]    @relation("AuditSettler")
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -74,6 +76,7 @@ model Branch {
   moneyTransfersFrom MoneyTransfer[] @relation("MoneyTransferFrom")
   moneyTransfersTo   MoneyTransfer[] @relation("MoneyTransferTo")
   returns           Return[]
+  audits            InventoryAudit[]
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -171,6 +174,7 @@ model Product {
   manufacturingOrders ManufacturingOrder[]
   returnItems   ReturnItem[]
   officeInvoiceItems OfficeInvoiceItem[]
+  auditItems    InventoryAuditItem[]
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -1246,4 +1250,90 @@ model Shipment {
   @@index([shipmentCompany])
   @@index([shippedAt])
   @@map("shipments")
+}
+
+// =====================
+// Inventory Audit (جرد المخزون)
+// =====================
+
+model InventoryAudit {
+  id                String              @id @default(uuid())
+  auditNumber       String              @unique // AUD-YYYYMMDD-XXXXX
+  
+  // الفرع اللي بيتعمله جرد
+  branchId          String
+  branch            Branch              @relation(fields: [branchId], references: [id])
+  
+  // حالة الجرد
+  status            String              @default("IN_PROGRESS")
+  // IN_PROGRESS (جاري الجرد), COMPLETED (اكتمل), SETTLED (تمت التسوية)
+  
+  // ملخص الجرد
+  totalItems        Int                 @default(0) // عدد الأصناف المجردة
+  itemsWithShortage Int                 @default(0) // عدد الأصناف اللي فيها عجز
+  itemsWithSurplus  Int                 @default(0) // عدد الأصناف اللي فيها زيادة
+  
+  totalShortageQty  Int                 @default(0) // إجمالي كمية العجز
+  totalSurplusQty   Int                 @default(0) // إجمالي كمية الزيادة
+  totalShortageValue Float              @default(0) // قيمة العجز (بسعر البيع)
+  totalSurplusValue Float               @default(0) // قيمة الزيادة (بسعر البيع)
+  
+  // من قام بالجرد والتسوية
+  createdBy         String
+  createdByUser     User                @relation("AuditCreator", fields: [createdBy], references: [id])
+  
+  settledBy         String?
+  settledByUser     User?               @relation("AuditSettler", fields: [settledBy], references: [id])
+  settledAt         DateTime?           // تاريخ التسوية
+  
+  // ملاحظات
+  notes             String?
+  
+  // التواريخ
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // العلاقات
+  items             InventoryAuditItem[]
+  
+  @@index([branchId])
+  @@index([status])
+  @@index([auditNumber])
+  @@index([createdAt])
+  @@map("inventory_audits")
+}
+
+model InventoryAuditItem {
+  id                String              @id @default(uuid())
+  
+  // الجرد المرتبط
+  auditId           String
+  audit             InventoryAudit      @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  
+  // المنتج
+  productId         String
+  product           Product             @relation(fields: [productId], references: [id])
+  
+  // الكميات
+  expectedQty       Int                 // الكمية المتوقعة (من النظام)
+  returnedQty       Int                 @default(0) // كمية المرتجعات
+  actualQty         Int?                // الكمية الفعلية (اللي لقيتها في الجرد)
+  
+  // الفرق
+  differenceQty     Int?                // الفرق = actualQty - (expectedQty + returnedQty)
+  differenceType    String?             // SHORTAGE (عجز), SURPLUS (زيادة), MATCHED (مطابق)
+  differenceValue   Float?              // قيمة الفرق (بسعر البيع)
+  
+  // السعر وقت الجرد
+  unitSalePrice     Float               // سعر البيع للقطعة
+  
+  // ملاحظات
+  notes             String?
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@index([auditId])
+  @@index([productId])
+  @@map("inventory_audit_items")
 }

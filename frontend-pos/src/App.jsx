@@ -21,6 +21,7 @@ import Invoices from './pages/Invoices';
 import Layout from './components/Layout';
 import Customers from './pages/Customers';
 import Expenses from './pages/Expenses';
+import OfficeExpenses from './pages/OfficeExpenses';
 import CashierPerformance from './pages/CashierPerformance';
 import MyProducts from './pages/MyProducts';
 import VaultManagement from './pages/VaultManagement';
@@ -37,6 +38,8 @@ import CreateOfficeInvoice from './pages/CreateOfficeInvoice';
 import OfficeInvoices from './pages/OfficeInvoices';
 import OfficeInvoicePrint from './pages/OfficeInvoicePrint';
 import Shipments from './pages/Shipments';
+import InventoryAudit from './pages/InventoryAudit';
+import AuditDetails from './pages/AuditDetails';
 
 
 function ProtectedRoute({ children }) {
@@ -122,6 +125,7 @@ function App() {
             <Route path="monthly-report" element={<MonthlyReport />} />
             <Route path="customers" element={<Customers />} />
             <Route path="expenses" element={<Expenses />} />
+            <Route path="office-expenses" element={<OfficeExpenses />} />
             <Route path="cashier-performance" element={<CashierPerformance />} />
             <Route path="fabric-types" element={<FabricTypes />} />
             <Route path="fabric-warehouse" element={<FabricWarehouse />} />
@@ -132,6 +136,8 @@ function App() {
             <Route path="office-invoices" element={<OfficeInvoices />} />
             <Route path="office-invoices/create" element={<CreateOfficeInvoice />} />
             <Route path="shipments" element={<Shipments />} />
+            <Route path="audit" element={<InventoryAudit />} />
+            <Route path="audit/:id" element={<AuditDetails />} />
           </>
         )}
       </Route>

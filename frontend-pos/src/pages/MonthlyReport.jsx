@@ -73,6 +73,25 @@ export default function MonthlyReport() {
     },
   });
 
+  const branchesData = branches?.data || [];
+  const mainBranch = branchesData.find(b => b.code === 'MAIN');
+
+  // مصروفات المكتب (المخزن الرئيسي)
+  const { data: officeExpenses } = useQuery({
+    queryKey: ['office-expenses', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/expenses', { 
+        params: { 
+          startDate, 
+          endDate: endDateString,
+          branchId: mainBranch?.id 
+        } 
+      });
+      return response.data;
+    },
+    enabled: !!mainBranch
+  });
+
   // بيانات توريدات الفروع ومبيعاتهم
   const { data: branchTransfersData } = useQuery({
     queryKey: ['branch-transfers-report', startDate, endDateString],
@@ -151,7 +170,6 @@ export default function MonthlyReport() {
   const partnersData = Array.isArray(partners?.data) ? partners.data : (Array.isArray(partners?.data?.data) ? partners.data.data : []);
 
   const returnsData = Array.isArray(returns?.data) ? returns.data : (Array.isArray(returns?.data?.data) ? returns.data.data : []);
-  const branchesData = Array.isArray(branches?.data) ? branches.data : (Array.isArray(branches?.data?.data) ? branches.data.data : []);
   const branchTransfers = branchTransfersData?.data || [];
   const customerSales = Array.isArray(customerSalesData?.data) ? customerSalesData.data : (Array.isArray(customerSalesData?.data?.data) ? customerSalesData.data.data : []);
 
@@ -190,7 +208,13 @@ export default function MonthlyReport() {
   // المشتريات = المشتريات العادية + مشتريات الإنتاج (قماش + تصنيع + غسيل)
   const regularPurchases = purchasesData.reduce((sum, purchase) => sum + (purchase.totalAmount || 0), 0);
   const totalPurchases = regularPurchases + totalProductionCost;
-  const totalExpenses = expensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+  
+  // المصروفات - مقسمة لفروع ومكتب
+  const branchExpensesData = expensesData.filter(e => !e.branchId || e.branchId !== mainBranch?.id);
+  const officeExpensesData = officeExpenses?.data?.expenses || [];
+  const totalBranchExpenses = branchExpensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+  const totalOfficeExpenses = officeExpensesData.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+  const totalExpenses = totalBranchExpenses + totalOfficeExpenses;
   
   // حساب معاملات الموردين
   const totalPurchasesPaid = purchasesData.reduce((sum, purchase) => sum + (purchase.paidAmount || 0), 0);
@@ -349,7 +373,16 @@ export default function MonthlyReport() {
             <DollarSign className="text-orange-600" size={24} />
           </div>
           <p className="text-2xl font-bold text-orange-700">{totalExpenses.toFixed(2)} ج.م</p>
-          <p className="text-xs text-gray-600 mt-1">{expensesData.length || 0} مصروف</p>
+          <div className="text-xs text-gray-600 mt-1 space-y-0.5">
+            <div className="flex justify-between">
+              <span>الفروع: {branchExpensesData.length || 0}</span>
+              <span className="font-medium">{totalBranchExpenses.toFixed(0)} ج</span>
+            </div>
+            <div className="flex justify-between">
+              <span>المكتب: {officeExpensesData.length || 0}</span>
+              <span className="font-medium">{totalOfficeExpenses.toFixed(0)} ج</span>
+            </div>
+          </div>
         </div>
 
         <div className={`card bg-gradient-to-br ${netProfit >= 0 ? 'from-blue-50 to-blue-100' : 'from-gray-50 to-gray-100'}`}>
@@ -424,8 +457,13 @@ export default function MonthlyReport() {
               </div>
               
               <div className="flex justify-between items-center pb-2 border-b border-red-200">
-                <span className="text-sm">المصروفات التشغيلية</span>
-                <span className="font-medium text-red-700">{totalExpenses.toFixed(2)}</span>
+                <span className="text-sm">المصروفات (الفروع)</span>
+                <span className="font-medium text-red-700">{totalBranchExpenses.toFixed(2)}</span>
+              </div>
+              
+              <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                <span className="text-sm">المصروفات (المكتب)</span>
+                <span className="font-medium text-red-700">{totalOfficeExpenses.toFixed(2)}</span>
               </div>
               
               <div className="flex justify-between items-center pt-2 font-bold">
@@ -586,10 +624,18 @@ export default function MonthlyReport() {
                 
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="text-gray-700">المصروفات التشغيلية</span>
-                    <div className="text-xs text-gray-500">{expensesData.length} مصروف</div>
+                    <span className="text-gray-700">مصروفات الفروع</span>
+                    <div className="text-xs text-gray-500">{branchExpensesData.length} مصروف</div>
                   </div>
-                  <span className="font-medium text-red-700">-{totalExpenses.toFixed(2)}</span>
+                  <span className="font-medium text-red-700">-{totalBranchExpenses.toFixed(2)}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-gray-700">مصروفات المكتب</span>
+                    <div className="text-xs text-gray-500">{officeExpensesData.length} مصروف</div>
+                  </div>
+                  <span className="font-medium text-red-700">-{totalOfficeExpenses.toFixed(2)}</span>
                 </div>
                 
                 <div className="flex justify-between items-center pt-2 border-t-2 border-red-300">

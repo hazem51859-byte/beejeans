@@ -13,7 +13,9 @@ import {
   FileText,
   Award,
   Clock,
-  RotateCcw
+  RotateCcw,
+  Building2,
+  ClipboardCheck
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI } from '../services/api';
@@ -81,31 +83,36 @@ export default function Layout() {
     { name: 'إدارة الشيفتات', path: '/shift-management', icon: Clock, roles: ['MANAGER'] },
     { name: 'المرتجعات', path: '/returns-management', icon: RotateCcw, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
     
-    // Admin Only - Production System
-    { name: '--- إدارة الإنتاج ---', path: '#production-header', icon: Package, roles: ['ADMIN'], isHeader: true },
-    { name: 'لوحة الإنتاج', path: '/production-dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+    // شغل المكتب
+    { name: '--- شغل المكتب ---', path: '#office-header', icon: Building2, roles: ['ADMIN'], isHeader: true },
+    { name: 'فواتير المكتب', path: '/office-invoices', icon: FileText, roles: ['ADMIN'] },
+    { name: 'التوريدات', path: '/transfers', icon: Package, roles: ['ADMIN'] },
+    { name: 'حالة الشحنات', path: '/shipments', icon: Truck, roles: ['ADMIN'] },
+    { name: 'الخزنة', path: '/vault-management', icon: DollarSign, roles: ['ADMIN'] },
+    { name: 'مصروفات المكتب', path: '/office-expenses', icon: DollarSign, roles: ['ADMIN'] },
+    { name: 'العملاء', path: '/customers', icon: User, roles: ['ADMIN'] },
+    { name: 'الموردين', path: '/suppliers', icon: DollarSign, roles: ['ADMIN'] },
+    { name: 'المخزون', path: '/inventory', icon: Package, roles: ['ADMIN'] },
+    { name: 'الشركاء', path: '/partners', icon: User, roles: ['ADMIN'] },
     { name: 'الأصناف (Master)', path: '/product-master', icon: Package, roles: ['ADMIN'] },
-    { name: 'أنواع الخامات', path: '/fabric-types', icon: Package, roles: ['ADMIN'] },
     { name: 'مخزن القماش', path: '/fabric-warehouse', icon: Warehouse, roles: ['ADMIN'] },
+    { name: 'لوحة الإنتاج', path: '/production-dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
     { name: 'أوامر التصنيع', path: '/manufacturing', icon: Truck, roles: ['ADMIN'] },
     { name: 'أوامر الغسيل', path: '/washing-orders', icon: RotateCcw, roles: ['ADMIN'] },
-    
-    { name: '--- الإدارة العامة ---', path: '#admin-header', icon: Settings, roles: ['ADMIN'], isHeader: true },
-    { name: 'الفروع', path: '/branches', icon: DollarSign, roles: ['ADMIN'] },
-    { name: 'المستخدمين', path: '/users', icon: User, roles: ['ADMIN'] },
-    { name: 'تقييم الكاشيرات', path: '/cashier-performance', icon: Award, roles: ['ADMIN'] },
-    { name: 'الموردين', path: '/suppliers', icon: DollarSign, roles: ['ADMIN'] },
-    { name: 'المصروفات', path: '/expenses', icon: DollarSign, roles: ['ADMIN'] },
-    { name: 'العملاء', path: '/customers', icon: User, roles: ['ADMIN'] },
-    { name: 'الشركاء', path: '/partners', icon: User, roles: ['ADMIN'] },
-    
-    { name: '--- فواتير المكتب ---', path: '#office-header', icon: FileText, roles: ['ADMIN'], isHeader: true },
-    { name: 'فواتير المكتب', path: '/office-invoices', icon: FileText, roles: ['ADMIN'] },
-    { name: 'حالة الشحنات', path: '/shipments', icon: Truck, roles: ['ADMIN'] },
-    
-    { name: '--- التقارير ---', path: '#reports-header', icon: BarChart3, roles: ['ADMIN'], isHeader: true },
     { name: 'التقرير الشهري', path: '/monthly-report', icon: FileText, roles: ['ADMIN'] },
     
+    // شغل الفروع
+    { name: '--- شغل الفروع ---', path: '#branches-header', icon: Building2, roles: ['ADMIN'], isHeader: true },
+    { name: 'الفروع', path: '/branches', icon: Building2, roles: ['ADMIN'] },
+    { name: 'تقارير الفروع', path: '/reports', icon: BarChart3, roles: ['ADMIN'] },
+    { name: 'مصروفات الفروع', path: '/expenses', icon: DollarSign, roles: ['ADMIN'] },
+    { name: 'تقييم الكاشيرات', path: '/cashier-performance', icon: Award, roles: ['ADMIN'] },
+    { name: 'الفواتير', path: '/invoices', icon: FileText, roles: ['ADMIN'] },
+    { name: 'الجرد', path: '/audit', icon: ClipboardCheck, roles: ['ADMIN'] },
+    
+    // الإعدادات
+    { name: '--- الإعدادات ---', path: '#settings-header', icon: Settings, roles: ['ADMIN'], isHeader: true },
+    { name: 'المستخدمين', path: '/users', icon: User, roles: ['ADMIN'] },
     { name: 'الإعدادات', path: '/settings', icon: Settings, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
   ];
 

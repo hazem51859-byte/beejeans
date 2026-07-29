@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, Trash2, DollarSign, Calendar, Filter, X, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, DollarSign, Filter, Building2 } from 'lucide-react';
 import api from '../services/api';
 
-export default function Expenses() {
+export default function OfficeExpenses() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   
   // Filters
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterBranch, setFilterBranch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -20,26 +19,11 @@ export default function Expenses() {
     description: '',
     amount: 0,
     expenseDate: new Date().toISOString().split('T')[0],
-    branchId: '',
     receiptNumber: '',
     notes: '',
   });
 
-  // Queries
-  const { data: expensesResponse, isLoading } = useQuery({
-    queryKey: ['expenses', filterCategory, filterBranch, startDate, endDate],
-    queryFn: async () => {
-      const params = {};
-      if (filterCategory) params.category = filterCategory;
-      if (filterBranch) params.branchId = filterBranch;
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
-      
-      const response = await api.get('/expenses', { params });
-      return response.data;
-    },
-  });
-
+  // جلب المخزن الرئيسي
   const { data: branchesResponse } = useQuery({
     queryKey: ['branches'],
     queryFn: async () => {
@@ -48,15 +32,34 @@ export default function Expenses() {
     },
   });
 
+  const branches = branchesResponse?.data || [];
+  const mainBranch = branches.find(b => b.code === 'MAIN');
+
+  // Queries - فلترة حسب المخزن الرئيسي فقط
+  const { data: expensesResponse, isLoading } = useQuery({
+    queryKey: ['office-expenses', filterCategory, startDate, endDate],
+    queryFn: async () => {
+      const params = {
+        branchId: mainBranch?.id || 'MAIN'  // فقط مصروفات المكتب
+      };
+      if (filterCategory) params.category = filterCategory;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      
+      const response = await api.get('/expenses', { params });
+      return response.data;
+    },
+    enabled: !!mainBranch
+  });
+
   const expenses = expensesResponse?.data?.expenses || [];
   const totalAmount = expensesResponse?.data?.total || 0;
-  const branches = branchesResponse?.data || [];
 
   // Mutations
   const createMutation = useMutation({
     mutationFn: (data) => api.post('/expenses', data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['expenses']);
+      queryClient.invalidateQueries(['office-expenses']);
       setShowModal(false);
       resetForm();
       toast.success('تم تسجيل المصروف بنجاح');
@@ -69,7 +72,7 @@ export default function Expenses() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => api.put(`/expenses/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['expenses']);
+      queryClient.invalidateQueries(['office-expenses']);
       setShowModal(false);
       setEditingExpense(null);
       resetForm();
@@ -83,7 +86,7 @@ export default function Expenses() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/expenses/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries(['expenses']);
+      queryClient.invalidateQueries(['office-expenses']);
       toast.success('تم حذف المصروف');
     },
     onError: (error) => {
@@ -97,7 +100,6 @@ export default function Expenses() {
       description: '',
       amount: 0,
       expenseDate: new Date().toISOString().split('T')[0],
-      branchId: '',
       receiptNumber: '',
       notes: '',
     });
@@ -110,7 +112,6 @@ export default function Expenses() {
       description: expense.description,
       amount: expense.amount,
       expenseDate: new Date(expense.expenseDate).toISOString().split('T')[0],
-      branchId: expense.branchId || '',
       receiptNumber: expense.receiptNumber || '',
       notes: expense.notes || '',
     });
@@ -128,7 +129,7 @@ export default function Expenses() {
     const dataToSend = {
       ...formData,
       amount: parseFloat(formData.amount),
-      branchId: formData.branchId || null
+      branchId: mainBranch?.id || null  // دائماً للمكتب
     };
 
     if (editingExpense) {
@@ -140,7 +141,7 @@ export default function Expenses() {
 
   const getCategoryText = (cat) => {
     const categories = {
-      RENT: 'إيجار فرع / مخزن',
+      RENT: 'إيجار المكتب / المخزن',
       SALARY: 'مرتبات وأجور',
       ELECTRICITY: 'كهرباء',
       WATER: 'مياه',
@@ -166,8 +167,11 @@ export default function Expenses() {
     <div className="space-y-6" dir="rtl">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">مصروفات الفروع</h1>
-          <p className="text-gray-600 mt-1">مصروفات الفروع التشغيلية (إيجار، كهرباء، مرتبات...) وتأثيرها على الأرباح</p>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Building2 className="text-purple-600" />
+            مصروفات المكتب
+          </h1>
+          <p className="text-gray-600 mt-1">مصروفات المخزن الرئيسي والإدارة (إيجار، كهرباء، مرتبات...)</p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn-primary self-start">
           <Plus size={20} />
@@ -178,7 +182,7 @@ export default function Expenses() {
       {/* بطاقة الإجمالي */}
       <div className="card max-w-sm border-r-4 border-red-500 bg-red-50/30 flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-500">إجمالي مصروفات الفروع</p>
+          <p className="text-sm text-gray-500">إجمالي مصروفات المكتب</p>
           <p className="text-3xl font-black text-red-600 mt-1">{totalAmount.toFixed(2)} ج.م</p>
         </div>
         <div className="bg-red-100 p-3 rounded-full text-red-600">
@@ -190,9 +194,9 @@ export default function Expenses() {
       <div className="card">
         <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
           <Filter size={18} />
-          <span>فلترة وتصفية المصروفات</span>
+          <span>فلترة المصروفات</span>
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-semibold mb-1 text-gray-600">فئة المصروف</label>
             <select
@@ -201,26 +205,12 @@ export default function Expenses() {
               className="input-field py-1.5 text-sm"
             >
               <option value="">كل الفئات</option>
-              <option value="RENT">إيجار فرع / مخزن</option>
+              <option value="RENT">إيجار المكتب / المخزن</option>
               <option value="SALARY">مرتبات وأجور</option>
               <option value="ELECTRICITY">كهرباء</option>
               <option value="WATER">مياه</option>
               <option value="PURCHASES">مشتريات نثرية</option>
               <option value="OTHER">مصروفات أخرى</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold mb-1 text-gray-600">الفرع المنسوب له</label>
-            <select
-              value={filterBranch}
-              onChange={(e) => setFilterBranch(e.target.value)}
-              className="input-field py-1.5 text-sm"
-            >
-              <option value="">كل الفروع / عام</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
             </select>
           </div>
 
@@ -259,7 +249,6 @@ export default function Expenses() {
                 <th className="p-3">التاريخ</th>
                 <th className="p-3">الفئة</th>
                 <th className="p-3">الوصف</th>
-                <th className="p-3">الفرع</th>
                 <th className="p-3">رقم الإيصال</th>
                 <th className="p-3 text-left">المبلغ</th>
                 <th className="p-3 text-center">الإجراءات</th>
@@ -279,9 +268,6 @@ export default function Expenses() {
                   <td className="p-3 font-semibold text-gray-800">
                     {expense.description}
                     {expense.notes && <span className="block text-xs text-gray-400 font-normal">{expense.notes}</span>}
-                  </td>
-                  <td className="p-3 text-gray-500">
-                    {expense.branch?.name || 'مصروف عام'}
                   </td>
                   <td className="p-3 font-mono text-gray-600">
                     {expense.receiptNumber || 'N/A'}
@@ -316,7 +302,7 @@ export default function Expenses() {
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">{editingExpense ? 'تعديل مصروف تشغيلي' : 'تسجيل مصروف تشغيلي جديد'}</h2>
+            <h2 className="text-xl font-bold mb-4">{editingExpense ? 'تعديل مصروف المكتب' : 'تسجيل مصروف مكتب جديد'}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">الفئة *</label>
@@ -326,7 +312,7 @@ export default function Expenses() {
                   className="input-field"
                   required
                 >
-                  <option value="RENT">إيجار فرع / مخزن</option>
+                  <option value="RENT">إيجار المكتب / المخزن</option>
                   <option value="SALARY">مرتبات وأجور</option>
                   <option value="ELECTRICITY">كهرباء</option>
                   <option value="WATER">مياه</option>
@@ -370,21 +356,6 @@ export default function Expenses() {
                     required
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">الفرع المنسوب له المصروف</label>
-                <select
-                  value={formData.branchId}
-                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                  className="input-field"
-                >
-                  <option value="">مصروف عام / الإدارة</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">اختياري - حدد إذا كان المصروف خاصاً بفرع معين لربطه بتقريره</p>
               </div>
 
               <div>

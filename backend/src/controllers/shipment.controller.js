@@ -82,7 +82,9 @@ exports.updateShipmentStatus = async (req, res) => {
       shippedAt,
       estimatedDelivery,
       deliveredAt,
-      trackingNotes
+      trackingNotes,
+      shipmentCompany,
+      shipmentBill
     } = req.body;
     
     const userId = req.user.id;
@@ -101,6 +103,10 @@ exports.updateShipmentStatus = async (req, res) => {
       trackingNotes,
       updatedBy: userId
     };
+
+    // تحديث بيانات الشحن إذا تم إرسالها
+    if (shipmentCompany) updateData.shipmentCompany = shipmentCompany;
+    if (shipmentBill) updateData.shipmentBill = shipmentBill;
 
     if (shippedAt) updateData.shippedAt = new Date(shippedAt);
     if (estimatedDelivery) updateData.estimatedDelivery = new Date(estimatedDelivery);

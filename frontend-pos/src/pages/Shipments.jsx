@@ -7,6 +7,11 @@ export default function Shipments() {
   const [shipments, setShipments] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showShipModal, setShowShipModal] = useState(false);
+  const [shipmentData, setShipmentData] = useState({
+    shipmentCompany: '',
+    shipmentBill: ''
+  });
   const [filter, setFilter] = useState({
     status: '',
     shipmentCompany: ''
@@ -32,21 +37,41 @@ export default function Shipments() {
     }
   };
 
-  const updateStatus = async (shipmentId, newStatus) => {
+  const updateStatus = async (shipmentId, newStatus, shipmentInfo = {}) => {
     try {
       await api.put(`/shipments/${shipmentId}/status`, {
         status: newStatus,
         shippedAt: newStatus === 'SHIPPED' ? new Date().toISOString() : undefined,
-        deliveredAt: newStatus === 'DELIVERED' ? new Date().toISOString() : undefined
+        deliveredAt: newStatus === 'DELIVERED' ? new Date().toISOString() : undefined,
+        ...shipmentInfo
       });
       
       alert('✅ تم تحديث حالة الشحنة');
       fetchShipments();
       setShowModal(false);
+      setShowShipModal(false);
+      setShipmentData({ shipmentCompany: '', shipmentBill: '' });
     } catch (error) {
       console.error('Error updating status:', error);
       alert('❌ فشل تحديث الحالة');
     }
+  };
+
+  const handleShipClick = (shipment) => {
+    setSelectedShipment(shipment);
+    setShipmentData({
+      shipmentCompany: shipment.shipmentCompany || '',
+      shipmentBill: shipment.shipmentBill || ''
+    });
+    setShowShipModal(true);
+  };
+
+  const handleShipSubmit = () => {
+    if (!shipmentData.shipmentCompany.trim() || !shipmentData.shipmentBill.trim()) {
+      alert('⚠️ يرجى إدخال اسم الشركة ورقم البوليصة');
+      return;
+    }
+    updateStatus(selectedShipment.id, 'SHIPPED', shipmentData);
   };
 
   const confirmPayment = async (shipmentId) => {
@@ -193,7 +218,7 @@ export default function Shipments() {
                   <div className="pt-3 border-t space-y-2">
                     {shipment.status === 'PENDING' && (
                       <button
-                        onClick={() => updateStatus(shipment.id, 'SHIPPED')}
+                        onClick={() => handleShipClick(shipment)}
                         className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                       >
                         <Truck size={16} className="inline mr-2" />
@@ -318,6 +343,78 @@ export default function Shipments() {
                   className="px-6 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
                 >
                   إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ship Modal */}
+      {showShipModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                  <Truck className="text-blue-600" />
+                  تأكيد الشحن
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowShipModal(false);
+                    setShipmentData({ shipmentCompany: '', shipmentBill: '' });
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    اسم شركة الشحن *
+                  </label>
+                  <input
+                    type="text"
+                    value={shipmentData.shipmentCompany}
+                    onChange={(e) => setShipmentData({ ...shipmentData, shipmentCompany: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="مثال: فيدكس، أرامكس..."
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    رقم البوليصة *
+                  </label>
+                  <input
+                    type="text"
+                    value={shipmentData.shipmentBill}
+                    onChange={(e) => setShipmentData({ ...shipmentData, shipmentBill: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="رقم تتبع الشحنة"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowShipModal(false);
+                    setShipmentData({ shipmentCompany: '', shipmentBill: '' });
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleShipSubmit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  تأكيد الشحن
                 </button>
               </div>
             </div>

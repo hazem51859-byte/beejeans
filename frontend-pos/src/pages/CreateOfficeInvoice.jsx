@@ -18,6 +18,7 @@ export default function CreateOfficeInvoice() {
   const [shipmentBill, setShipmentBill] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // CASH, CARD, CREDIT
   const [notes, setNotes] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
   
   // الأصناف
   const [items, setItems] = useState([
@@ -89,9 +90,13 @@ export default function CreateOfficeInvoice() {
       return sum + (item.quantity * item.unitSalePrice);
     }, 0);
     
+    const discount = parseFloat(discountAmount) || 0;
+    const total = subtotal - discount;
+    
     return {
       subtotal,
-      total: subtotal
+      discount,
+      total: total > 0 ? total : 0
     };
   };
 
@@ -137,7 +142,7 @@ export default function CreateOfficeInvoice() {
         shipmentCompany: invoiceType === 'SHIPMENT' ? shipmentCompany : undefined,
         shipmentBill: invoiceType === 'SHIPMENT' ? shipmentBill : undefined,
         items: validItems,
-        discountAmount: 0,
+        discountAmount: totals.discount,
         paymentMethod,
         paidAmount: paymentMethod === 'CREDIT' ? 0 : totals.total,
         notes
@@ -169,7 +174,7 @@ export default function CreateOfficeInvoice() {
     }
   };
 
-  const { subtotal, total } = calculateTotals();
+  const { subtotal, discount, total } = calculateTotals();
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -398,12 +403,31 @@ export default function CreateOfficeInvoice() {
           </div>
 
           {/* المجاميع */}
-          <div className="bg-gray-100 p-4 rounded-lg space-y-2">
+          <div className="bg-gray-100 p-4 rounded-lg space-y-3">
             <div className="flex justify-between text-lg">
               <span>المجموع الفرعي:</span>
               <span className="font-bold">{subtotal.toFixed(2)} ج</span>
             </div>
-            <div className="flex justify-between text-xl font-bold text-blue-600">
+            
+            {/* حقل الخصم */}
+            <div className="flex justify-between items-center border-t pt-2">
+              <label className="text-sm font-medium text-gray-700">الخصم:</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={subtotal}
+                  step="0.01"
+                  value={discountAmount}
+                  onChange={(e) => setDiscountAmount(e.target.value)}
+                  className="w-32 p-2 border rounded-lg text-right"
+                  placeholder="0.00"
+                />
+                <span className="text-gray-600">ج</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between text-xl font-bold text-blue-600 border-t pt-2">
               <span>الإجمالي:</span>
               <span>{total.toFixed(2)} ج</span>
             </div>

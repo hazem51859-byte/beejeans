@@ -1,7 +1,4 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tantml:function_calls>
-<invoke name="strReplace">
-<parameter name="newStr">import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { FileText, Search, Calendar, DollarSign, AlertCircle, Package, TrendingUp } from 'lucide-react';

@@ -45,9 +45,20 @@ export default function OfficeInvoices() {
       if (filter.endDate) params.append('endDate', filter.endDate);
 
       const response = await api.get(`/office-invoices/dashboard?${params}`);
-      setDashboard(response.data);
+      console.log('Office Invoices Dashboard Data:', response.data);
+      
+      // Handle both response formats
+      const dashboardData = response.data.data || response.data;
+      setDashboard(dashboardData);
     } catch (error) {
       console.error('Error fetching dashboard:', error);
+      // Set default dashboard on error
+      setDashboard({
+        totalSales: 0,
+        totalProfit: 0,
+        totalCollected: 0,
+        totalRemaining: 0
+      });
     }
   };
 

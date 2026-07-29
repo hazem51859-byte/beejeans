@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, Download, FileSpreadsheet, FileBarcode } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, Barcode } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JsBarcode from 'jsbarcode';
 import { jsPDF } from 'jspdf';
@@ -173,7 +173,7 @@ export default function BarcodeGenerator() {
         {/* Header */}
         <div className="border-b p-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-t-lg">
           <div className="flex items-center gap-3">
-            <FileBarcode size={32} />
+            <Barcode size={32} />
             <div>
               <h1 className="text-3xl font-bold">🏷️ توليد الباركود</h1>
               <p className="text-purple-100 mt-1">رفع ملف Excel وإنشاء ملف PDF بالباركود</p>
@@ -285,7 +285,7 @@ export default function BarcodeGenerator() {
           {data.length > 0 && (
             <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-6">
               <h3 className="font-bold text-lg text-purple-900 mb-4 flex items-center gap-2">
-                <FileBarcode size={24} className="text-purple-600" />
+                <Barcode size={24} className="text-purple-600" />
                 الخطوة 3: توليد ملف PDF
               </h3>
               
@@ -301,7 +301,7 @@ export default function BarcodeGenerator() {
                   </>
                 ) : (
                   <>
-                    <FileBarcode size={24} />
+                    <Barcode size={24} />
                     توليد {data.length} باركود
                   </>
                 )}

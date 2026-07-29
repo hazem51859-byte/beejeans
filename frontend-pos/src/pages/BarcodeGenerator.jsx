@@ -257,8 +257,9 @@ export default function BarcodeGenerator() {
           const serialCanvas = document.createElement('canvas');
           const serialCtx = serialCanvas.getContext('2d');
           const serialFontSize = 28;
+          const currentSerial = String(item.serial); // نسخة محلية
           serialCtx.font = `bold ${serialFontSize}px Arial`;
-          const serialMetrics = serialCtx.measureText(item.serial);
+          const serialMetrics = serialCtx.measureText(currentSerial);
           const serialWidth = serialMetrics.width + 40;
           
           serialCanvas.width = serialWidth;
@@ -269,9 +270,9 @@ export default function BarcodeGenerator() {
           serialCtx.textAlign = 'center';
           serialCtx.textBaseline = 'middle';
           serialCtx.fillStyle = '#000000';
-          serialCtx.fillText(item.serial, serialWidth / 2, (serialFontSize + 20) / 2);
+          serialCtx.fillText(currentSerial, serialWidth / 2, (serialFontSize + 20) / 2);
           
-          // إضافة السيريال كصورة
+          // إضافة السيريال كصورة فوراً
           const serialImgData = serialCanvas.toDataURL('image/png');
           const serialImgWidth = Math.min(serialWidth / 3.5, 80);
           const serialImgHeight = (serialFontSize + 20) / 3.5;
@@ -286,28 +287,28 @@ export default function BarcodeGenerator() {
             serialImgHeight
           );
 
-          // إنشاء canvas لاسم المنتج
-          const productCanvas = document.createElement('canvas');
-          const productCtx = productCanvas.getContext('2d');
+          // إنشاء canvas لاسم المنتج (منفصل تماماً)
+          const productCanvas2 = document.createElement('canvas');
+          const productCtx2 = productCanvas2.getContext('2d');
           const productFontSize = 24;
-          const currentProductName = item.productName; // حفظ اسم المنتج الحالي
+          const currentProductName = String(item.productName); // نسخة محلية
           
-          productCtx.font = `${productFontSize}px Arial`;
-          const productMetrics = productCtx.measureText(currentProductName);
+          productCtx2.font = `${productFontSize}px Arial`;
+          const productMetrics = productCtx2.measureText(currentProductName);
           const productWidth = Math.min(productMetrics.width + 40, 600);
           
-          productCanvas.width = productWidth;
-          productCanvas.height = productFontSize + 20;
+          productCanvas2.width = productWidth;
+          productCanvas2.height = productFontSize + 20;
           
           // رسم اسم المنتج
-          productCtx.font = `${productFontSize}px Arial`;
-          productCtx.textAlign = 'center';
-          productCtx.textBaseline = 'middle';
-          productCtx.fillStyle = '#000000';
-          productCtx.fillText(currentProductName, productWidth / 2, (productFontSize + 20) / 2);
+          productCtx2.font = `${productFontSize}px Arial`;
+          productCtx2.textAlign = 'center';
+          productCtx2.textBaseline = 'middle';
+          productCtx2.fillStyle = '#000000';
+          productCtx2.fillText(currentProductName, productWidth / 2, (productFontSize + 20) / 2);
           
-          // إضافة اسم المنتج كصورة
-          const productImgData = productCanvas.toDataURL('image/png');
+          // إضافة اسم المنتج كصورة فوراً
+          const productImgData = productCanvas2.toDataURL('image/png');
           const productImgWidth = Math.min(productWidth / 3.5, 85);
           const productImgHeight = (productFontSize + 20) / 3.5;
           const productX = (pageWidth - productImgWidth) / 2;

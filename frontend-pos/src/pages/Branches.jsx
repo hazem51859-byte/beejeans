@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { Plus, Edit2, Store, Link as LinkIcon, Trash2 } from 'lucide-react';
 import api from '../services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'https://bee-jeans-pos-production.up.railway.app/api/v1';
 
 const branchAPI = {
   getAll: () => api.get('/branches').then(res => res.data),

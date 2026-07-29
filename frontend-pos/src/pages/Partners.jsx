@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { Plus, Edit2, Users, DollarSign, TrendingUp, TrendingDown, X } from 'lucide-react';
 import api from '../services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'https://bee-jeans-pos-production.up.railway.app/api/v1';
 
 const partnerAPI = {
   getAll: () => api.get('/partners'),

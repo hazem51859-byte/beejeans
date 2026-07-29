@@ -46,7 +46,8 @@ export default function Dashboard() {
     queryKey: ['office-invoices-dashboard'],
     queryFn: async () => {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/v1/office-invoices/dashboard', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://bee-jeans-pos-production.up.railway.app/api/v1';
+      const response = await fetch(`${API_URL}/office-invoices/dashboard`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

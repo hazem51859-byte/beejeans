@@ -64,21 +64,6 @@ export default function InventoryAudit() {
       setLoading(false);
     }
   };
-      if (filterBranch) params.branchId = filterBranch;
-      if (filterStatus) params.status = filterStatus;
-
-      const response = await api.get('/audits', { params });
-      
-      if (response.data.success) {
-        setAudits(response.data.audits);
-      }
-    } catch (error) {
-      console.error('Error fetching audits:', error);
-      alert('حدث خطأ أثناء جلب الجرود');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCreateAudit = async (e) => {
     e.preventDefault();

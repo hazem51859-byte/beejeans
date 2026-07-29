@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Wallet, TrendingUp, TrendingDown, CreditCard, DollarSign, 
-  Building, ArrowRightLeft, CheckCircle, XCircle, AlertCircle,
+  ArrowRightLeft, CheckCircle, AlertCircle,
   Users, Clock
 } from 'lucide-react';
 import api from '../services/api';
@@ -17,24 +17,15 @@ export default function VaultManagement() {
   const userBranchId = user?.branchId;
   
   // States
-  const [selectedBranch, setSelectedBranch] = useState(isAdmin ? 'all' : userBranchId);
   const [transactionType, setTransactionType] = useState('all');
   const [showTransferModal, setShowTransferModal] = useState(false);
-  const [showDrawerModal, setShowDrawerModal] = useState(false);
   const [showPrepareDrawerModal, setShowPrepareDrawerModal] = useState(false);
-  const [selectedShift, setSelectedShift] = useState(null);
   
   // Transfer money form
   const [transferForm, setTransferForm] = useState({
     toBranchId: '',
     amount: '',
     reason: '',
-    notes: ''
-  });
-  
-  // Drawer clear form
-  const [drawerForm, setDrawerForm] = useState({
-    actualAmount: '',
     notes: ''
   });
 
@@ -45,17 +36,17 @@ export default function VaultManagement() {
     notes: ''
   });
 
-  // Queries
+  // Queries - Main Factory Vault Only
   const { data: vaultsData, isLoading } = useQuery({
     queryKey: ['vaults'],
     queryFn: () => api.get('/vault').then(r => r.data)
   });
 
   const { data: transactionsData } = useQuery({
-    queryKey: ['vault-transactions', selectedBranch, transactionType],
+    queryKey: ['vault-transactions', transactionType],
     queryFn: () => {
       const params = new URLSearchParams({
-        ...(selectedBranch !== 'all' && { branchId: selectedBranch }),
+        branchId: '1', // Main factory only
         ...(transactionType !== 'all' && { type: transactionType }),
         limit: '100'
       });
@@ -110,21 +101,6 @@ export default function VaultManagement() {
     }
   });
 
-  const clearDrawerMutation = useMutation({
-    mutationFn: (data) => api.post('/vault/transfer-drawer', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['vaults']);
-      queryClient.invalidateQueries(['active-drawers']);
-      setShowDrawerModal(false);
-      setSelectedShift(null);
-      setDrawerForm({ actualAmount: '', notes: '' });
-      toast.success('تم تجريد الدرج وتحويل الأموال للخزينة');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || 'حدث خطأ');
-    }
-  });
-
   const prepareDrawerMutation = useMutation({
     mutationFn: (data) => api.post('/vault/prepare-drawer', data),
     onSuccess: () => {
@@ -145,16 +121,14 @@ export default function VaultManagement() {
   const activeDrawers = drawersData?.data || [];
   const cashiers = cashiersData?.data || [];
 
-  // Filter branches for managers
-  const displayBranches = isAdmin 
-    ? vaults.branches 
-    : vaults.branches?.filter(b => b.id === userBranchId);
+  // Get main factory vault (ID = 1)
+  const mainFactoryVault = vaults.branches?.find(b => b.id === '1') || {};
+  const mainFactoryBalance = mainFactoryVault.vaultBalance || 0;
+  const mainFactoryCardBalance = mainFactoryVault.cardVaultBalance || 0;
 
-  const displayedTotalBalance = displayBranches?.reduce((sum, b) => sum + (b.vaultBalance || 0), 0) || 0;
-
-  // Get branches list for transfer dropdown
+  // Get branches list for transfer dropdown (exclude main factory)
   const transferableBranches = vaults.branches?.filter(b => 
-    b.id !== userBranchId // Can't transfer to same branch
+    b.id !== '1' // Can't transfer to main factory
   ) || [];
 
   const handleTransferSubmit = (e) => {
@@ -164,19 +138,6 @@ export default function VaultManagement() {
       return;
     }
     transferMoneyMutation.mutate(transferForm);
-  };
-
-  const handleDrawerSubmit = (e) => {
-    e.preventDefault();
-    if (!drawerForm.actualAmount || !selectedShift) {
-      toast.error('الرجاء إدخال المبلغ');
-      return;
-    }
-    clearDrawerMutation.mutate({
-      shiftId: selectedShift.id,
-      actualAmount: parseFloat(drawerForm.actualAmount),
-      notes: drawerForm.notes
-    });
   };
 
   const handlePrepareDrawerSubmit = (e) => {
@@ -242,10 +203,10 @@ export default function VaultManagement() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Wallet size={28} />
-            {isAdmin ? 'إدارة الخزائن' : 'خزينة الفرع'}
+            خزينة المصنع الرئيسي
           </h1>
           <p className="text-gray-600 mt-1">
-            {isAdmin ? 'إدارة ومتابعة خزائن جميع الفروع' : 'متابعة خزينة فرعك والمعاملات'}
+            إدارة ومتابعة خزينة المصنع الرئيسي والمعاملات المالية
           </p>
         </div>
         
@@ -274,45 +235,43 @@ export default function VaultManagement() {
         <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">
-              {isAdmin ? 'إجمالي الخزائن (نقدي)' : 'رصيد الخزينة (نقدي)'}
+              خزينة المصنع (نقدي)
             </h3>
             <Wallet size={24} className="opacity-75" />
           </div>
           <p className="text-3xl font-bold">
-            {(isAdmin ? vaults.summary?.totalVaultBalance || 0 : displayedTotalBalance).toLocaleString('ar-EG')} جنيه
+            {mainFactoryBalance.toLocaleString('ar-EG')} جنيه
           </p>
           <p className="text-xs opacity-75 mt-2">
-            {isAdmin ? `${vaults.summary?.branchCount || 0} فرع` : user?.branch?.name}
+            المصنع الرئيسي
           </p>
         </div>
 
         <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">
-              {isAdmin ? 'إجمالي الفيزا' : 'رصيد الفيزا'}
+              رصيد الفيزا
             </h3>
             <CreditCard size={24} className="opacity-75" />
           </div>
           <p className="text-3xl font-bold">
-            {(isAdmin ? vaults.summary?.totalCardVaultBalance || 0 : (vaults.branches?.[0]?.cardVaultBalance || 0)).toLocaleString('ar-EG')} جنيه
+            {mainFactoryCardBalance.toLocaleString('ar-EG')} جنيه
           </p>
           <p className="text-xs opacity-75 mt-2">
             معاملات الفيزا
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium opacity-90">الدروج النشطة</h3>
-              <Users size={24} className="opacity-75" />
-            </div>
-            <p className="text-3xl font-bold">{activeDrawers.length}</p>
-            <p className="text-xs opacity-75 mt-2">
-              كاشير يعمل الآن
-            </p>
+        <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">الدروج النشطة</h3>
+            <Users size={24} className="opacity-75" />
           </div>
-        )}
+          <p className="text-3xl font-bold">{activeDrawers.length}</p>
+          <p className="text-xs opacity-75 mt-2">
+            كاشير يعمل الآن
+          </p>
+        </div>
 
         <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white">
           <div className="flex items-center justify-between mb-2">
@@ -366,16 +325,15 @@ export default function VaultManagement() {
         </div>
       )}
 
-      {/* Active Drawers (Admin only) */}
-      {isAdmin && activeDrawers.length > 0 && (
+      {/* Active Drawers */}
+      {activeDrawers.length > 0 && (
         <div className="card">
-          <h2 className="text-lg font-bold mb-4">الدروج النشطة</h2>
+          <h2 className="text-lg font-bold mb-4">الدروج النشطة في المصنع</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b">
                   <th className="text-right py-3 px-4">الكاشير</th>
-                  <th className="text-right py-3 px-4">الفرع</th>
                   <th className="text-right py-3 px-4">رصيد افتتاحي</th>
                   <th className="text-right py-3 px-4">مبيعات نقدية</th>
                   <th className="text-right py-3 px-4">الرصيد الحالي</th>
@@ -386,7 +344,6 @@ export default function VaultManagement() {
                 {activeDrawers.map((drawer) => (
                   <tr key={drawer.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4 font-medium">{drawer.user.fullName}</td>
-                    <td className="py-3 px-4">{drawer.branch.name}</td>
                     <td className="py-3 px-4">{drawer.openingBalance.toLocaleString('ar-EG')} جنيه</td>
                     <td className="py-3 px-4 text-green-600">+{drawer.totalCashSales.toLocaleString('ar-EG')} جنيه</td>
                     <td className="py-3 px-4">
@@ -403,59 +360,11 @@ export default function VaultManagement() {
         </div>
       )}
 
-      {/* Branch Vaults */}
-      <div className="card">
-        <h2 className="text-lg font-bold mb-4">{isAdmin ? 'خزائن الفروع' : 'تفاصيل الخزينة'}</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-right py-3 px-4">الفرع</th>
-                <th className="text-right py-3 px-4">الكود</th>
-                <th className="text-right py-3 px-4">رصيد الخزينة</th>
-                <th className="text-right py-3 px-4">عدد المعاملات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayBranches?.map((branch) => (
-                <tr key={branch.id} className="border-b hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium">{branch.name}</td>
-                  <td className="py-3 px-4 text-gray-600">{branch.code}</td>
-                  <td className="py-3 px-4">
-                    <span className="font-bold text-primary-600">
-                      {branch.vaultBalance.toLocaleString('ar-EG')} جنيه
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">
-                    {branch._count.vaultTransactions}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Transactions */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">سجل المعاملات</h2>
+          <h2 className="text-lg font-bold">سجل معاملات المصنع الرئيسي</h2>
           <div className="flex gap-2">
-            {isAdmin && (
-              <select
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                className="input-field text-sm py-2"
-              >
-                <option value="all">جميع الفروع</option>
-                {vaults.branches?.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
             <select
               value={transactionType}
               onChange={(e) => setTransactionType(e.target.value)}
@@ -519,7 +428,7 @@ export default function VaultManagement() {
       {showTransferModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h2 className="text-xl font-bold mb-4">تحويل أموال للمصنع</h2>
+            <h2 className="text-xl font-bold mb-4">تحويل أموال من المصنع لفرع</h2>
             <form onSubmit={handleTransferSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">الفرع المستقبل *</label>
@@ -551,7 +460,7 @@ export default function VaultManagement() {
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  الرصيد المتاح: {displayedTotalBalance.toLocaleString('ar-EG')} جنيه
+                  الرصيد المتاح: {mainFactoryBalance.toLocaleString('ar-EG')} جنيه
                 </p>
               </div>
 
@@ -562,7 +471,7 @@ export default function VaultManagement() {
                   value={transferForm.reason}
                   onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
                   className="input-field"
-                  placeholder="مثال: تسليم أرباح الفرع"
+                  placeholder="مثال: تمويل الفرع"
                   required
                 />
               </div>
@@ -607,7 +516,7 @@ export default function VaultManagement() {
             <form onSubmit={handlePrepareDrawerSubmit} className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                 <p className="text-sm text-blue-800">
-                  💡 سيتم خصم المبلغ من خزينة الفرع وتسجيله كرصيد افتتاحي للدرج
+                  💡 سيتم خصم المبلغ من خزينة المصنع وتسجيله كرصيد افتتاحي للدرج
                 </p>
               </div>
 
@@ -624,7 +533,7 @@ export default function VaultManagement() {
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  الرصيد المتاح: {displayedTotalBalance.toLocaleString('ar-EG')} جنيه
+                  الرصيد المتاح: {mainFactoryBalance.toLocaleString('ar-EG')} جنيه
                 </p>
               </div>
 

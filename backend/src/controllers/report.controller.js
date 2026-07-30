@@ -451,3 +451,340 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
     next(error);
   }
 };
+
+
+/**
+ * Get Audits Report (for monthly report)
+ * تقرير الجرود والخسائر
+ */
+exports.getAuditsReport = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const start = startDate ? new Date(startDate) : dayjs().startOf('month').toDate();
+    const end = endDate ? new Date(endDate) : dayjs().endOf('month').toDate();
+
+    // Get all settled audits in the period
+    const audits = await prisma.inventoryAudit.findMany({
+      where: {
+        status: 'SETTLED', // فقط الجرود المكتملة والمسواة
+        settledAt: {
+          gte: start,
+          lte: end
+        }
+      },
+      include: {
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        items: {
+          where: {
+            differenceType: { in: ['SHORTAGE', 'SURPLUS'] } // فقط الأصناف فيها فروقات
+          },
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                barcode: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        settledAt: 'desc'
+      }
+    });
+
+    // حساب الإجماليات
+    const totalAudits = audits.length;
+    
+    // حساب الخسائر بسعر التكلفة (العجز فقط)
+    const totalShortageValue = audits.reduce((sum, audit) => {
+      const auditShortage = audit.items
+        .filter(item => item.differenceType === 'SHORTAGE')
+        .reduce((itemSum, item) => {
+          // الخسارة = كمية العجز × سعر التكلفة
+          return itemSum + (Math.abs(item.differenceQty) * item.unitCostPrice);
+        }, 0);
+      return sum + auditShortage;
+    }, 0);
+
+    // حساب الزيادات بسعر التكلفة
+    const totalSurplusValue = audits.reduce((sum, audit) => {
+      const auditSurplus = audit.items
+        .filter(item => item.differenceType === 'SURPLUS')
+        .reduce((itemSum, item) => {
+          // الزيادة = كمية الزيادة × سعر التكلفة
+          return itemSum + (item.differenceQty * item.unitCostPrice);
+        }, 0);
+      return sum + auditSurplus;
+    }, 0);
+
+    const totalShortageQty = audits.reduce((sum, audit) => sum + (audit.totalShortageQty || 0), 0);
+    const totalSurplusQty = audits.reduce((sum, audit) => sum + (audit.totalSurplusQty || 0), 0);
+
+    // تفاصيل كل جرد
+    const auditDetails = audits.map(audit => {
+      // حساب الخسارة الفعلية لهذا الجرد (بسعر التكلفة)
+      const actualLoss = audit.items
+        .filter(item => item.differenceType === 'SHORTAGE')
+        .reduce((sum, item) => sum + (Math.abs(item.differenceQty) * item.unitCostPrice), 0);
+
+      const actualGain = audit.items
+        .filter(item => item.differenceType === 'SURPLUS')
+        .reduce((sum, item) => sum + (item.differenceQty * item.unitCostPrice), 0);
+
+      return {
+        id: audit.id,
+        auditNumber: audit.auditNumber,
+        branch: audit.branch,
+        settledAt: audit.settledAt,
+        totalItems: audit.totalItems,
+        itemsWithShortage: audit.itemsWithShortage,
+        itemsWithSurplus: audit.itemsWithSurplus,
+        totalShortageQty: audit.totalShortageQty,
+        totalSurplusQty: audit.totalSurplusQty,
+        actualLoss, // الخسارة الفعلية بسعر التكلفة
+        actualGain, // الزيادة الفعلية بسعر التكلفة
+        netLoss: actualLoss - actualGain, // صافي الخسارة
+        items: audit.items.map(item => ({
+          product: item.product,
+          expectedQty: item.expectedQty,
+          actualQty: item.actualQty,
+          differenceQty: item.differenceQty,
+          differenceType: item.differenceType,
+          unitCostPrice: item.unitCostPrice,
+          actualDifferenceValue: Math.abs(item.differenceQty) * item.unitCostPrice // الخسارة الفعلية للصنف
+        }))
+      };
+    });
+
+    // صافي الخسارة = الخسائر - الزيادات
+    const netLoss = totalShortageValue - totalSurplusValue;
+
+    res.json({
+      success: true,
+      data: {
+        totalAudits,
+        totalShortageQty,
+        totalSurplusQty,
+        totalShortageValue, // إجمالي خسائر العجز بسعر التكلفة
+        totalSurplusValue,  // إجمالي الزيادات بسعر التكلفة
+        netLoss,            // صافي الخسارة الفعلية
+        audits: auditDetails
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get Branch Sales Report (excludes Main Warehouse)
+ * تقرير مبيعات الفروع فقط بدون المخزن الرئيسي
+ */
+exports.getBranchSalesReport = async (req, res, next) => {
+  try {
+    const { startDate, endDate, branchId } = req.query;
+
+    // Build date filter
+    const dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.createdAt.lte = end;
+      }
+    }
+
+    // Get all branches (exclude MAIN warehouse)
+    const branches = await prisma.branch.findMany({
+      where: {
+        isActive: true,
+        code: { not: 'MAIN' } // Exclude main warehouse
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true
+      }
+    });
+
+    // Build branch filter
+    const branchFilter = branchId 
+      ? { id: branchId }
+      : { 
+          isActive: true,
+          code: { not: 'MAIN' }
+        };
+
+    // Get sales data for branches
+    const sales = await prisma.sale.findMany({
+      where: {
+        ...dateFilter,
+        status: 'COMPLETED',
+        branch: branchFilter
+      },
+      include: {
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                costPrice: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Calculate totals by branch
+    const branchSales = {};
+    const productSales = {};
+    
+    branches.forEach(branch => {
+      branchSales[branch.id] = {
+        branch,
+        totalSales: 0,
+        totalCost: 0,
+        totalQuantity: 0,
+        totalProfit: 0,
+        salesCount: 0,
+        products: {}
+      };
+    });
+
+    sales.forEach(sale => {
+      const branchId = sale.branchId;
+      if (!branchSales[branchId]) return;
+
+      branchSales[branchId].totalSales += sale.total;
+      branchSales[branchId].salesCount += 1;
+      
+      sale.items.forEach(item => {
+        const costPrice = parseFloat(item.product?.costPrice || 0);
+        const sellingPrice = parseFloat(item.unitPrice || 0);
+        const quantity = parseInt(item.quantity || 0);
+        
+        const itemCost = costPrice * quantity;
+        const itemRevenue = sellingPrice * quantity;
+        const itemProfit = itemRevenue - itemCost;
+        
+        branchSales[branchId].totalCost += itemCost;
+        branchSales[branchId].totalProfit += itemProfit;
+        branchSales[branchId].totalQuantity += quantity;
+
+        // Track product sales
+        const productId = item.productId;
+        if (!branchSales[branchId].products[productId]) {
+          branchSales[branchId].products[productId] = {
+            product: item.product,
+            quantity: 0,
+            totalSales: 0,
+            totalCost: 0,
+            profit: 0
+          };
+        }
+
+        branchSales[branchId].products[productId].quantity += quantity;
+        branchSales[branchId].products[productId].totalSales += itemRevenue;
+        branchSales[branchId].products[productId].totalCost += itemCost;
+        branchSales[branchId].products[productId].profit += itemProfit;
+
+        // Track overall product sales
+        if (!productSales[productId]) {
+          productSales[productId] = {
+            product: item.product,
+            totalQuantity: 0,
+            totalSales: 0,
+            branchesCount: new Set()
+          };
+        }
+        productSales[productId].totalQuantity += item.quantity;
+        productSales[productId].totalSales += item.subtotal;
+        productSales[productId].branchesCount.add(branchId);
+      });
+    });
+
+    // Convert products object to array
+    Object.keys(branchSales).forEach(branchId => {
+      branchSales[branchId].products = Object.values(branchSales[branchId].products)
+        .sort((a, b) => b.totalSales - a.totalSales);
+    });
+
+    // Convert to array and sort by sales
+    const branchSalesArray = Object.values(branchSales)
+      .sort((a, b) => b.totalSales - a.totalSales);
+
+    // Top products across all branches
+    const topProducts = Object.values(productSales)
+      .map(p => ({
+        ...p,
+        branchesCount: p.branchesCount.size
+      }))
+      .sort((a, b) => b.totalSales - a.totalSales)
+      .slice(0, 10);
+
+    // Calculate totals
+    const totals = {
+      totalSales: branchSalesArray.reduce((sum, b) => sum + b.totalSales, 0),
+      totalProfit: branchSalesArray.reduce((sum, b) => sum + b.totalProfit, 0),
+      totalQuantity: branchSalesArray.reduce((sum, b) => sum + b.totalQuantity, 0),
+      totalSalesCount: branchSalesArray.reduce((sum, b) => sum + b.salesCount, 0),
+      branchesCount: branchSalesArray.length
+    };
+
+    // Get today's sales for comparison
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todaySales = await prisma.sale.aggregate({
+      where: {
+        createdAt: { gte: today },
+        status: 'COMPLETED',
+        branch: {
+          isActive: true,
+          code: { not: 'MAIN' }
+        }
+      },
+      _sum: {
+        total: true
+      },
+      _count: true
+    });
+
+    res.json({
+      success: true,
+      data: {
+        branches: branchSalesArray,
+        topProducts,
+        totals,
+        today: {
+          sales: todaySales._sum.total || 0,
+          count: todaySales._count || 0
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};

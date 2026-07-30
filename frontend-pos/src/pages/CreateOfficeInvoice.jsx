@@ -24,7 +24,7 @@ export default function CreateOfficeInvoice() {
   
   // الأصناف
   const [items, setItems] = useState([
-    { productId: '', productCode: '', quantity: 1, unitSalePrice: 0 }
+    { productId: '', productCode: '', quantity: 1, unitSalePrice: 0, availableQuantity: 0 }
   ]);
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function CreateOfficeInvoice() {
   };
 
   // بحث المنتج بالكود
-  const handleProductCodeChange = (index, code) => {
+  const handleProductCodeChange = async (index, code) => {
     const updated = [...items];
     updated[index].productCode = code;
     
@@ -70,9 +70,28 @@ export default function CreateOfficeInvoice() {
     if (product) {
       updated[index].productId = product.id;
       updated[index].unitSalePrice = product.sellingPrice || product.costPrice * 1.3;
+      
+      // جلب الكمية المتاحة في المخزن الرئيسي
+      try {
+        const inventoryRes = await api.get(`/inventory/product/${product.id}`);
+        const inventoryData = inventoryRes.data?.data || inventoryRes.data;
+        // البحث عن المخزن الرئيسي بكود MAIN أو أكبر كمية موجودة
+        const mainInventory = inventoryData.find(inv => 
+          inv.branch?.code === 'MAIN' || inv.branchId === '550e8400-e29b-41d4-a716-446655440000'
+        );
+        // لو ملقاش MAIN خد الإجمالي
+        const totalQty = mainInventory 
+          ? mainInventory.quantity 
+          : inventoryData.reduce((sum, inv) => sum + (inv.quantity || 0), 0);
+        updated[index].availableQuantity = totalQty;
+      } catch (err) {
+        console.error('Error fetching inventory:', err);
+        updated[index].availableQuantity = 0;
+      }
     } else {
       updated[index].productId = '';
       updated[index].unitSalePrice = 0;
+      updated[index].availableQuantity = 0;
     }
     
     setItems(updated);
@@ -96,7 +115,7 @@ export default function CreateOfficeInvoice() {
 
   // إضافة صنف جديد
   const addItem = () => {
-    setItems([...items, { productId: '', productCode: '', quantity: 1, unitSalePrice: 0 }]);
+    setItems([...items, { productId: '', productCode: '', quantity: 1, unitSalePrice: 0, availableQuantity: 0 }]);
   };
 
   // حذف صنف
@@ -417,8 +436,19 @@ export default function CreateOfficeInvoice() {
                         placeholder="اكتب الكود..."
                       />
                       {product && (
-                        <div className="mt-1 text-xs text-green-600 font-medium">
-                          ✓ {product.name} - {item.unitSalePrice} ج
+                        <div className="mt-1 space-y-1">
+                          <div className="text-xs text-green-600 font-medium">
+                            ✓ {product.name} - {item.unitSalePrice} ج
+                          </div>
+                          <div className="text-xs">
+                            <span className="text-gray-600">متاح في المخزن: </span>
+                            <span className={`font-bold ${item.availableQuantity > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                              {item.availableQuantity} قطعة
+                            </span>
+                            {item.quantity > item.availableQuantity && (
+                              <span className="text-red-600 mr-2">⚠ الكمية المطلوبة أكبر من المتاح!</span>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

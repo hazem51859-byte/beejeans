@@ -65,7 +65,7 @@ export default function AuditDetails() {
         // تحديث العنصر في القائمة
         setAudit(prev => ({
           ...prev,
-          items: prev.items.map(item =>
+          items: (prev.items || []).map(item =>
             item.id === itemId ? response.data.item : item
           )
         }));
@@ -156,8 +156,10 @@ export default function AuditDetails() {
     );
   }
 
-  const auditedItemsCount = audit.items.filter(item => item.actualQty !== null).length;
-  const progress = (auditedItemsCount / audit.totalItems) * 100;
+  // Check if items exist, otherwise use empty array
+  const items = audit.items || [];
+  const auditedItemsCount = items.filter(item => item.actualQty !== null).length;
+  const progress = audit.totalItems > 0 ? (auditedItemsCount / audit.totalItems) * 100 : 0;
 
   return (
     <div className="p-6">

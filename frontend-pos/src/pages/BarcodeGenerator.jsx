@@ -109,10 +109,10 @@ export default function BarcodeGenerator() {
       const barcodeCanvas = document.createElement('canvas');
       JsBarcode(barcodeCanvas, quickSerial, {
         format: 'CODE128',
-        width: 2.5,
-        height: 50,
+        width: 3, // Increased from 2.5
+        height: 80, // Increased from 50
         displayValue: false,
-        margin: 3
+        margin: 5 // Increased from 3
       });
 
       const barcodeX = (pageWidth - barcodeWidth) / 2;
@@ -122,23 +122,26 @@ export default function BarcodeGenerator() {
       // إنشاء canvas للسيريال
       const serialCanvas = document.createElement('canvas');
       const serialCtx = serialCanvas.getContext('2d');
-      const serialFontSize = 28;
-      serialCtx.font = `bold ${serialFontSize}px Arial`;
-      const serialMetrics = serialCtx.measureText(quickSerial);
-      const serialWidth = serialMetrics.width + 40;
+      const serialFontSize = 48; // Increased from 28
+      const currentSerial = String(quickSerial);
       
-      serialCanvas.width = serialWidth;
-      serialCanvas.height = serialFontSize + 20;
+      // Set canvas to high resolution
+      serialCanvas.width = 800;
+      serialCanvas.height = 120;
       
+      // Scale for retina
+      serialCtx.scale(2, 2);
+      
+      // Draw SKU text
       serialCtx.font = `bold ${serialFontSize}px Arial`;
       serialCtx.textAlign = 'center';
       serialCtx.textBaseline = 'middle';
       serialCtx.fillStyle = '#000000';
-      serialCtx.fillText(quickSerial, serialWidth / 2, (serialFontSize + 20) / 2);
+      serialCtx.fillText(currentSerial, 200, 30);
       
       const serialImgData = serialCanvas.toDataURL('image/png');
-      const serialImgWidth = Math.min(serialWidth / 3.5, 80);
-      const serialImgHeight = (serialFontSize + 20) / 3.5;
+      const serialImgWidth = 60;
+      const serialImgHeight = 9;
       const serialX = (pageWidth - serialImgWidth) / 2;
       
       pdf.addImage(
@@ -153,24 +156,26 @@ export default function BarcodeGenerator() {
       // إنشاء canvas لاسم المنتج
       const productCanvas = document.createElement('canvas');
       const productCtx = productCanvas.getContext('2d');
-      const productFontSize = 24;
+      const productFontSize = 40; // Increased from 24
+      const currentProductName = String(quickProductName);
       
-      productCtx.font = `${productFontSize}px Arial`;
-      const productMetrics = productCtx.measureText(quickProductName);
-      const productWidth = Math.min(productMetrics.width + 40, 600);
+      // Set canvas to high resolution
+      productCanvas.width = 1000;
+      productCanvas.height = 120;
       
-      productCanvas.width = productWidth;
-      productCanvas.height = productFontSize + 20;
+      // Scale for retina
+      productCtx.scale(2, 2);
       
+      // Draw product name
       productCtx.font = `${productFontSize}px Arial`;
       productCtx.textAlign = 'center';
       productCtx.textBaseline = 'middle';
       productCtx.fillStyle = '#000000';
-      productCtx.fillText(quickProductName, productWidth / 2, (productFontSize + 20) / 2);
+      productCtx.fillText(currentProductName, 250, 30);
       
       const productImgData = productCanvas.toDataURL('image/png');
-      const productImgWidth = Math.min(productWidth / 3.5, 85);
-      const productImgHeight = (productFontSize + 20) / 3.5;
+      const productImgWidth = 75;
+      const productImgHeight = 9;
       const productX = (pageWidth - productImgWidth) / 2;
       
       pdf.addImage(
@@ -221,8 +226,8 @@ export default function BarcodeGenerator() {
       // إعدادات الباركود
       const barcodeWidth = 85;
       const barcodeHeight = 15;
-      const startY = 50;
-      const spacingY = 35;
+      const startY = 20; // Start from top
+      const spacingY = 40; // Increased spacing
       
       let currentY = startY;
       
@@ -240,10 +245,10 @@ export default function BarcodeGenerator() {
         try {
           JsBarcode(barcodeCanvas, item.serial, {
             format: 'CODE128',
-            width: 2.5,
-            height: 50,
+            width: 3, // Increased from 2.5
+            height: 80, // Increased from 50
             displayValue: false,
-            margin: 3
+            margin: 5 // Increased from 3
           });
 
           // حساب موضع الباركود (في المنتصف)
@@ -256,26 +261,27 @@ export default function BarcodeGenerator() {
           // إنشاء canvas للسيريال
           const serialCanvas = document.createElement('canvas');
           const serialCtx = serialCanvas.getContext('2d');
-          const serialFontSize = 28;
-          const currentSerial = String(item.serial); // نسخة محلية
-          serialCtx.font = `bold ${serialFontSize}px Arial`;
-          const serialMetrics = serialCtx.measureText(currentSerial);
-          const serialWidth = serialMetrics.width + 40;
+          const serialFontSize = 48; // Increased from 28
+          const currentSerial = String(item.serial);
           
-          serialCanvas.width = serialWidth;
-          serialCanvas.height = serialFontSize + 20;
+          // Set canvas to high resolution
+          serialCanvas.width = 800;
+          serialCanvas.height = 120;
           
-          // رسم السيريال
+          // Scale for retina
+          serialCtx.scale(2, 2);
+          
+          // Draw SKU text
           serialCtx.font = `bold ${serialFontSize}px Arial`;
           serialCtx.textAlign = 'center';
           serialCtx.textBaseline = 'middle';
           serialCtx.fillStyle = '#000000';
-          serialCtx.fillText(currentSerial, serialWidth / 2, (serialFontSize + 20) / 2);
+          serialCtx.fillText(currentSerial, 200, 30);
           
           // إضافة السيريال كصورة فوراً
           const serialImgData = serialCanvas.toDataURL('image/png');
-          const serialImgWidth = Math.min(serialWidth / 3.5, 80);
-          const serialImgHeight = (serialFontSize + 20) / 3.5;
+          const serialImgWidth = 60;
+          const serialImgHeight = 9;
           const serialX = (pageWidth - serialImgWidth) / 2;
           
           pdf.addImage(
@@ -290,27 +296,27 @@ export default function BarcodeGenerator() {
           // إنشاء canvas لاسم المنتج (منفصل تماماً)
           const productCanvas2 = document.createElement('canvas');
           const productCtx2 = productCanvas2.getContext('2d');
-          const productFontSize = 24;
-          const currentProductName = String(item.productName); // نسخة محلية
+          const productFontSize = 40; // Increased from 24
+          const currentProductName = String(item.productName);
           
-          productCtx2.font = `${productFontSize}px Arial`;
-          const productMetrics = productCtx2.measureText(currentProductName);
-          const productWidth = Math.min(productMetrics.width + 40, 600);
+          // Set canvas to high resolution
+          productCanvas2.width = 1000;
+          productCanvas2.height = 120;
           
-          productCanvas2.width = productWidth;
-          productCanvas2.height = productFontSize + 20;
+          // Scale for retina
+          productCtx2.scale(2, 2);
           
-          // رسم اسم المنتج
+          // Draw product name
           productCtx2.font = `${productFontSize}px Arial`;
           productCtx2.textAlign = 'center';
           productCtx2.textBaseline = 'middle';
           productCtx2.fillStyle = '#000000';
-          productCtx2.fillText(currentProductName, productWidth / 2, (productFontSize + 20) / 2);
+          productCtx2.fillText(currentProductName, 250, 30);
           
           // إضافة اسم المنتج كصورة فوراً
           const productImgData = productCanvas2.toDataURL('image/png');
-          const productImgWidth = Math.min(productWidth / 3.5, 85);
-          const productImgHeight = (productFontSize + 20) / 3.5;
+          const productImgWidth = 75;
+          const productImgHeight = 9;
           const productX = (pageWidth - productImgWidth) / 2;
           
           pdf.addImage(

@@ -231,7 +231,7 @@ export default function VaultManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">
@@ -259,17 +259,6 @@ export default function VaultManagement() {
           </p>
           <p className="text-xs opacity-75 mt-2">
             معاملات الفيزا
-          </p>
-        </div>
-
-        <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium opacity-90">الدروج النشطة</h3>
-            <Users size={24} className="opacity-75" />
-          </div>
-          <p className="text-3xl font-bold">{activeDrawers.length}</p>
-          <p className="text-xs opacity-75 mt-2">
-            كاشير يعمل الآن
           </p>
         </div>
 

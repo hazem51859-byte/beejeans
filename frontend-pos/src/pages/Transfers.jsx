@@ -34,8 +34,16 @@ export default function Transfers() {
   const [formData, setFormData] = useState({
     fromBranchId: '',
     toBranchId: '',
-    items: [{ productId: '', quantity: 1, costPrice: 0, sellingPrice: 0 }],
+    items: [],
     notes: '',
+  });
+
+  const [currentItem, setCurrentItem] = useState({
+    barcode: '',
+    productId: '',
+    quantity: 1,
+    costPrice: 0,
+    sellingPrice: 0
   });
 
   const [receiveForm, setReceiveForm] = useState({
@@ -130,13 +138,31 @@ export default function Transfers() {
 
   const receiveMutation = useMutation({
     mutationFn: ({ transferId, data }) => api.post(`/transfers/${transferId}/complete-receiving`, data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries(['transfers']);
       queryClient.invalidateQueries(['pending-transfers-count']);
       queryClient.invalidateQueries(['source-inventory']);
       setShowReceiveModal(false);
       setSelectedTransfer(null);
-      toast.success('تم استلام التوريد وإضافته لمخزن الفرع بنجاح 🎉');
+      
+      // Check for discrepancies and show appropriate message
+      const { hasDiscrepancy, discrepancyType, message } = response.data;
+      
+      if (hasDiscrepancy) {
+        if (discrepancyType === 'SHORTAGE') {
+          toast.success(message || 'تم استلام التوريد مع وجود نقص في الكمية. تم تحديث المخزون والأرقام بناءً على الكمية المستلمة فعلياً.', {
+            duration: 5000,
+            icon: '⚠️'
+          });
+        } else {
+          toast.success(message || 'تم استلام التوريد مع وجود زيادة في الكمية. تم تحديث المخزون والأرقام بناءً على الكمية المستلمة فعلياً.', {
+            duration: 5000,
+            icon: '⚠️'
+          });
+        }
+      } else {
+        toast.success('تم استلام التوريد وإضافته لمخزن الفرع بنجاح 🎉');
+      }
     },
     onError: (error) => {
       toast.error(error.response?.data?.error || 'حدث خطأ ما');
@@ -147,40 +173,85 @@ export default function Transfers() {
     setFormData({
       fromBranchId: '',
       toBranchId: '',
-      items: [{ productId: '', quantity: 1, costPrice: 0, sellingPrice: 0 }],
+      items: [],
       notes: '',
     });
-  };
-
-  const addItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { productId: '', quantity: 1, costPrice: 0, sellingPrice: 0 }],
+    setCurrentItem({
+      barcode: '',
+      productId: '',
+      quantity: 1,
+      costPrice: 0,
+      sellingPrice: 0
     });
   };
 
-  const removeItem = (index) => {
-    const newItems = formData.items.filter((_, i) => i !== index);
-    setFormData({ ...formData, items: newItems });
-  };
-
-  const updateItem = (index, field, value) => {
-    const newItems = [...formData.items];
-    newItems[index][field] = value;
-
-    if (field === 'productId') {
-      const p = products.find(prod => prod.id === value);
-      if (p) {
-        newItems[index].costPrice = p.costPrice || 0;
-        newItems[index].sellingPrice = p.sellingPrice || 0;
+  const handleBarcodeChange = (value) => {
+    setCurrentItem({ ...currentItem, barcode: value });
+    
+    if (value.length >= 3) {
+      const product = products.find(p => 
+        p.sku?.toLowerCase().includes(value.toLowerCase()) ||
+        p.barcode?.toLowerCase().includes(value.toLowerCase())
+      );
+      
+      if (product) {
+        const inventory = sourceInventory.find(inv => inv.productId === product.id);
+        setCurrentItem({
+          ...currentItem,
+          barcode: value,
+          productId: product.id,
+          costPrice: product.costPrice || 0,
+          sellingPrice: product.sellingPrice || 0
+        });
       }
     }
-
-    setFormData({ ...formData, items: newItems });
   };
+
+  const addItemToTransfer = () => {
+    if (!currentItem.productId || currentItem.quantity <= 0) {
+      toast.error('يرجى اختيار منتج وكمية صحيحة');
+      return;
+    }
+
+    const product = products.find(p => p.id === currentItem.productId);
+    const inventory = sourceInventory.find(inv => inv.productId === currentItem.productId);
+    const availableQty = inventory?.quantity || 0;
+
+    if (currentItem.quantity > availableQty) {
+      toast.error(`الكمية المتاحة: ${availableQty} فقط`);
+      return;
+    }
+
+    setFormData({
+      ...formData,
+      items: [...formData.items, {
+        productId: currentItem.productId,
+        quantity: parseInt(currentItem.quantity),
+        costPrice: parseFloat(currentItem.costPrice || 0),
+        sellingPrice: parseFloat(currentItem.sellingPrice || 0)
+      }]
+    });
+
+    setCurrentItem({
+      barcode: '',
+      productId: '',
+      quantity: 1,
+      costPrice: 0,
+      sellingPrice: 0
+    });
+  };
+
+
 
   const handleCreateSubmit = (e) => {
     e.preventDefault();
+    
+    // Validate that there are items
+    if (!formData.items || formData.items.length === 0) {
+      toast.error('يجب إضافة منتج واحد على الأقل');
+      return;
+    }
+    
     createMutation.mutate({
       fromBranchId: formData.fromBranchId || mainBranchId,
       toBranchId: formData.toBranchId,
@@ -468,76 +539,129 @@ export default function Transfers() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">الأصناف المطلوبة</label>
-                <div className="space-y-3">
-                  {formData.items.map((item, index) => {
-                    const product = products.find(p => p.id === item.productId);
-                    const inventory = sourceInventory.find(inv => inv.productId === item.productId);
+                <label className="block text-sm font-bold text-slate-700 mb-2">إضافة منتج للتوريد</label>
+                
+                {/* Barcode Input Section */}
+                <div className="bg-emerald-50 p-4 rounded-xl border-2 border-emerald-200 mb-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">الكود / الباركود</label>
+                      <input
+                        type="text"
+                        value={currentItem.barcode}
+                        onChange={(e) => handleBarcodeChange(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (currentItem.productId) {
+                              document.getElementById('quantity-input-transfer')?.focus();
+                            }
+                          }
+                        }}
+                        className="w-full border-2 border-emerald-300 rounded-lg px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-emerald-500"
+                        placeholder="اكتب أو امسح الباركود..."
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">الكمية</label>
+                      <input
+                        id="quantity-input-transfer"
+                        type="number"
+                        min="1"
+                        value={currentItem.quantity}
+                        onChange={(e) => setCurrentItem({ ...currentItem, quantity: e.target.value })}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addItemToTransfer();
+                          }
+                        }}
+                        className="w-full border-2 border-emerald-300 rounded-lg px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Product Preview */}
+                  {currentItem.productId && (() => {
+                    const product = products.find(p => p.id === currentItem.productId);
+                    const inventory = sourceInventory.find(inv => inv.productId === currentItem.productId);
                     const availableQty = inventory?.quantity || 0;
-
-                    return (
-                      <div key={index} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col gap-2">
-                        <div className="flex gap-2 items-center">
-                          <div className="flex-1">
-                            <select
-                              value={item.productId}
-                              onChange={(e) => updateItem(index, 'productId', e.target.value)}
-                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800"
-                              required
-                            >
-                              <option value="">اختر المنتج</option>
-                              {products.map(p => (
-                                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                              ))}
-                            </select>
+                    
+                    return product ? (
+                      <div className="mt-3 bg-white p-3 rounded-lg border border-emerald-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-bold text-slate-900">{product.name}</p>
+                            <p className="text-xs text-slate-500">SKU: {product.sku}</p>
                           </div>
-                          <div className="w-24">
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-center"
-                              placeholder="الكمية"
-                              required
-                            />
-                          </div>
-                          {formData.items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeItem(index)}
-                              className="text-rose-600 hover:text-rose-800 p-2"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          )}
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${
+                            availableQty >= currentItem.quantity ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            متاح: {availableQty}
+                          </span>
                         </div>
+                        <div className="flex justify-between items-center text-xs text-slate-600">
+                          <span>التكلفة: <strong>{formatMoney(currentItem.costPrice)}</strong></span>
+                          <span>البيع: <strong className="text-emerald-700">{formatMoney(currentItem.sellingPrice)}</strong></span>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
 
-                        {product && (
-                          <div className="flex justify-between items-center text-xs px-1 text-slate-600 font-semibold bg-white p-2 rounded-lg border border-slate-100">
-                            <span>المتاح بمخزن المصدر: <strong className="text-emerald-700">{availableQty} قطعة</strong></span>
+                  <button
+                    type="button"
+                    onClick={addItemToTransfer}
+                    disabled={!currentItem.productId}
+                    className="mt-3 w-full bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    إضافة للتوريد
+                  </button>
+                </div>
+
+                {/* Added Items List */}
+                {formData.items.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-600">المنتجات المضافة ({formData.items.length})</label>
+                    {formData.items.map((item, index) => {
+                      const product = products.find(p => p.id === item.productId);
+                      const inventory = sourceInventory.find(inv => inv.productId === item.productId);
+                      const availableQty = inventory?.quantity || 0;
+
+                      return (
+                        <div key={index} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-3">
+                          <div className="flex-1">
+                            <p className="font-bold text-slate-900 text-sm">{product?.name}</p>
+                            <p className="text-xs text-slate-500">الكمية: <strong>{item.quantity}</strong> | المتاح: {availableQty}</p>
+                          </div>
+                          <div className="text-right text-xs">
                             {isAdmin ? (
-                              <span>
-                                التكلفة: <strong className="text-slate-800">{formatMoney(item.costPrice)}</strong> | البيع: <strong className="text-emerald-700">{formatMoney(item.sellingPrice)}</strong>
-                              </span>
+                              <>
+                                <p className="text-slate-600">التكلفة: <strong>{formatMoney(item.costPrice)}</strong></p>
+                                <p className="text-emerald-700 font-bold">البيع: {formatMoney(item.sellingPrice)}</p>
+                              </>
                             ) : (
-                              <span>سعر البيع للقطعة: <strong className="text-emerald-700">{formatMoney(item.sellingPrice)}</strong></span>
+                              <p className="text-emerald-700 font-bold">{formatMoney(item.sellingPrice)}</p>
                             )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={addItem}
-                  className="text-emerald-600 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 mt-3"
-                >
-                  <Plus size={16} />
-                  إضافة صنف آخر
-                </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                items: formData.items.filter((_, i) => i !== index)
+                              });
+                            }}
+                            className="text-rose-600 hover:text-rose-800 p-2"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -685,6 +809,55 @@ export default function Transfers() {
               </div>
               <div>{getStatusBadge(selectedTransfer.status)}</div>
             </div>
+
+            {/* Discrepancy Warning Banner */}
+            {selectedTransfer.hasDiscrepancy && (
+              <div className="mb-6 bg-amber-50 border-2 border-amber-400 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={24} />
+                  <div className="flex-1">
+                    <h3 className="text-base font-black text-amber-900 mb-2">
+                      ⚠️ تنبيه: يوجد فروقات في الكميات المستلمة
+                    </h3>
+                    <p className="text-sm font-semibold text-amber-800 mb-3">
+                      {selectedTransfer.discrepancyType === 'SHORTAGE' 
+                        ? '🔻 نقص في الكمية المستلمة - تم إرجاع الفرق للمخزن المصدر'
+                        : '🔺 زيادة في الكمية المستلمة - تم تعديل المخازن'}
+                    </p>
+                    <div className="space-y-2">
+                      {selectedTransfer.items?.map((item) => {
+                        const requested = item.quantityRequested;
+                        const received = item.quantityReceived;
+                        const diff = received - requested;
+                        
+                        if (diff !== 0) {
+                          return (
+                            <div key={item.id} className="flex items-center gap-2 text-xs font-bold text-amber-900 bg-white/60 rounded-lg p-2.5 border border-amber-200">
+                              <span className="font-black">{item.product?.name}</span>
+                              <span className="text-amber-600">•</span>
+                              <span>المطلوب: {requested}</span>
+                              <span className="text-amber-600">←</span>
+                              <span>المستلم: {received}</span>
+                              <span className={`font-black ${diff > 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                                ({diff > 0 ? '+' : ''}{diff})
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                    {selectedTransfer.discrepancyNotes && (
+                      <div className="mt-3 pt-3 border-t border-amber-200">
+                        <p className="text-xs font-semibold text-amber-700">
+                          <span className="font-black">ملاحظات:</span> {selectedTransfer.discrepancyNotes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Financial Summary Box */}
             <div className="mb-6 grid grid-cols-3 gap-3">

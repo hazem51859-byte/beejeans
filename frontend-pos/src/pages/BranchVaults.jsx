@@ -28,7 +28,8 @@ export default function BranchVaults() {
 
   const vaults = vaultsData?.data || {};
   const transactions = transactionsData?.data || [];
-  const branches = vaults.branches || [];
+  // فلترة الفروع - استبعاد الفرع الرئيسي
+  const branches = (vaults.branches || []).filter(branch => branch.code !== 'MAIN');
 
   const getTransactionIcon = (type) => {
     switch(type) {

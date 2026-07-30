@@ -2,14 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, DollarSign, TrendingUp, TrendingDown, Package, Users, FileText } from 'lucide-react';
 import api from '../services/api';
+import AuditsReportSection from '../components/AuditsReportSection';
 
 export default function MonthlyReport() {
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-
-  const handlePrint = () => {
-    window.print();
-  };
   
   // تحويل endDate لآخر اليوم (23:59:59) للـ API calls
   const endDateForAPI = new Date(endDate);
@@ -113,6 +110,17 @@ export default function MonthlyReport() {
           endDate: endDateString,
           customerOnly: 'true' // فقط المبيعات للعملاء
         } 
+      });
+      return response.data;
+    },
+  });
+
+  // بيانات الجرود والخسائر
+  const { data: auditsData } = useQuery({
+    queryKey: ['audits-report', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/reports/audits', { 
+        params: { startDate, endDate: endDateString } 
       });
       return response.data;
     },
@@ -251,9 +259,12 @@ export default function MonthlyReport() {
 
   const costOfGoodsSold = branchSalesCost + officeInvoicesCost;
 
+  // خسائر الجرود (بسعر التكلفة)
+  const auditsLoss = auditsData?.data?.netLoss || 0; // صافي خسارة الجرود
+
   // صافي الربح (على أساس الاستحقاق)
   const grossProfit = totalRevenue - costOfGoodsSold;
-  const netProfit = grossProfit - totalExpenses;
+  const netProfit = grossProfit - totalExpenses - auditsLoss; // طرح خسارة الجرود
   const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100) : 0;
   
   // التدفق النقدي (Cash Flow)
@@ -466,16 +477,23 @@ export default function MonthlyReport() {
                 <span className="font-medium text-red-700">{totalOfficeExpenses.toFixed(2)}</span>
               </div>
               
+              {auditsLoss > 0 && (
+                <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                  <span className="text-sm">خسائر الجرود (عجز المخزون)</span>
+                  <span className="font-medium text-red-700">{auditsLoss.toFixed(2)}</span>
+                </div>
+              )}
+              
               <div className="flex justify-between items-center pt-2 font-bold">
                 <span>= إجمالي التكاليف</span>
-                <span className="text-red-700">{(costOfGoodsSold + totalProductionCost + totalExpenses).toFixed(2)}</span>
+                <span className="text-red-700">{(costOfGoodsSold + totalProductionCost + totalExpenses + auditsLoss).toFixed(2)}</span>
               </div>
             </div>
             
             <div className="flex justify-between items-center pt-3 bg-blue-100 p-3 rounded-lg border-2 border-blue-300">
               <span className="font-bold text-lg">= صافي الربح / الخسارة</span>
-              <span className={`font-bold text-xl ${(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses) >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                {(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses) >= 0 ? '+' : ''}{(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses).toFixed(2)} ج.م
+              <span className={`font-bold text-xl ${(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses - auditsLoss) >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                {(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses - auditsLoss) >= 0 ? '+' : ''}{(totalRevenue - costOfGoodsSold - totalProductionCost - totalExpenses - auditsLoss).toFixed(2)} ج.م
               </span>
             </div>
             
@@ -638,23 +656,33 @@ export default function MonthlyReport() {
                   <span className="font-medium text-red-700">-{totalOfficeExpenses.toFixed(2)}</span>
                 </div>
                 
+                {auditsLoss > 0 && (
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-gray-700">خسائر الجرود (عجز المخزون)</span>
+                      <div className="text-xs text-gray-500">تكلفة البضاعة المفقودة</div>
+                    </div>
+                    <span className="font-medium text-red-700">-{auditsLoss.toFixed(2)}</span>
+                  </div>
+                )}
+                
                 <div className="flex justify-between items-center pt-2 border-t-2 border-red-300">
                   <span className="font-bold text-red-800">= إجمالي الخارج</span>
-                  <span className="font-bold text-lg text-red-700">{cashOutflow.toFixed(2)} ج.م</span>
+                  <span className="font-bold text-lg text-red-700">{(cashOutflow + auditsLoss).toFixed(2)} ج.م</span>
                 </div>
               </div>
             </div>
             
             {/* صافي التدفق */}
-            <div className={`p-4 rounded-lg border-2 ${netCashFlow >= 0 ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400'}`}>
+            <div className={`p-4 rounded-lg border-2 ${(netCashFlow - auditsLoss) >= 0 ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400'}`}>
               <div className="flex justify-between items-center mb-2">
                 <span className="font-bold text-lg">💵 صافي التدفق النقدي</span>
-                <span className={`font-bold text-2xl ${netCashFlow >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                  {netCashFlow >= 0 ? '+' : ''}{netCashFlow.toFixed(2)} ج.م
+                <span className={`font-bold text-2xl ${(netCashFlow - auditsLoss) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  {(netCashFlow - auditsLoss) >= 0 ? '+' : ''}{(netCashFlow - auditsLoss).toFixed(2)} ج.م
                 </span>
               </div>
               <div className="text-xs text-gray-600">
-                {netCashFlow >= 0 ? '✅ عندك فائض نقدي' : '⚠️ عندك عجز نقدي'}
+                {(netCashFlow - auditsLoss) >= 0 ? '✅ عندك فائض نقدي' : '⚠️ عندك عجز نقدي'}
               </div>
             </div>
             
@@ -1333,16 +1361,9 @@ export default function MonthlyReport() {
         )}
       </div>
 
-      {/* زر الطباعة */}
-      <div className="flex justify-center mt-6 print:hidden">
-        <button
-          onClick={handlePrint}
-          className="btn-primary px-8 py-3 flex items-center gap-2"
-        >
-          <FileText size={20} />
-          طباعة التقرير
-        </button>
-      </div>
+        {/* قسم الجرود والخسائر */}
+        <AuditsReportSection auditsData={auditsData} />
+
       </div>
     </div>
   );

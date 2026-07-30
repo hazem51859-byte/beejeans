@@ -1,57 +1,74 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
+import dayjs from 'dayjs';
+import html2pdf from 'html2pdf.js';
 
 export default function CustomerStatementPrint() {
   const { customerId } = useParams();
   const [customer, setCustomer] = useState(null);
-  const [sales, setSales] = useState([]);
-  const [officeInvoices, setOfficeInvoices] = useState([]);
-  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const contentRef = useRef(null);
 
-  useEffect(() => {
-    fetchCustomerStatement();
-  }, [customerId]);
-
-  const fetchCustomerStatement = async () => {
+  const handleDownloadPDF = async () => {
+    if (!contentRef.current) return;
+    
+    const opt = {
+      margin: 10,
+      filename: `كشف-حساب-${customer.name}-${dayjs().format('YYYY-MM-DD')}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
     try {
-      setLoading(true);
-      const response = await api.get(`/customers/${customerId}`);
-      
-      if (response.data.success) {
-        const data = response.data.data;
-        setCustomer(data);
-        setSales(data.sales || []);
-        setOfficeInvoices(data.officeInvoices || []);
-        setPayments(data.payments || []);
-        
-        // طباعة تلقائية بعد التحميل
-        setTimeout(() => window.print(), 500);
-      }
+      await html2pdf().set(opt).from(contentRef.current).save();
     } catch (error) {
-      console.error('Error fetching customer statement:', error);
-      alert('حدث خطأ في تحميل كشف الحساب');
-    } finally {
-      setLoading(false);
+      console.error('Error generating PDF:', error);
+      alert('حدث خطأ أثناء إنشاء PDF');
     }
   };
 
+  useEffect(() => {
+    const fetchCustomerStatement = async () => {
+      try {
+        const response = await api.get(`/customers/${customerId}`);
+        
+        if (response.data.success) {
+          setCustomer(response.data.data);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error loading customer:', error);
+        alert('خطأ في تحميل كشف الحساب');
+        setLoading(false);
+      }
+    };
+    
+    if (customerId) {
+      fetchCustomerStatement();
+    }
+  }, [customerId]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">جاري التحميل...</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <p>جاري التحميل...</p>
       </div>
     );
   }
 
   if (!customer) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl text-red-600">لم يتم العثور على العميل</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <p>لم يتم العثور على العميل</p>
       </div>
     );
   }
+
+  const sales = customer.sales || [];
+  const officeInvoices = customer.officeInvoices || [];
+  const payments = customer.payments || [];
 
   const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
   const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
@@ -63,228 +80,331 @@ export default function CustomerStatementPrint() {
   const remainingBalance = grandTotal - totalPaid;
 
   return (
-    <div className="p-8 max-w-[210mm] mx-auto bg-white" dir="rtl">
-      <style>
-        {`
-          @media print {
-            body { margin: 0; }
-            @page { size: A4; margin: 10mm; }
-            .no-print { display: none; }
+    <>
+      {/* Buttons - Not included in PDF */}
+      <div className="button-container">
+        <button onClick={handleDownloadPDF} className="btn-download">
+          📥 تحميل PDF
+        </button>
+        <button onClick={() => window.close()} className="btn-close">
+          إغلاق
+        </button>
+      </div>
+
+      {/* PDF Content */}
+      <div className="print-content" dir="rtl" ref={contentRef}>
+        <style>{`
+          .button-container {
+            text-align: center;
+            padding: 15px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ccc;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
           }
-        `}
-      </style>
-
-      {/* Header */}
-      <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-        <h1 className="text-3xl font-bold mb-2">كشف حساب عميل</h1>
-        <div className="flex justify-between text-sm">
-          <div>
-            <strong>التاريخ:</strong> {new Date().toLocaleDateString('ar-EG')}
-          </div>
-          <div>
-            <strong>رقم العميل:</strong> {customer.code || customer.id}
-          </div>
-        </div>
-      </div>
-
-      {/* Customer Info */}
-      <div className="mb-6 p-4 bg-gray-50 rounded">
-        <h2 className="text-xl font-bold mb-2">بيانات العميل</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div><strong>الاسم:</strong> {customer.name}</div>
-          <div><strong>الهاتف:</strong> {customer.phone || 'غير متوفر'}</div>
-          <div className="col-span-2"><strong>العنوان:</strong> {customer.address || 'غير متوفر'}</div>
-        </div>
-      </div>
-
-      {/* Sales Summary */}
-      <div className="mb-6">
-        <h2 className="text-xl font-bold mb-3 border-b border-gray-400 pb-2">ملخص الحساب</h2>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="font-bold">إجمالي الفواتير:</div>
-          <div className="text-left">{grandTotal.toFixed(2)} جنيه</div>
           
-          <div className="font-bold">إجمالي المدفوع:</div>
-          <div className="text-left text-green-600">{totalPaid.toFixed(2)} جنيه</div>
+          .btn-download, .btn-close {
+            padding: 10px 24px;
+            margin: 0 5px;
+            border: 1px solid #000;
+            border-radius: 4px;
+            fontSize: 14px;
+            fontWeight: 600;
+            cursor: pointer;
+          }
           
-          <div className="font-bold text-lg pt-2 border-t-2 border-gray-800">الرصيد المستحق:</div>
-          <div className="text-left text-lg font-bold text-red-600 pt-2 border-t-2 border-gray-800">
-            {remainingBalance.toFixed(2)} جنيه
+          .btn-download {
+            background: #000;
+            color: #fff;
+          }
+          
+          .btn-close {
+            background: #fff;
+            color: #000;
+          }
+          
+          .print-content {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+            color: #000;
+          }
+          
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+          }
+          
+          .header h1 {
+            font-size: 24px;
+            margin: 5px 0;
+            color: #000;
+          }
+          
+          .header p {
+            font-size: 14px;
+            margin: 3px 0;
+            color: #000;
+          }
+          
+          .info-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+          }
+          
+          .info-box {
+            border: 1px solid #000;
+            padding: 10px;
+          }
+          
+          .info-box h3 {
+            font-size: 15px;
+            margin: 0 0 10px 0;
+            color: #000;
+            font-weight: bold;
+          }
+          
+          .info-box p {
+            font-size: 14px;
+            margin: 5px 0;
+            color: #000;
+          }
+          
+          .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #000;
+            color: #000;
+          }
+          
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          
+          th, td {
+            border: 1px solid #000;
+            padding: 10px 8px;
+            text-align: center;
+            font-size: 14px;
+            color: #000;
+          }
+          
+          thead {
+            background: #000;
+            color: #fff !important;
+            font-weight: bold;
+          }
+          
+          thead th {
+            font-size: 14px;
+            color: #fff !important;
+            font-weight: bold;
+          }
+          
+          tfoot {
+            background: #f0f0f0;
+            font-weight: bold;
+          }
+          
+          .totals {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 2px solid #000;
+          }
+          
+          .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 15px;
+          }
+          
+          .total-row.main {
+            font-size: 18px;
+            font-weight: bold;
+            border-top: 2px solid #000;
+            padding-top: 12px;
+            margin-top: 12px;
+          }
+          
+          .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #000;
+            text-align: center;
+            font-size: 10px;
+            color: #000;
+          }
+        `}</style>
+
+        {/* Header */}
+        <div className="header">
+          <h1>كشف حساب عميل</h1>
+          <p>التاريخ: {dayjs().format('DD/MM/YYYY')}</p>
+        </div>
+
+        {/* Customer & Summary Info */}
+        <div className="info-section">
+          <div className="info-box">
+            <h3>بيانات العميل</h3>
+            <p><strong>الاسم:</strong> {customer.name}</p>
+            <p><strong>الهاتف:</strong> {customer.phone || '-'}</p>
+            <p><strong>العنوان:</strong> {customer.address || '-'}</p>
+          </div>
+
+          <div className="info-box">
+            <h3>ملخص الحساب</h3>
+            <p><strong>إجمالي الفواتير:</strong> {grandTotal.toFixed(2)} ج.م</p>
+            <p><strong>إجمالي المدفوع:</strong> {totalPaid.toFixed(2)} ج.م</p>
+            <p><strong>الرصيد المستحق:</strong> {remainingBalance.toFixed(2)} ج.م</p>
           </div>
         </div>
+
+        {/* Office Invoices */}
+        {officeInvoices.length > 0 && (
+          <>
+            <div className="section-title">فواتير المكتب ({officeInvoices.length})</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم الفاتورة</th>
+                  <th>التاريخ</th>
+                  <th>الإجمالي</th>
+                  <th>المدفوع</th>
+                  <th>المتبقي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {officeInvoices.map((inv) => (
+                  <tr key={inv.id}>
+                    <td>{inv.invoiceNumber}</td>
+                    <td>{dayjs(inv.createdAt).format('DD/MM/YYYY')}</td>
+                    <td>{inv.total.toFixed(2)}</td>
+                    <td>{inv.paidAmount.toFixed(2)}</td>
+                    <td>{inv.remainingAmount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="2">الإجمالي</td>
+                  <td>{totalOfficeInvoices.toFixed(2)}</td>
+                  <td>{totalPaidOnOfficeInvoices.toFixed(2)}</td>
+                  <td>{(totalOfficeInvoices - totalPaidOnOfficeInvoices).toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </>
+        )}
+
+        {/* Branch Sales */}
+        {sales.length > 0 && (
+          <>
+            <div className="section-title">فواتير الفروع ({sales.length})</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم الفاتورة</th>
+                  <th>التاريخ</th>
+                  <th>الإجمالي</th>
+                  <th>المدفوع</th>
+                  <th>المتبقي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.map((sale) => (
+                  <tr key={sale.id}>
+                    <td>{sale.invoiceNumber}</td>
+                    <td>{dayjs(sale.createdAt).format('DD/MM/YYYY')}</td>
+                    <td>{sale.total.toFixed(2)}</td>
+                    <td>{sale.amountPaid.toFixed(2)}</td>
+                    <td>{(sale.total - sale.amountPaid).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="2">الإجمالي</td>
+                  <td>{totalSales.toFixed(2)}</td>
+                  <td>{totalPaidOnSales.toFixed(2)}</td>
+                  <td>{(totalSales - totalPaidOnSales).toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </>
+        )}
+
+        {/* Payments */}
+        {payments.length > 0 && (
+          <>
+            <div className="section-title">الدفعات ({payments.length})</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>المبلغ</th>
+                  <th>طريقة الدفع</th>
+                  <th>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td>{dayjs(payment.paymentDate).format('DD/MM/YYYY')}</td>
+                    <td>{payment.amount.toFixed(2)}</td>
+                    <td>
+                      {payment.paymentMethod === 'CASH' ? 'نقدي' : 
+                       payment.paymentMethod === 'CARD' ? 'فيزا' : 'آجل'}
+                    </td>
+                    <td>{payment.notes || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>الإجمالي</td>
+                  <td>{totalPayments.toFixed(2)}</td>
+                  <td colSpan="2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </>
+        )}
+
+        {/* Final Totals */}
+        <div className="totals">
+          <div className="total-row">
+            <span>إجمالي الفواتير:</span>
+            <span>{grandTotal.toFixed(2)} ج.م</span>
+          </div>
+          <div className="total-row">
+            <span>إجمالي المدفوع:</span>
+            <span>{totalPaid.toFixed(2)} ج.م</span>
+          </div>
+          <div className="total-row main">
+            <span>الرصيد المستحق:</span>
+            <span>{remainingBalance.toFixed(2)} ج.م</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="footer">
+          <p>شكراً لتعاملكم معنا</p>
+          <p>طُبع في: {dayjs().format('DD/MM/YYYY - HH:mm')}</p>
+          <p>نظام إدارة نقاط البيع - Bee Jeans</p>
+        </div>
       </div>
-
-      {/* Office Invoices */}
-      {officeInvoices.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold mb-3 border-b border-gray-400 pb-2">
-            فواتير المكتب ({officeInvoices.length})
-          </h2>
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border border-gray-400 p-2">رقم الفاتورة</th>
-                <th className="border border-gray-400 p-2">التاريخ</th>
-                <th className="border border-gray-400 p-2">الأصناف</th>
-                <th className="border border-gray-400 p-2">الإجمالي</th>
-                <th className="border border-gray-400 p-2">المدفوع</th>
-                <th className="border border-gray-400 p-2">المتبقي</th>
-              </tr>
-            </thead>
-            <tbody>
-              {officeInvoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td className="border border-gray-400 p-2">{invoice.invoiceNumber}</td>
-                  <td className="border border-gray-400 p-2">
-                    {new Date(invoice.createdAt).toLocaleDateString('ar-EG')}
-                  </td>
-                  <td className="border border-gray-400 p-2">
-                    {invoice.items?.map(item => (
-                      <div key={item.id}>
-                        {item.product.name} × {item.quantity}
-                      </div>
-                    ))}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left">
-                    {invoice.total.toFixed(2)}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left text-green-600">
-                    {invoice.paidAmount.toFixed(2)}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left text-red-600">
-                    {invoice.remainingAmount.toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 font-bold">
-                <td colSpan="3" className="border border-gray-400 p-2">الإجمالي</td>
-                <td className="border border-gray-400 p-2 text-left">
-                  {totalOfficeInvoices.toFixed(2)}
-                </td>
-                <td className="border border-gray-400 p-2 text-left text-green-600">
-                  {totalPaidOnOfficeInvoices.toFixed(2)}
-                </td>
-                <td className="border border-gray-400 p-2 text-left text-red-600">
-                  {(totalOfficeInvoices - totalPaidOnOfficeInvoices).toFixed(2)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      {/* Branch Sales */}
-      {sales.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold mb-3 border-b border-gray-400 pb-2">
-            فواتير الفروع ({sales.length})
-          </h2>
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border border-gray-400 p-2">رقم الفاتورة</th>
-                <th className="border border-gray-400 p-2">التاريخ</th>
-                <th className="border border-gray-400 p-2">الأصناف</th>
-                <th className="border border-gray-400 p-2">الإجمالي</th>
-                <th className="border border-gray-400 p-2">المدفوع</th>
-                <th className="border border-gray-400 p-2">المتبقي</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sales.map((sale) => (
-                <tr key={sale.id}>
-                  <td className="border border-gray-400 p-2">{sale.invoiceNumber}</td>
-                  <td className="border border-gray-400 p-2">
-                    {new Date(sale.createdAt).toLocaleDateString('ar-EG')}
-                  </td>
-                  <td className="border border-gray-400 p-2">
-                    {sale.items?.map(item => (
-                      <div key={item.id}>
-                        {item.product.name} × {item.quantity}
-                      </div>
-                    ))}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left">
-                    {sale.total.toFixed(2)}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left text-green-600">
-                    {sale.amountPaid.toFixed(2)}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left text-red-600">
-                    {(sale.total - sale.amountPaid).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 font-bold">
-                <td colSpan="3" className="border border-gray-400 p-2">الإجمالي</td>
-                <td className="border border-gray-400 p-2 text-left">
-                  {totalSales.toFixed(2)}
-                </td>
-                <td className="border border-gray-400 p-2 text-left text-green-600">
-                  {totalPaidOnSales.toFixed(2)}
-                </td>
-                <td className="border border-gray-400 p-2 text-left text-red-600">
-                  {(totalSales - totalPaidOnSales).toFixed(2)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      {/* Payments */}
-      {payments.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold mb-3 border-b border-gray-400 pb-2">
-            الدفعات ({payments.length})
-          </h2>
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border border-gray-400 p-2">التاريخ</th>
-                <th className="border border-gray-400 p-2">المبلغ</th>
-                <th className="border border-gray-400 p-2">طريقة الدفع</th>
-                <th className="border border-gray-400 p-2">ملاحظات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((payment) => (
-                <tr key={payment.id}>
-                  <td className="border border-gray-400 p-2">
-                    {new Date(payment.paymentDate).toLocaleDateString('ar-EG')}
-                  </td>
-                  <td className="border border-gray-400 p-2 text-left font-bold text-green-600">
-                    {payment.amount.toFixed(2)} جنيه
-                  </td>
-                  <td className="border border-gray-400 p-2">
-                    {payment.paymentMethod === 'CASH' ? 'نقدي' : payment.paymentMethod === 'CARD' ? 'فيزا' : 'آجل'}
-                  </td>
-                  <td className="border border-gray-400 p-2">{payment.notes || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 font-bold">
-                <td className="border border-gray-400 p-2">الإجمالي</td>
-                <td className="border border-gray-400 p-2 text-left text-green-600">
-                  {totalPayments.toFixed(2)} جنيه
-                </td>
-                <td colSpan="2" className="border border-gray-400 p-2"></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="mt-8 pt-4 border-t-2 border-gray-800 text-center text-sm text-gray-600">
-        <p>تم الطباعة بتاريخ: {new Date().toLocaleString('ar-EG')}</p>
-        <p className="mt-2">نظام إدارة نقاط البيع - Bee Jeans</p>
-      </div>
-    </div>
+    </>
   );
 }

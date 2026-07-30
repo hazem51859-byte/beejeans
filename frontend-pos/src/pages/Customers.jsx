@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import dayjs from 'dayjs';
 
@@ -124,6 +124,37 @@ export default function Customers() {
     },
     onError: (error) => {
       toast.error(error.response?.data?.error || 'فشل في تسجيل الدفعة');
+    },
+  });
+
+  const deleteCompletedSaleMutation = useMutation({
+    mutationFn: (saleId) => api.delete(`/customers/sales/${saleId}`),
+    onSuccess: async () => {
+      toast.success('تم حذف الفاتورة بنجاح');
+      // تحديث بيانات العميل المفتوح في الـ modal
+      if (selectedCustomer) {
+        const response = await api.get(`/customers/${selectedCustomer.id}`);
+        setSelectedCustomer(response.data.data);
+      }
+      queryClient.invalidateQueries(['customers']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'فشل في حذف الفاتورة');
+    },
+  });
+
+  const deleteCompletedOfficeInvoiceMutation = useMutation({
+    mutationFn: (invoiceId) => api.delete(`/customers/office-invoices/${invoiceId}`),
+    onSuccess: async () => {
+      toast.success('تم حذف فاتورة المكتب بنجاح');
+      if (selectedCustomer) {
+        const response = await api.get(`/customers/${selectedCustomer.id}`);
+        setSelectedCustomer(response.data.data);
+      }
+      queryClient.invalidateQueries(['customers']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'فشل في حذف الفاتورة');
     },
   });
 
@@ -1167,6 +1198,20 @@ export default function Customers() {
                               <Receipt size={14} />
                               طباعة
                             </button>
+                            {remaining <= 0 && (
+                              <button
+                                onClick={() => {
+                                  if (confirm(`حذف فاتورة المكتب ${invoice.invoiceNumber}؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                                    deleteCompletedOfficeInvoiceMutation.mutate(invoice.id);
+                                  }
+                                }}
+                                className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1"
+                                title="حذف الفاتورة المكتملة"
+                              >
+                                <Trash2 size={14} />
+                                حذف
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1220,6 +1265,21 @@ export default function Customers() {
                             <Receipt size={14} />
                             طباعة
                           </button>
+                          {remaining <= 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`حذف فاتورة ${sale.invoiceNumber}؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                                  deleteCompletedSaleMutation.mutate(sale.id);
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1"
+                              title="حذف الفاتورة المكتملة"
+                            >
+                              <Trash2 size={14} />
+                              حذف
+                            </button>
+                          )}
                           <span className={`text-gray-500 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
                             ▼
                           </span>

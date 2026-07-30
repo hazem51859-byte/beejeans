@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import JsBarcode from 'jsbarcode';
+import { jsPDF } from 'jspdf';
+import { Printer, Search } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -12,6 +15,10 @@ export default function ProductMaster() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [searchTerm, setSearchTerm] = useState(''); // Live search
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false); // Barcode modal
+  const [selectedProduct, setSelectedProduct] = useState(null); // Product for barcode
+  const [barcodeQuantity, setBarcodeQuantity] = useState(1); // Quantity of barcodes
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -102,6 +109,119 @@ export default function ProductMaster() {
     setShowModal(true);
   };
 
+  const generateBarcodes = () => {
+    if (!selectedProduct || !barcodeQuantity || barcodeQuantity < 1) {
+      alert('يرجى إدخال كمية صحيحة');
+      return;
+    }
+
+    try {
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const barcodeWidth = 85;
+      const barcodeHeight = 15;
+      const startY = 20;
+      const spacingY = 40; // Increased spacing between barcodes
+      
+      let currentY = startY;
+
+      for (let i = 0; i < barcodeQuantity; i++) {
+        // Check if we need a new page
+        if (currentY + spacingY > pageHeight - 20) {
+          pdf.addPage();
+          currentY = startY;
+        }
+
+        // 1. Create and add BARCODE - HIGH QUALITY
+        const barcodeCanvas = document.createElement('canvas');
+        JsBarcode(barcodeCanvas, selectedProduct.sku, {
+          format: 'CODE128',
+          width: 3, // Increased from 2.5
+          height: 80, // Increased from 50
+          displayValue: false,
+          margin: 5
+        });
+        const barcodeImgData = barcodeCanvas.toDataURL('image/png');
+        const barcodeX = (pageWidth - barcodeWidth) / 2;
+        pdf.addImage(barcodeImgData, 'PNG', barcodeX, currentY, barcodeWidth, barcodeHeight);
+
+        // 2. Create and add SKU (NEW canvas each time)
+        const skuCanvas = document.createElement('canvas');
+        const skuCtx = skuCanvas.getContext('2d');
+        const skuText = String(selectedProduct.sku);
+        const skuFontSize = 48;
+        
+        // Set canvas to high resolution
+        skuCanvas.width = 800;
+        skuCanvas.height = 120;
+        
+        // Scale for retina
+        skuCtx.scale(2, 2);
+        
+        // Draw SKU text
+        skuCtx.font = `bold ${skuFontSize}px Arial`;
+        skuCtx.textAlign = 'center';
+        skuCtx.textBaseline = 'middle';
+        skuCtx.fillStyle = '#000000';
+        skuCtx.fillText(skuText, 200, 30);
+        
+        // Add SKU to PDF
+        const skuImgData = skuCanvas.toDataURL('image/png');
+        const skuImgWidth = 60;
+        const skuImgHeight = 9;
+        const skuX = (pageWidth - skuImgWidth) / 2;
+        pdf.addImage(skuImgData, 'PNG', skuX, currentY + barcodeHeight + 2, skuImgWidth, skuImgHeight);
+
+        // 3. Create and add PRODUCT NAME (COMPLETELY NEW canvas)
+        const nameCanvas = document.createElement('canvas');
+        const nameCtx = nameCanvas.getContext('2d');
+        const nameText = String(selectedProduct.name);
+        const nameFontSize = 40;
+        
+        // Set canvas to high resolution
+        nameCanvas.width = 1000;
+        nameCanvas.height = 120;
+        
+        // Scale for retina
+        nameCtx.scale(2, 2);
+        
+        // Draw product name
+        nameCtx.font = `${nameFontSize}px Arial`;
+        nameCtx.textAlign = 'center';
+        nameCtx.textBaseline = 'middle';
+        nameCtx.fillStyle = '#000000';
+        nameCtx.fillText(nameText, 250, 30);
+        
+        // Add product name to PDF
+        const nameImgData = nameCanvas.toDataURL('image/png');
+        const nameImgWidth = 75;
+        const nameImgHeight = 9;
+        const nameX = (pageWidth - nameImgWidth) / 2;
+        pdf.addImage(nameImgData, 'PNG', nameX, currentY + barcodeHeight + skuImgHeight + 4, nameImgWidth, nameImgHeight);
+
+        // Move to next barcode position
+        currentY += spacingY;
+      }
+
+      // Save PDF
+      pdf.save(`barcodes-${selectedProduct.sku}-${barcodeQuantity}.pdf`);
+      
+      // Close modal
+      setShowBarcodeModal(false);
+      setSelectedProduct(null);
+      setBarcodeQuantity(1);
+    } catch (error) {
+      console.error('Error generating barcodes:', error);
+      alert('فشل في إنشاء الباركود');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
       DRAFT: { text: 'مسودة', class: 'bg-gray-100 text-gray-800' },
@@ -115,6 +235,12 @@ export default function ProductMaster() {
   if (loading) {
     return <div className="flex justify-center items-center h-screen">جاري التحميل...</div>;
   }
+
+  // Filter products based on search term
+  const filteredProducts = products.filter(product => 
+    product.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    product.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="p-6">
@@ -130,6 +256,20 @@ export default function ProductMaster() {
         >
           + إضافة صنف جديد
         </button>
+      </div>
+
+      {/* Search Input */}
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute right-3 top-3 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="ابحث بالكود أو اسم الصنف..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -152,7 +292,7 @@ export default function ProductMaster() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {products.map((product) => {
+            {filteredProducts.map((product) => {
               const profit = (product.sellingPrice || 0) - (product.costPrice || 0);
               const profitMargin = product.costPrice > 0 ? ((profit / product.costPrice) * 100).toFixed(1) : 0;
               
@@ -225,12 +365,24 @@ export default function ProductMaster() {
                     {getStatusBadge(product.status)}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => handleEditPrice(product)}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      تعديل السعر
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditPrice(product)}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        تعديل السعر
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedProduct(product);
+                          setShowBarcodeModal(true);
+                        }}
+                        className="text-green-600 hover:text-green-900 flex items-center gap-1"
+                      >
+                        <Printer size={16} />
+                        تكويد
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -241,6 +393,12 @@ export default function ProductMaster() {
         {products.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             لا توجد أصناف. اضغط "إضافة صنف جديد" للبدء.
+          </div>
+        )}
+
+        {products.length > 0 && filteredProducts.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            لا توجد نتائج للبحث "{searchTerm}"
           </div>
         )}
       </div>
@@ -353,6 +511,58 @@ export default function ProductMaster() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Barcode Modal */}
+      {showBarcodeModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-2xl font-bold mb-4">طباعة باركود</h2>
+            
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-600 mb-1">الصنف:</div>
+              <div className="font-bold text-lg">{selectedProduct.name}</div>
+              <div className="text-sm text-gray-600 mt-2">الكود:</div>
+              <div className="font-mono font-bold">{selectedProduct.sku}</div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">الكمية المطلوبة *</label>
+              <input
+                type="number"
+                min="1"
+                value={barcodeQuantity}
+                onChange={(e) => setBarcodeQuantity(parseInt(e.target.value) || 1)}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                placeholder="مثال: 50"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                سيتم طباعة {barcodeQuantity} باركود لنفس الصنف
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={generateBarcodes}
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+              >
+                <Printer size={20} />
+                طباعة PDF
+              </button>
+              <button
+                onClick={() => {
+                  setShowBarcodeModal(false);
+                  setSelectedProduct(null);
+                  setBarcodeQuantity(1);
+                }}
+                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+              >
+                إلغاء
+              </button>
+            </div>
           </div>
         </div>
       )}

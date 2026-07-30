@@ -17,7 +17,8 @@ import {
   Building2,
   ClipboardCheck,
   Barcode,
-  Layers
+  Layers,
+  TrendingUp
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI } from '../services/api';
@@ -75,8 +76,10 @@ export default function Layout() {
     // الصفحات الأساسية (للـ Managers والـ Cashiers)
     { name: 'الرئيسية', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
     { name: 'نقطة البيع', path: '/pos', icon: ShoppingCart, roles: ['MANAGER', 'CASHIER'] },
+    { name: 'المخزون', path: '/inventory', icon: Warehouse, roles: ['MANAGER', 'CASHIER'] },
     { name: 'الخزينة', path: '/vault', icon: DollarSign, roles: ['MANAGER'] },
     { name: 'إدارة الشيفتات', path: '/shift-management', icon: Clock, roles: ['MANAGER'] },
+    { name: 'التوريدات', path: '/transfers', icon: Truck, roles: ['MANAGER'], badge: pendingCount },
     { name: 'المرتجعات', path: '/returns-management', icon: RotateCcw, roles: ['MANAGER', 'CASHIER'] },
     
     // شغل المكتب
@@ -107,6 +110,7 @@ export default function Layout() {
     { name: 'تقييم الكاشيرات', path: '/cashier-performance', icon: Award, roles: ['ADMIN'] },
     { name: 'الجرد', path: '/audit', icon: ClipboardCheck, roles: ['ADMIN'] },
     { name: 'خزائن الفروع', path: '/branch-vaults', icon: DollarSign, roles: ['ADMIN'] },
+    { name: 'مبيعات الفروع', path: '/branch-sales', icon: TrendingUp, roles: ['ADMIN'] },
     
     // الإعدادات
     { name: '--- الإعدادات ---', path: '#settings-header', icon: Settings, roles: ['ADMIN'], isHeader: true },

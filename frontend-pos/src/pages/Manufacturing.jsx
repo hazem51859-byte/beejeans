@@ -26,6 +26,9 @@ export default function Manufacturing() {
     notes: ''
   });
 
+  const [productCode, setProductCode] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
   const [receiveForm, setReceiveForm] = useState({
     piecesReceived: '',
     manufacturingCostPerPiece: '',
@@ -91,6 +94,12 @@ export default function Manufacturing() {
 
   const handleSendSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!selectedProduct) {
+      alert('الرجاء إدخال كود منتج صحيح');
+      return;
+    }
+    
     try {
       await axios.post(`${API_URL}/production/manufacturing`, sendForm, {
         headers: { Authorization: `Bearer ${token}` }
@@ -106,10 +115,35 @@ export default function Manufacturing() {
         sentDate: new Date().toISOString().split('T')[0],
         notes: ''
       });
+      setProductCode('');
+      setSelectedProduct(null);
       fetchOrders();
     } catch (error) {
       console.error('Error sending order:', error);
       alert(error.response?.data?.message || 'فشل في إرسال الأمر');
+    }
+  };
+
+  // Handle product code search
+  const handleProductCodeChange = async (code) => {
+    setProductCode(code);
+    
+    if (code.trim().length >= 3) {
+      const product = products.find(p => 
+        p.sku.toLowerCase() === code.toLowerCase().trim() ||
+        p.barcode?.toLowerCase() === code.toLowerCase().trim()
+      );
+      
+      if (product) {
+        setSelectedProduct(product);
+        setSendForm({ ...sendForm, productId: product.id });
+      } else {
+        setSelectedProduct(null);
+        setSendForm({ ...sendForm, productId: '' });
+      }
+    } else {
+      setSelectedProduct(null);
+      setSendForm({ ...sendForm, productId: '' });
     }
   };
 
@@ -261,20 +295,30 @@ export default function Manufacturing() {
                   />
                 </div>
                 <div className="mb-4 col-span-2">
-                  <label className="block text-gray-700 mb-2">الصنف المطلوب تصنيعه *</label>
-                  <select
-                    value={sendForm.productId}
-                    onChange={(e) => setSendForm({ ...sendForm, productId: e.target.value })}
+                  <label className="block text-gray-700 mb-2">كود الصنف المطلوب تصنيعه *</label>
+                  <input
+                    type="text"
+                    value={productCode}
+                    onChange={(e) => handleProductCodeChange(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-4 py-2"
                     required
-                  >
-                    <option value="">اختر الصنف</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} ({product.sku})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="أدخل كود المنتج (SKU)"
+                  />
+                  {productCode && selectedProduct && (
+                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm font-medium text-green-800">
+                        ✓ {selectedProduct.name}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        الكود: {selectedProduct.sku}
+                      </p>
+                    </div>
+                  )}
+                  {productCode && !selectedProduct && productCode.trim().length >= 3 && (
+                    <p className="text-xs text-red-500 mt-1">
+                      ❌ لم يتم العثور على منتج بهذا الكود
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     سيتم ربط القطع المصنعة بهذا الصنف وحساب التكاليف تلقائياً
                   </p>

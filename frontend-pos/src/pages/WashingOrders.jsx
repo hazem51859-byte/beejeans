@@ -98,6 +98,7 @@ export default function WashingOrders() {
   const masterProducts = productsData?.data || [];
 
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productCode, setProductCode] = useState('');
   const [washingCost, setWashingCost] = useState(0);
   const [piecesCount, setPiecesCount] = useState(0);
 
@@ -130,6 +131,11 @@ export default function WashingOrders() {
     e.preventDefault();
     const formData = new FormData(e.target);
     
+    if (!selectedProduct) {
+      toast.error('الرجاء إدخال كود منتج صحيح');
+      return;
+    }
+    
     // Get selected manufacturing order for cost breakdown
     const mfgOrderId = selectedOrder.manufacturingOrderId;
     const mfgOrder = mfgOrders.find(o => o.id === mfgOrderId);
@@ -149,6 +155,26 @@ export default function WashingOrders() {
         notes: formData.get('notes') || undefined
       }
     });
+  };
+
+  // Handle product code search
+  const handleProductCodeChange = (code) => {
+    setProductCode(code);
+    
+    if (code.trim().length >= 3) {
+      const product = masterProducts.find(p => 
+        p.sku?.toLowerCase() === code.toLowerCase().trim() ||
+        p.barcode?.toLowerCase() === code.toLowerCase().trim()
+      );
+      
+      if (product) {
+        setSelectedProduct(product);
+      } else {
+        setSelectedProduct(null);
+      }
+    } else {
+      setSelectedProduct(null);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -302,6 +328,7 @@ export default function WashingOrders() {
                       setPiecesCount(order.piecesSent); // Initialize with sent pieces
                       setWashingCost(0);
                       setSelectedProduct(null);
+                      setProductCode(''); // Reset product code
                       setShowCompleteModal(true);
                     }}
                     className="btn-primary flex items-center gap-2"
@@ -508,22 +535,30 @@ export default function WashingOrders() {
                 <div className="border-t pt-4">
                   <h3 className="font-bold mb-3 text-green-900">🎯 اختيار المنتج من الأصناف (Master)</h3>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium mb-2">اختر المنتج *</label>
-                    <select
-                      required
-                      onChange={(e) => {
-                        const product = masterProducts.find(p => p.id === e.target.value);
-                        setSelectedProduct(product);
-                      }}
+                    <label className="block text-sm font-medium mb-2">كود المنتج *</label>
+                    <input
+                      type="text"
+                      value={productCode}
+                      onChange={(e) => handleProductCodeChange(e.target.value)}
                       className="input-field"
-                    >
-                      <option value="">-- اختر من الأصناف --</option>
-                      {masterProducts.map(product => (
-                        <option key={product.id} value={product.id}>
-                          {product.barcode} - {product.name}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="أدخل كود المنتج (SKU أو Barcode)..."
+                      required
+                    />
+                    {productCode && selectedProduct && (
+                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm font-medium text-green-800">
+                          ✓ {selectedProduct.name}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          الكود: {selectedProduct.sku} | Barcode: {selectedProduct.barcode}
+                        </p>
+                      </div>
+                    )}
+                    {productCode && !selectedProduct && productCode.trim().length >= 3 && (
+                      <p className="text-xs text-red-500 mt-1">
+                        ❌ لم يتم العثور على منتج بهذا الكود
+                      </p>
+                    )}
                   </div>
                   
                   {selectedProduct && (
@@ -639,6 +674,7 @@ export default function WashingOrders() {
                       setShowCompleteModal(false);
                       setSelectedOrder(null);
                       setSelectedProduct(null);
+                      setProductCode(''); // Reset product code
                       setWashingCost(0);
                       setPiecesCount(0);
                     }}

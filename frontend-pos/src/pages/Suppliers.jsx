@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, Truck, DollarSign, Package, X } from 'lucide-react';
+import { Plus, Edit2, Truck, DollarSign, Package, X, Trash2 } from 'lucide-react';
 import api from '../services/api';
 
 export default function Suppliers() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
   
@@ -98,6 +99,51 @@ export default function Suppliers() {
     },
   });
 
+  const deleteCompletedFabricPurchaseMutation = useMutation({
+    mutationFn: (purchaseId) => api.delete(`/suppliers/fabric-purchases/${purchaseId}`),
+    onSuccess: async () => {
+      toast.success('تم حذف فاتورة القماش بنجاح');
+      if (selectedSupplier) {
+        const response = await api.get(`/suppliers/${selectedSupplier.id}`);
+        setSelectedSupplier(response.data.data);
+      }
+      queryClient.invalidateQueries(['suppliers']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في حذف الفاتورة');
+    },
+  });
+
+  const deleteCompletedManufacturingOrderMutation = useMutation({
+    mutationFn: (orderId) => api.delete(`/suppliers/manufacturing-orders/${orderId}`),
+    onSuccess: async () => {
+      toast.success('تم حذف أمر التصنيع بنجاح');
+      if (selectedSupplier) {
+        const response = await api.get(`/suppliers/${selectedSupplier.id}`);
+        setSelectedSupplier(response.data.data);
+      }
+      queryClient.invalidateQueries(['suppliers']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في حذف الأمر');
+    },
+  });
+
+  const deleteCompletedWashingOrderMutation = useMutation({
+    mutationFn: (orderId) => api.delete(`/suppliers/washing-orders/${orderId}`),
+    onSuccess: async () => {
+      toast.success('تم حذف أمر الغسيل بنجاح');
+      if (selectedSupplier) {
+        const response = await api.get(`/suppliers/${selectedSupplier.id}`);
+        setSelectedSupplier(response.data.data);
+      }
+      queryClient.invalidateQueries(['suppliers']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في حذف الأمر');
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -140,41 +186,41 @@ export default function Suppliers() {
       
       if (supplier.type === 'FABRIC' && supplierData.fabricPurchases) {
         unpaidInvoices = supplierData.fabricPurchases
-          .filter(purchase => purchase.totalCost > purchase.amountPaid)
+          .filter(purchase => (purchase.totalCost || 0) > (purchase.paidAmount || 0))
           .map(purchase => ({
             id: purchase.id,
             type: 'FABRIC',
-            invoiceNumber: `FABRIC-${purchase.id.substring(0, 8)}`,
+            invoiceNumber: purchase.invoiceNumber || `FABRIC-${purchase.id.substring(0, 8)}`,
             date: purchase.purchaseDate,
-            total: purchase.totalCost,
-            amountPaid: purchase.amountPaid,
-            remaining: purchase.totalCost - purchase.amountPaid,
+            total: purchase.totalCost || 0,
+            amountPaid: purchase.paidAmount || 0,
+            remaining: (purchase.totalCost || 0) - (purchase.paidAmount || 0),
             allocation: 0,
           }));
       } else if (supplier.type === 'MANUFACTURING' && supplierData.manufacturingOrders) {
         unpaidInvoices = supplierData.manufacturingOrders
-          .filter(order => order.totalCost > order.amountPaid)
+          .filter(order => order.status === 'COMPLETED' && (order.totalManufacturingCost || 0) > (order.paidAmount || 0))
           .map(order => ({
             id: order.id,
             type: 'MANUFACTURING',
-            invoiceNumber: `MANUF-${order.id.substring(0, 8)}`,
+            invoiceNumber: order.orderNumber || `MFG-${order.id.substring(0, 8)}`,
             date: order.sentDate,
-            total: order.totalCost,
-            amountPaid: order.amountPaid,
-            remaining: order.totalCost - order.amountPaid,
+            total: order.totalManufacturingCost || 0,
+            amountPaid: order.paidAmount || 0,
+            remaining: (order.totalManufacturingCost || 0) - (order.paidAmount || 0),
             allocation: 0,
           }));
       } else if (supplier.type === 'WASHING' && supplierData.washingOrders) {
         unpaidInvoices = supplierData.washingOrders
-          .filter(order => order.totalCost > order.amountPaid)
+          .filter(order => order.status === 'COMPLETED' && (order.totalWashingCost || 0) > (order.paidAmount || 0))
           .map(order => ({
             id: order.id,
             type: 'WASHING',
-            invoiceNumber: `WASH-${order.id.substring(0, 8)}`,
+            invoiceNumber: order.orderNumber || `WASH-${order.id.substring(0, 8)}`,
             date: order.sentDate,
-            total: order.totalCost,
-            amountPaid: order.amountPaid,
-            remaining: order.totalCost - order.amountPaid,
+            total: order.totalWashingCost || 0,
+            amountPaid: order.paidAmount || 0,
+            remaining: (order.totalWashingCost || 0) - (order.paidAmount || 0),
             allocation: 0,
           }));
       }
@@ -188,6 +234,16 @@ export default function Suppliers() {
       setShowPaymentModal(true);
     } catch (error) {
       console.error('Error loading supplier data:', error);
+      toast.error('فشل في تحميل بيانات المورد');
+    }
+  };
+
+  const openDetailsModal = async (supplier) => {
+    try {
+      const response = await api.get(`/suppliers/${supplier.id}`);
+      setSelectedSupplier(response.data.data);
+      setShowDetailsModal(true);
+    } catch (error) {
       toast.error('فشل في تحميل بيانات المورد');
     }
   };
@@ -259,15 +315,23 @@ export default function Suppliers() {
   };
 
   const calculateSupplierBalance = (supplier) => {
-    // عدد الفواتير = 1 لو عنده رصيد، 0 لو مفيش
-    // TODO: المفروض نجيب العدد الحقيقي من fabric/manufacturing/washing حسب النوع
-    const purchasesCount = supplier.balance > 0 ? 1 : 0;
+    // حساب عدد الفواتير من الـ _count حسب نوع المورد
+    let purchasesCount = 0;
+    if (supplier.type === 'FABRIC') {
+      purchasesCount = supplier._count?.fabricPurchases || 0;
+    } else if (supplier.type === 'MANUFACTURING') {
+      purchasesCount = supplier._count?.manufacturingOrders || 0;
+    } else if (supplier.type === 'WASHING') {
+      purchasesCount = supplier._count?.washingOrders || 0;
+    } else {
+      purchasesCount = supplier._count?.purchases || 0;
+    }
     
     return {
-      totalAmount: supplier.totalPurchases || supplier.balance || 0,
+      totalAmount: supplier.totalPurchases || 0,
       paidAmount: supplier.totalPaid || 0,
       remaining: supplier.balance || 0,
-      purchasesCount: purchasesCount,
+      purchasesCount,
     };
   };
 
@@ -382,6 +446,13 @@ export default function Suppliers() {
                 >
                   <DollarSign size={16} />
                   {balance.remaining > 0 ? 'دفع' : 'لا يوجد مستحقات'}
+                </button>
+                <button
+                  onClick={() => openDetailsModal(supplier)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                  title="التفاصيل"
+                >
+                  <Package size={16} />
                 </button>
               </div>
             </div>
@@ -593,6 +664,217 @@ export default function Suppliers() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: تفاصيل المورد */}
+      {showDetailsModal && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-5xl my-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">تفاصيل المورد - {selectedSupplier.name}</h2>
+              <button onClick={() => setShowDetailsModal(false)} className="text-gray-600 hover:text-gray-800">
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Fabric Purchases */}
+            {selectedSupplier.type === 'FABRIC' && selectedSupplier.fabricPurchases && selectedSupplier.fabricPurchases.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3">مشتريات القماش</h3>
+                <div className="space-y-3">
+                  {selectedSupplier.fabricPurchases.map((purchase) => {
+                    const remaining = purchase.totalCost - purchase.paidAmount;
+                    return (
+                      <div key={purchase.id} className="border rounded-lg overflow-hidden bg-blue-50">
+                        <div className="bg-blue-100 p-3 flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-5 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم الفاتورة</p>
+                              <p className="font-bold text-sm">{purchase.invoiceNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{new Date(purchase.purchaseDate).toLocaleDateString('ar-EG')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الإجمالي</p>
+                              <p className="text-sm font-bold">{purchase.totalCost.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المدفوع</p>
+                              <p className="text-sm text-green-700 font-bold">{purchase.paidAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المتبقي</p>
+                              <p className={`text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {remaining.toFixed(2)} ج.م
+                              </p>
+                            </div>
+                          </div>
+                          {remaining <= 0 && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`حذف فاتورة القماش ${purchase.invoiceNumber}؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                                  deleteCompletedFabricPurchaseMutation.mutate(purchase.id);
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1 mr-2"
+                              title="حذف الفاتورة المكتملة"
+                            >
+                              <Trash2 size={14} />
+                              حذف
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Manufacturing Orders */}
+            {selectedSupplier.type === 'MANUFACTURING' && selectedSupplier.manufacturingOrders && selectedSupplier.manufacturingOrders.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3">أوامر التصنيع</h3>
+                <div className="space-y-3">
+                  {selectedSupplier.manufacturingOrders.map((order) => {
+                    const totalCost = order.totalManufacturingCost || 0;
+                    const remaining = totalCost - order.paidAmount;
+                    return (
+                      <div key={order.id} className="border rounded-lg overflow-hidden bg-purple-50">
+                        <div className="bg-purple-100 p-3 flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-5 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم الأمر</p>
+                              <p className="font-bold text-sm">{order.orderNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{new Date(order.sentDate).toLocaleDateString('ar-EG')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الإجمالي</p>
+                              <p className="text-sm font-bold">{totalCost.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المدفوع</p>
+                              <p className="text-sm text-green-700 font-bold">{order.paidAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المتبقي</p>
+                              <p className={`text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {remaining.toFixed(2)} ج.م
+                              </p>
+                            </div>
+                          </div>
+                          {remaining <= 0 && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`حذف أمر التصنيع ${order.orderNumber}؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                                  deleteCompletedManufacturingOrderMutation.mutate(order.id);
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1 mr-2"
+                              title="حذف الأمر المكتمل"
+                            >
+                              <Trash2 size={14} />
+                              حذف
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Washing Orders */}
+            {selectedSupplier.type === 'WASHING' && selectedSupplier.washingOrders && selectedSupplier.washingOrders.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3">أوامر الغسيل</h3>
+                <div className="space-y-3">
+                  {selectedSupplier.washingOrders.map((order) => {
+                    const totalCost = order.totalWashingCost || 0;
+                    const remaining = totalCost - order.paidAmount;
+                    return (
+                      <div key={order.id} className="border rounded-lg overflow-hidden bg-cyan-50">
+                        <div className="bg-cyan-100 p-3 flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-5 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم الأمر</p>
+                              <p className="font-bold text-sm">{order.orderNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{new Date(order.sentDate).toLocaleDateString('ar-EG')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الإجمالي</p>
+                              <p className="text-sm font-bold">{totalCost.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المدفوع</p>
+                              <p className="text-sm text-green-700 font-bold">{order.paidAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المتبقي</p>
+                              <p className={`text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {remaining.toFixed(2)} ج.م
+                              </p>
+                            </div>
+                          </div>
+                          {remaining <= 0 && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`حذف أمر الغسيل ${order.orderNumber}؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                                  deleteCompletedWashingOrderMutation.mutate(order.id);
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1 mr-2"
+                              title="حذف الأمر المكتمل"
+                            >
+                              <Trash2 size={14} />
+                              حذف
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Payments */}
+            {selectedSupplier.payments && selectedSupplier.payments.length > 0 && (
+              <div>
+                <h3 className="font-bold mb-3">الدفعات</h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-3 text-right text-sm">التاريخ</th>
+                        <th className="p-3 text-right text-sm">المبلغ</th>
+                        <th className="p-3 text-right text-sm">ملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedSupplier.payments.map((payment) => (
+                        <tr key={payment.id} className="border-t">
+                          <td className="p-3 text-sm">{new Date(payment.paymentDate).toLocaleDateString('ar-EG')}</td>
+                          <td className="p-3 text-sm font-bold text-green-700">{payment.amount.toFixed(2)} ج.م</td>
+                          <td className="p-3 text-sm">{payment.notes || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

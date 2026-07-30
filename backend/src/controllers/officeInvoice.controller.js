@@ -20,12 +20,55 @@ exports.createOfficeInvoice = async (req, res) => {
 
     const createdBy = req.user.id;
 
-    // حساب المجاميع
+    // ======== VALIDATION PHASE ========
+    console.log('📝 Creating office invoice with data:', { type, customerName, items: items?.length });
+
+    // Validate items first
+    if (!items || items.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'يجب إضافة أصناف للفاتورة' 
+      });
+    }
+
+    // خصم من المخزن الرئيسي - Find it first
+    let mainWarehouse = await prisma.branch.findFirst({
+      where: { code: 'MAIN' }
+    });
+
+    // If not found by code, try to find first branch (usually the main one)
+    if (!mainWarehouse) {
+      const branches = await prisma.branch.findMany({
+        orderBy: { createdAt: 'asc' },
+        take: 1
+      });
+      mainWarehouse = branches[0];
+    }
+
+    console.log('🏢 Main Warehouse:', { id: mainWarehouse?.id, name: mainWarehouse?.name, code: mainWarehouse?.code });
+
+    if (!mainWarehouse || !mainWarehouse.id) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'المخزن الرئيسي غير موجود' 
+      });
+    }
+
+    // Validate products and calculate totals
     let subtotal = 0;
     let totalCost = 0;
     const invoiceItems = [];
 
     for (const item of items) {
+      console.log('🔍 Checking item:', { productId: item.productId, quantity: item.quantity });
+
+      if (!item.productId) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'يجب تحديد المنتج' 
+        });
+      }
+
       const product = await prisma.product.findUnique({
         where: { id: item.productId }
       });
@@ -33,7 +76,36 @@ exports.createOfficeInvoice = async (req, res) => {
       if (!product) {
         return res.status(404).json({ 
           success: false,
-          error: `Product not found: ${item.productId}` 
+          error: `المنتج غير موجود: ${item.productId}` 
+        });
+      }
+
+      console.log('✅ Product found:', { id: product.id, name: product.name });
+      console.log('🔍 Looking for inventory with:', { branchId: mainWarehouse.id, productId: item.productId });
+
+      // Check inventory availability BEFORE creating invoice
+      const inventory = await prisma.inventory.findUnique({
+        where: {
+          productId_branchId: {
+            productId: item.productId,
+            branchId: mainWarehouse.id
+          }
+        }
+      });
+
+      console.log('📦 Inventory result:', inventory ? { quantity: inventory.quantity } : 'NOT FOUND');
+
+      if (!inventory) {
+        return res.status(400).json({ 
+          success: false,
+          error: `المنتج "${product.name}" غير موجود في المخزن الرئيسي` 
+        });
+      }
+
+      if (inventory.quantity < item.quantity) {
+        return res.status(400).json({ 
+          success: false,
+          error: `الكمية المتاحة في المخزن غير كافية للمنتج "${product.name}". المتاح: ${inventory.quantity}` 
         });
       }
 
@@ -66,175 +138,114 @@ exports.createOfficeInvoice = async (req, res) => {
     const count = await prisma.officeInvoice.count();
     const invoiceNumber = `OF-${dateStr}-${String(count + 1).padStart(5, '0')}`;
 
-    // إنشاء الفاتورة
-    const invoice = await prisma.officeInvoice.create({
-      data: {
-        invoiceNumber,
-        type,
-        customerId,
-        customerName,
-        customerPhone,
-        shipmentCompany,
-        shipmentBill,
-        subtotal,
-        discountAmount,
-        total,
-        totalCost,
-        profit,
-        paymentMethod,
-        paidAmount: actualPaidAmount, // صفر للشحن
-        remainingAmount,
-        status: type === 'SHIPMENT' ? 'PENDING' : (remainingAmount > 0 ? 'PENDING' : 'COMPLETED'),
-        notes,
-        createdBy,
-        items: {
-          create: invoiceItems
-        }
-      },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        },
-        customer: true
-      }
-    });
-
-    // تحديث رصيد العميل إذا كان موجود
-    if (customerId && remainingAmount > 0) {
-      try {
-        const customerExists = await prisma.customer.findUnique({
-          where: { id: customerId }
-        });
-        
-        if (customerExists) {
-          await prisma.customer.update({
-            where: { id: customerId },
-            data: {
-              balance: {
-                increment: remainingAmount
-              }
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Error updating customer balance:', error);
-        // Don't fail the whole invoice creation if balance update fails
-      }
-    }
-
-    // إذا كان شحن، أنشئ Shipment
-    if (type === 'SHIPMENT') {
-      await prisma.shipment.create({
+    // ======== TRANSACTION PHASE ========
+    // استخدام Transaction لضمان أن كل العمليات تتم بنجاح أو لا تتم على الإطلاق
+    const invoice = await prisma.$transaction(async (tx) => {
+      // 1. إنشاء الفاتورة
+      const newInvoice = await tx.officeInvoice.create({
         data: {
-          shipmentNumber: `SH-${dateStr}-${String(count + 1).padStart(5, '0')}`,
-          invoiceId: invoice.id,
-          shipmentCompany,
-          shipmentBill,
+          invoiceNumber,
+          type,
+          customerId,
           customerName,
           customerPhone,
-          status: 'PENDING',
-          updatedBy: createdBy
-        }
-      });
-    }
-
-    // خصم من المخزن الرئيسي - Try multiple methods to find it
-    let mainWarehouse = await prisma.branch.findFirst({
-      where: { code: 'MAIN' }
-    });
-
-    // If not found by code, try to find first branch (usually the main one)
-    if (!mainWarehouse) {
-      const branches = await prisma.branch.findMany({
-        orderBy: { createdAt: 'asc' },
-        take: 1
-      });
-      mainWarehouse = branches[0];
-    }
-
-    console.log('🏢 Main Warehouse:', mainWarehouse);
-
-    if (!mainWarehouse || !mainWarehouse.id) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'المخزن الرئيسي غير موجود' 
-      });
-    }
-
-    // خصم الكمية من المخزن
-    for (const item of invoiceItems) {
-      const inventory = await prisma.inventory.findUnique({
-        where: {
-          branchId_productId: {
-            branchId: mainWarehouse.id,
-            productId: item.productId
+          shipmentCompany,
+          shipmentBill,
+          subtotal,
+          discountAmount,
+          total,
+          totalCost,
+          profit,
+          paymentMethod,
+          paidAmount: actualPaidAmount,
+          remainingAmount,
+          status: type === 'SHIPMENT' ? 'PENDING' : (remainingAmount > 0 ? 'PENDING' : 'COMPLETED'),
+          notes,
+          createdBy,
+          items: {
+            create: invoiceItems
           }
+        },
+        include: {
+          items: {
+            include: {
+              product: true
+            }
+          },
+          customer: true
         }
       });
 
-      if (inventory) {
-        if (inventory.quantity < item.quantity) {
-          return res.status(400).json({ 
-            success: false,
-            error: `الكمية المتاحة في المخزن غير كافية للمنتج ${item.productId}` 
-          });
-        }
-
-        await prisma.inventory.update({
+      // 2. خصم الكمية من المخزن
+      for (const item of invoiceItems) {
+        await tx.inventory.update({
           where: {
-            branchId_productId: {
-              branchId: mainWarehouse.id,
-              productId: item.productId
+            productId_branchId: {
+              productId: item.productId,
+              branchId: mainWarehouse.id
             }
           },
           data: {
-            quantity: inventory.quantity - item.quantity
+            quantity: {
+              decrement: item.quantity
+            }
           }
-        });
-      } else {
-        return res.status(400).json({ 
-          success: false,
-          error: `المنتج ${item.productId} غير موجود في المخزن الرئيسي` 
         });
       }
-    }
 
-    // إضافة للخزينة فقط إذا لم يكن شحن (الشحن يتم إضافته عند تأكيد الاستلام)
-    if (type !== 'SHIPMENT' && (paymentMethod === 'CASH' || paymentMethod === 'CARD') && actualPaidAmount > 0) {
-      const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : 'cardVaultBalance';
-      
-      // جلب الرصيد الحالي
-      const currentWarehouse = await prisma.branch.findUnique({
-        where: { id: mainWarehouse.id }
-      });
-      
-      const balanceBefore = currentWarehouse[vaultField] || 0;
-      const balanceAfter = balanceBefore + actualPaidAmount;
-      
-      await prisma.branch.update({
-        where: { id: mainWarehouse.id },
-        data: {
-          [vaultField]: {
-            increment: actualPaidAmount
+      // 3. إذا كان شحن، أنشئ Shipment
+      if (type === 'SHIPMENT') {
+        await tx.shipment.create({
+          data: {
+            shipmentNumber: `SH-${dateStr}-${String(count + 1).padStart(5, '0')}`,
+            invoiceId: newInvoice.id,
+            shipmentCompany,
+            shipmentBill,
+            customerName,
+            customerPhone,
+            status: 'PENDING',
+            updatedBy: createdBy
           }
-        }
-      });
+        });
+      }
 
-      await prisma.vaultTransaction.create({
-        data: {
-          branchId: mainWarehouse.id,
-          type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : 'CARD_PAYMENT',
-          amount: actualPaidAmount,
-          description: `فاتورة مكتب ${invoiceNumber}`,
-          notes: `دفعة من ${customerName}`,
-          createdBy,
-          balanceBefore,
-          balanceAfter
-        }
-      });
-    }
+      // 4. إضافة للخزينة فقط إذا لم يكن شحن
+      if (type !== 'SHIPMENT' && (paymentMethod === 'CASH' || paymentMethod === 'CARD') && actualPaidAmount > 0) {
+        const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : 'cardVaultBalance';
+        
+        // جلب الرصيد الحالي
+        const currentWarehouse = await tx.branch.findUnique({
+          where: { id: mainWarehouse.id }
+        });
+        
+        const balanceBefore = currentWarehouse[vaultField] || 0;
+        const balanceAfter = balanceBefore + actualPaidAmount;
+        
+        await tx.branch.update({
+          where: { id: mainWarehouse.id },
+          data: {
+            [vaultField]: {
+              increment: actualPaidAmount
+            }
+          }
+        });
+
+        await tx.vaultTransaction.create({
+          data: {
+            branchId: mainWarehouse.id,
+            type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : 'CARD_PAYMENT',
+            amount: actualPaidAmount,
+            description: `فاتورة مكتب ${invoiceNumber}`,
+            notes: `دفعة من ${customerName}`,
+            createdBy,
+            balanceBefore,
+            balanceAfter
+          }
+        });
+      }
+
+      return newInvoice;
+    });
 
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
@@ -339,18 +350,6 @@ exports.updatePayment = async (req, res) => {
         status: newRemaining <= 0 ? 'COMPLETED' : invoice.status
       }
     });
-
-    // تحديث رصيد العميل
-    if (invoice.customerId) {
-      await prisma.customer.update({
-        where: { id: invoice.customerId },
-        data: {
-          balance: {
-            decrement: paidAmount
-          }
-        }
-      });
-    }
 
     // إضافة للخزينة
     const mainWarehouse = await prisma.branch.findFirst({

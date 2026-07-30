@@ -278,7 +278,7 @@ exports.completeManufacturingOrder = async (req, res) => {
             fabricCost: fabricCostPerPiece,
             manufacturingCost: costPerPiece,
             costPrice: fabricCostPerPiece + costPerPiece, // سيتم إضافة تكلفة الغسيل لاحقاً
-            totalPiecesProduced: { increment: piecesInt },
+            // ملاحظة: totalPiecesProduced سيتم تحديثه عند استلام الغسيل فقط لتجنب التكرار
             status: 'ACTIVE' // تفعيل المنتج بعد التصنيع
           }
         });

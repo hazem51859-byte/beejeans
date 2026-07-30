@@ -32,21 +32,24 @@ exports.getAllCustomers = async (req, res) => {
         const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
         const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
         
-        const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPaidOnOfficeInvoices - totalPayments;
+        // الرصيد الصحيح:
+        // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة
+        // ملاحظة: paidAmount على فاتورة المكتب يأتي من customerPayment لذا نستخدم totalPayments فقط لتجنب الحساب المزدوج
+        const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments;
         
         // Debug logging
         if (customer.name) {
           console.log(`\n💰 ${customer.name}:`);
-          console.log(`   فواتير التقسيط: ${totalSales} (مدفوع: ${totalPaidOnSales})`);
+          console.log(`   فواتير التقسيط: ${totalSales} (مدفوع مباشر: ${totalPaidOnSales})`);
           console.log(`   فواتير المكتب: ${totalOfficeInvoices} (مدفوع: ${totalPaidOnOfficeInvoices})`);
-          console.log(`   دفعات مباشرة: ${totalPayments}`);
+          console.log(`   دفعات مسجلة: ${totalPayments}`);
           console.log(`   الرصيد المحسوب: ${balance.toFixed(2)}`);
         }
         
         return {
           ...customer,
           totalSales: totalSales + totalOfficeInvoices,
-          totalPaid: totalPaidOnSales + totalPaidOnOfficeInvoices + totalPayments,
+          totalPaid: totalPaidOnSales + totalPayments,
           balance: parseFloat(balance.toFixed(2))
         };
       })
@@ -118,14 +121,17 @@ exports.getCustomerById = async (req, res) => {
     const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
     const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
     
-    const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPaidOnOfficeInvoices - totalPayments;
+    // الرصيد الصحيح:
+    // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة
+    // ملاحظة: paidAmount على فاتورة المكتب يأتي من customerPayment لذا نستخدم totalPayments فقط لتجنب الحساب المزدوج
+    const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments;
     
     res.json({
       success: true,
       data: {
         ...customer,
         totalSales: totalSales + totalOfficeInvoices,
-        totalPaid: totalPaidOnSales + totalPaidOnOfficeInvoices + totalPayments,
+        totalPaid: totalPaidOnSales + totalPayments,
         balance: parseFloat(balance.toFixed(2)),
         sales,
         officeInvoices, // إضافة فواتير المكتب
@@ -223,6 +229,67 @@ exports.deleteCustomer = async (req, res) => {
       success: false,
       error: 'Failed to delete customer'
     });
+  }
+};
+
+// Delete completed sale (fully paid, remaining = 0)
+exports.deleteCompletedSale = async (req, res) => {
+  try {
+    const { saleId } = req.params;
+
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId }
+    });
+
+    if (!sale) {
+      return res.status(404).json({ success: false, error: 'الفاتورة غير موجودة' });
+    }
+
+    const remaining = sale.total - sale.amountPaid;
+    if (remaining > 0.01) {
+      return res.status(400).json({
+        success: false,
+        error: 'لا يمكن حذف فاتورة لم يتم سداد كامل قيمتها'
+      });
+    }
+
+    // حذف الفاتورة وعناصرها (cascade)
+    await prisma.sale.delete({ where: { id: saleId } });
+
+    res.json({ success: true, message: 'تم حذف الفاتورة بنجاح' });
+  } catch (error) {
+    console.error('Error deleting sale:', error);
+    res.status(500).json({ success: false, error: 'فشل في حذف الفاتورة' });
+  }
+};
+
+// Delete completed office invoice (fully paid, remaining = 0)
+exports.deleteCompletedOfficeInvoice = async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+
+    const invoice = await prisma.officeInvoice.findUnique({
+      where: { id: invoiceId }
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, error: 'الفاتورة غير موجودة' });
+    }
+
+    const remaining = invoice.total - invoice.paidAmount;
+    if (remaining > 0.01) {
+      return res.status(400).json({
+        success: false,
+        error: 'لا يمكن حذف فاتورة لم يتم سداد كامل قيمتها'
+      });
+    }
+
+    await prisma.officeInvoice.delete({ where: { id: invoiceId } });
+
+    res.json({ success: true, message: 'تم حذف فاتورة المكتب بنجاح' });
+  } catch (error) {
+    console.error('Error deleting office invoice:', error);
+    res.status(500).json({ success: false, error: 'فشل في حذف الفاتورة' });
   }
 };
 

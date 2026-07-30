@@ -178,7 +178,7 @@ exports.getTransferById = async (req, res) => {
   }
 };
 
-// Create transfer (Admin/Manager only) - ✨ UPDATED - NO MORE WORKAROUNDS
+// Create transfer (Admin/Manager only) - ✨ UPDATED WITH INVENTORY DEDUCTION
 exports.createTransfer = async (req, res) => {
   try {
     const { fromBranchId, toBranchId, items, notes } = req.body;
@@ -201,11 +201,60 @@ exports.createTransfer = async (req, res) => {
       sourceBranchId = mainBranch?.id || null;
     }
     
+    // التحقق من المخزون المتاح قبل الإرسال
+    if (sourceBranchId) {
+      for (const item of items) {
+        const inventory = await prisma.inventory.findUnique({
+          where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId: sourceBranchId
+            }
+          }
+        });
+        
+        if (!inventory || inventory.quantity < item.quantity) {
+          const product = await prisma.product.findUnique({
+            where: { id: item.productId },
+            select: { name: true, sku: true }
+          });
+          
+          return res.status(400).json({
+            success: false,
+            error: `الكمية المتاحة من ${product?.name || 'المنتج'} (${product?.sku || ''}) غير كافية. المتاح: ${inventory?.quantity || 0}، المطلوب: ${item.quantity}`
+          });
+        }
+      }
+    }
+    
     // Generate unique transfer number
     const date = new Date();
     const transferNumber = `TRF-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-6)}`;
     
-    // ✨ البنية الجديدة المبسطة - بدون categoryId أو attributes
+    // حساب الأسعار الإجمالية
+    let totalCost = 0;
+    let totalSellingPrice = 0;
+    
+    // Get product details with prices
+    const itemsWithPrices = await Promise.all(items.map(async (item) => {
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId }
+      });
+      
+      const costPrice = product?.costPrice || 0;
+      const sellingPrice = product?.sellingPrice || 0;
+      
+      totalCost += costPrice * item.quantity;
+      totalSellingPrice += sellingPrice * item.quantity;
+      
+      return {
+        ...item,
+        costPrice,
+        sellingPrice
+      };
+    }));
+    
+    // Create transfer with prices
     const transfer = await prisma.transfer.create({
       data: {
         transferNumber,
@@ -215,10 +264,14 @@ exports.createTransfer = async (req, res) => {
         notes,
         status: 'PENDING',
         sentAt: new Date(),
+        totalCost,
+        totalSellingPrice,
         items: {
-          create: items.map(item => ({
+          create: itemsWithPrices.map(item => ({
             productId: item.productId,
             quantityRequested: item.quantity,
+            costPrice: item.costPrice,
+            sellingPrice: item.sellingPrice,
             status: 'PENDING',
             notes: item.notes || ''
           }))
@@ -242,6 +295,25 @@ exports.createTransfer = async (req, res) => {
       }
     });
     
+    // ✅ خصم الكمية من المخزن المصدر فوراً
+    if (sourceBranchId) {
+      for (const item of items) {
+        await prisma.inventory.update({
+          where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId: sourceBranchId
+            }
+          },
+          data: {
+            quantity: {
+              decrement: item.quantity
+            }
+          }
+        });
+      }
+    }
+    
     // إرسال إشعار عبر Socket.io
     const io = req.app.get('io');
     if (io) {
@@ -256,13 +328,15 @@ exports.createTransfer = async (req, res) => {
     
     res.status(201).json({
       success: true,
-      data: transfer
+      data: transfer,
+      message: 'تم إنشاء التوريد وخصم الكمية من المخزن المصدر بنجاح'
     });
   } catch (error) {
     console.error('Error creating transfer:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to create transfer'
+      error: 'Failed to create transfer',
+      details: error.message
     });
   }
 };
@@ -271,13 +345,19 @@ exports.createTransfer = async (req, res) => {
 exports.confirmReceipt = async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, receiverNotes } = req.body;
+    const { items, receiverNotes, hasDiscrepancy, discrepancyNotes } = req.body;
     const receivedBy = req.user.id;
     
     const transfer = await prisma.transfer.findUnique({
       where: { id },
       include: {
-        items: true
+        items: {
+          include: {
+            product: true
+          }
+        },
+        fromBranch: true,
+        toBranch: true
       }
     });
     
@@ -295,14 +375,59 @@ exports.confirmReceipt = async (req, res) => {
       });
     }
     
-    // تحديث حالة التوريد
+    // حساب الفروقات وإجمالي الأسعار
+    let totalCost = 0;
+    let totalSellingPrice = 0;
+    let hasAnyDiscrepancy = false;
+    let discrepancyType = null;
+    
+    const itemsWithDiscrepancy = [];
+    
+    for (const receivedItem of items) {
+      const transferItem = transfer.items.find(ti => ti.id === receivedItem.id);
+      if (!transferItem) continue;
+      
+      const quantityRequested = transferItem.quantityRequested;
+      const quantityReceived = receivedItem.quantityReceived || quantityRequested;
+      
+      // تحديد نوع الفرق
+      if (quantityReceived !== quantityRequested) {
+        hasAnyDiscrepancy = true;
+        if (quantityReceived < quantityRequested) {
+          discrepancyType = 'SHORTAGE'; // نقص
+        } else {
+          discrepancyType = 'EXCESS'; // زيادة
+        }
+        
+        itemsWithDiscrepancy.push({
+          productName: transferItem.product.name,
+          requested: quantityRequested,
+          received: quantityReceived,
+          difference: quantityReceived - quantityRequested
+        });
+      }
+      
+      // حساب الإجماليات بناءً على الكمية المستلمة فعلياً
+      const costPrice = transferItem.product.costPrice || 0;
+      const sellingPrice = transferItem.product.sellingPrice || 0;
+      
+      totalCost += costPrice * quantityReceived;
+      totalSellingPrice += sellingPrice * quantityReceived;
+    }
+    
+    // تحديث حالة التوريد مع الفروقات
     const updatedTransfer = await prisma.transfer.update({
       where: { id },
       data: {
         status: 'DELIVERED',
         receivedBy,
         receivedAt: new Date(),
-        receiverNotes: receiverNotes || null
+        receiverNotes: receiverNotes || null,
+        hasDiscrepancy: hasAnyDiscrepancy,
+        discrepancyType: discrepancyType,
+        discrepancyNotes: hasAnyDiscrepancy ? (discrepancyNotes || JSON.stringify(itemsWithDiscrepancy)) : null,
+        totalCost: totalCost,
+        totalSellingPrice: totalSellingPrice
       },
       include: {
         fromBranch: true,
@@ -330,27 +455,35 @@ exports.confirmReceipt = async (req, res) => {
     });
     
     // تحديث كميات كل صنف
-    for (const item of items) {
-      // Find the transfer item
-      const transferItem = transfer.items.find(ti => ti.id === item.id);
+    for (const receivedItem of items) {
+      const transferItem = transfer.items.find(ti => ti.id === receivedItem.id);
       if (!transferItem) continue;
       
-      const quantityReceived = item.quantityReceived || item.quantity || transferItem.quantityRequested;
+      const quantityRequested = transferItem.quantityRequested;
+      const quantityReceived = receivedItem.quantityReceived || quantityRequested;
+      const difference = quantityReceived - quantityRequested;
       
-      // تحديث TransferItem بالكمية المستلمة
+      // Get product prices
+      const costPrice = transferItem.product.costPrice || 0;
+      const sellingPrice = transferItem.product.sellingPrice || 0;
+      
+      // تحديث TransferItem بالكمية المستلمة والأسعار
       await prisma.transferItem.update({
-        where: { id: item.id },
+        where: { id: receivedItem.id },
         data: {
           quantityReceived: quantityReceived,
-          status: 'DELIVERED'
+          status: 'DELIVERED',
+          costPrice: costPrice,
+          sellingPrice: sellingPrice,
+          notes: receivedItem.notes || (difference !== 0 ? `فرق: ${difference > 0 ? '+' : ''}${difference}` : null)
         }
       });
       
-      // تحديث المخزون في الفرع المستقبل
+      // ✅ تحديث المخزون في الفرع المستقبل (إضافة الكمية المستلمة فعلياً)
       await prisma.inventory.upsert({
         where: {
           productId_branchId: {
-            productId: item.productId,
+            productId: receivedItem.productId,
             branchId: transfer.toBranchId
           }
         },
@@ -361,41 +494,78 @@ exports.confirmReceipt = async (req, res) => {
           lastRestockDate: new Date()
         },
         create: {
-          productId: item.productId,
+          productId: receivedItem.productId,
           branchId: transfer.toBranchId,
           quantity: quantityReceived,
           lastRestockDate: new Date()
         }
       });
       
-      // خصم من المخزون المرسل (إذا كان من فرع)
+      // ✅ تحديث المخزون في الفرع المُرسِل
       if (transfer.fromBranchId) {
         const fromInventory = await prisma.inventory.findUnique({
           where: {
             productId_branchId: {
-              productId: item.productId,
+              productId: receivedItem.productId,
               branchId: transfer.fromBranchId
             }
           }
         });
         
-        if (fromInventory && fromInventory.quantity >= quantityReceived) {
-          await prisma.inventory.update({
-            where: { id: fromInventory.id },
-            data: {
-              quantity: {
-                decrement: quantityReceived
+        // خصم الكمية المطلوبة أولاً (لو كانت تم خصمها مسبقاً عند الإرسال)
+        // أو خصم الكمية المستلمة فعلياً
+        const actualQuantityToDeduct = quantityRequested; // نفترض إن الكمية اتخصمت عند الإرسال
+        
+        if (fromInventory) {
+          // لو في فرق، نعدل المخزون
+          if (difference !== 0) {
+            // لو نقص (استلم أقل): نرجع الفرق للمخزن المصدر
+            // لو زيادة (استلم أكثر): نشيل الزيادة من المخزن المصدر
+            await prisma.inventory.update({
+              where: { id: fromInventory.id },
+              data: {
+                quantity: {
+                  // لو نقص → نزود المخزن المصدر
+                  // لو زيادة → ننقص من المخزن المصدر
+                  increment: -difference // (requested - received) بالسالب = (received - requested)
+                }
               }
+            });
+          } else {
+            // لو مفيش فرق، نتأكد إن الكمية اتخصمت
+            if (fromInventory.quantity >= quantityRequested) {
+              // الكمية موجودة، مفيش تعديل مطلوب (افتراض إنها اتخصمت مسبقاً)
             }
-          });
+          }
         }
+      }
+    }
+    
+    // إرسال إشعار للأدمن لو في فروقات
+    if (hasAnyDiscrepancy) {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('transfer-discrepancy', {
+          transferId: transfer.id,
+          transferNumber: transfer.transferNumber,
+          fromBranch: transfer.fromBranch?.name || 'المخزن الرئيسي',
+          toBranch: transfer.toBranch?.name,
+          discrepancyType: discrepancyType === 'SHORTAGE' ? 'نقص' : 'زيادة',
+          items: itemsWithDiscrepancy,
+          message: `تم اكتشاف ${discrepancyType === 'SHORTAGE' ? 'نقص' : 'زيادة'} في التوريد ${transfer.transferNumber}`
+        });
       }
     }
     
     res.json({
       success: true,
       data: updatedTransfer,
-      message: 'تم تأكيد الاستلام وتحديث المخزون بنجاح'
+      message: hasAnyDiscrepancy 
+        ? `تم تأكيد الاستلام مع وجود ${discrepancyType === 'SHORTAGE' ? 'نقص' : 'زيادة'} في الكمية. تم تحديث المخزون والأرقام بناءً على الكمية المستلمة فعلياً.`
+        : 'تم تأكيد الاستلام وتحديث المخزون بنجاح',
+      hasDiscrepancy: hasAnyDiscrepancy,
+      discrepancyType: discrepancyType,
+      discrepancyDetails: hasAnyDiscrepancy ? itemsWithDiscrepancy : null
     });
   } catch (error) {
     console.error('Error confirming receipt:', error);

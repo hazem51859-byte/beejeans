@@ -20,4 +20,8 @@ router.delete('/:id', authorize('ADMIN'), customerController.deleteCustomer);
 router.post('/:id/sales', authorize('ADMIN', 'MANAGER'), customerController.createCustomerSale);
 router.post('/:id/payments', authorize('ADMIN', 'MANAGER'), customerController.recordCustomerPayment);
 
+// Delete completed (fully paid) invoices
+router.delete('/sales/:saleId', authorize('ADMIN', 'MANAGER'), customerController.deleteCompletedSale);
+router.delete('/office-invoices/:invoiceId', authorize('ADMIN', 'MANAGER'), customerController.deleteCompletedOfficeInvoice);
+
 module.exports = router;

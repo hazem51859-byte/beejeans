@@ -74,6 +74,9 @@ exports.getAllVaults = async (req, res, next) => {
       orderBy: { name: 'asc' }
     });
 
+    // Filter out MAIN branch for calculations
+    const nonMainBranches = branches.filter(b => b.code !== 'MAIN');
+
     // Get card payments (main vault)
     const cardPayments = await prisma.vaultTransaction.findMany({
       where: {
@@ -96,9 +99,9 @@ exports.getAllVaults = async (req, res, next) => {
       _sum: { amount: true }
     });
 
-    // Get total across all branches
-    const totalVaultBalance = branches.reduce((sum, b) => sum + b.vaultBalance, 0);
-    const totalCardVaultBalance = branches.reduce((sum, b) => sum + (b.cardVaultBalance || 0), 0);
+    // Get total across NON-MAIN branches only
+    const totalVaultBalance = nonMainBranches.reduce((sum, b) => sum + b.vaultBalance, 0);
+    const totalCardVaultBalance = nonMainBranches.reduce((sum, b) => sum + (b.cardVaultBalance || 0), 0);
 
     res.json({
       success: true,
@@ -109,7 +112,7 @@ exports.getAllVaults = async (req, res, next) => {
           totalVaultBalance,
           totalCardVaultBalance,
           totalCardPayments: cardPaymentsTotal._sum.amount || 0,
-          branchCount: branches.length
+          branchCount: nonMainBranches.length // Exclude MAIN branch
         }
       }
     });

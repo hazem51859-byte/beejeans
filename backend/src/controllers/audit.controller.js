@@ -81,6 +81,7 @@ exports.createAudit = async (req, res) => {
             productId: inv.productId,
             expectedQty: inv.quantity,
             returnedQty: returnedQtyByProduct[inv.productId] || 0,
+            unitCostPrice: inv.product.costPrice,  // حفظ سعر التكلفة
             unitSalePrice: inv.product.sellingPrice
           }))
         }
@@ -270,7 +271,8 @@ exports.updateAuditItem = async (req, res) => {
       differenceType = 'SURPLUS'; // زيادة
     }
 
-    const differenceValue = Math.abs(differenceQty) * item.unitSalePrice;
+    // حساب قيمة الفرق بسعر التكلفة (الخسارة الفعلية)
+    const differenceValue = Math.abs(differenceQty) * item.unitCostPrice;
 
     // تحديث العنصر
     const updatedItem = await prisma.inventoryAuditItem.update({
@@ -439,9 +441,9 @@ exports.settleAudit = async (req, res) => {
       if (item.differenceType !== 'MATCHED') {
         await prisma.inventory.update({
           where: {
-            branchId_productId: {
-              branchId: audit.branchId,
-              productId: item.productId
+            productId_branchId: {
+              productId: item.productId,
+              branchId: audit.branchId
             }
           },
           data: {

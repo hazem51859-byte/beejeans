@@ -1325,6 +1325,7 @@ model InventoryAuditItem {
   differenceValue   Float?              // قيمة الفرق (بسعر البيع)
   
   // السعر وقت الجرد
+  unitCostPrice     Float               // سعر التكلفة للقطعة (للخسارة الفعلية)
   unitSalePrice     Float               // سعر البيع للقطعة
   
   // ملاحظات

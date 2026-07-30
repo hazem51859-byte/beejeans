@@ -215,6 +215,98 @@ exports.deleteSupplier = async (req, res) => {
   }
 };
 
+// Delete completed fabric purchase (fully paid, remaining = 0)
+exports.deleteCompletedFabricPurchase = async (req, res) => {
+  try {
+    const { purchaseId } = req.params;
+
+    const purchase = await prisma.fabricPurchase.findUnique({
+      where: { id: purchaseId }
+    });
+
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'فاتورة القماش غير موجودة' });
+    }
+
+    const remaining = purchase.totalCost - purchase.paidAmount;
+    if (remaining > 0.01) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا يمكن حذف فاتورة لم يتم سداد كامل قيمتها'
+      });
+    }
+
+    await prisma.fabricPurchase.delete({ where: { id: purchaseId } });
+
+    res.json({ success: true, message: 'تم حذف فاتورة القماش بنجاح' });
+  } catch (error) {
+    console.error('Error deleting fabric purchase:', error);
+    res.status(500).json({ success: false, message: 'فشل في حذف فاتورة القماش' });
+  }
+};
+
+// Delete completed manufacturing order (fully paid, remaining = 0)
+exports.deleteCompletedManufacturingOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await prisma.manufacturingOrder.findUnique({
+      where: { id: orderId }
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'أمر التصنيع غير موجود' });
+    }
+
+    const totalCost = order.totalManufacturingCost || 0;
+    const remaining = totalCost - order.paidAmount;
+    if (remaining > 0.01) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا يمكن حذف أمر تصنيع لم يتم سداد كامل قيمته'
+      });
+    }
+
+    await prisma.manufacturingOrder.delete({ where: { id: orderId } });
+
+    res.json({ success: true, message: 'تم حذف أمر التصنيع بنجاح' });
+  } catch (error) {
+    console.error('Error deleting manufacturing order:', error);
+    res.status(500).json({ success: false, message: 'فشل في حذف أمر التصنيع' });
+  }
+};
+
+// Delete completed washing order (fully paid, remaining = 0)
+exports.deleteCompletedWashingOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await prisma.washingOrder.findUnique({
+      where: { id: orderId }
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'أمر الغسيل غير موجود' });
+    }
+
+    const totalCost = order.totalWashingCost || 0;
+    const remaining = totalCost - order.paidAmount;
+    if (remaining > 0.01) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا يمكن حذف أمر غسيل لم يتم سداد كامل قيمته'
+      });
+    }
+
+    await prisma.washingOrder.delete({ where: { id: orderId } });
+
+    res.json({ success: true, message: 'تم حذف أمر الغسيل بنجاح' });
+  } catch (error) {
+    console.error('Error deleting washing order:', error);
+    res.status(500).json({ success: false, message: 'فشل في حذف أمر الغسيل' });
+  }
+};
+
 // Make payment to supplier
 exports.makePayment = async (req, res) => {
   try {
@@ -247,10 +339,15 @@ exports.makePayment = async (req, res) => {
               where: { id: allocation.id }
             });
             if (purchase) {
+              const newPaidAmount = purchase.paidAmount + allocAmount;
+              const newRemainingAmount = Math.max(0, purchase.totalCost - newPaidAmount);
+              const paymentStatus = newRemainingAmount <= 0 ? 'PAID' : newPaidAmount > 0 ? 'PARTIAL' : 'PENDING';
               await tx.fabricPurchase.update({
                 where: { id: allocation.id },
                 data: {
-                  amountPaid: purchase.amountPaid + allocAmount
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  paymentStatus
                 }
               });
             }
@@ -259,10 +356,16 @@ exports.makePayment = async (req, res) => {
               where: { id: allocation.id }
             });
             if (order) {
+              const totalCost = order.totalManufacturingCost || 0;
+              const newPaidAmount = order.paidAmount + allocAmount;
+              const newRemainingAmount = Math.max(0, totalCost - newPaidAmount);
+              const paymentStatus = newRemainingAmount <= 0 ? 'PAID' : newPaidAmount > 0 ? 'PARTIAL' : 'PENDING';
               await tx.manufacturingOrder.update({
                 where: { id: allocation.id },
                 data: {
-                  amountPaid: order.amountPaid + allocAmount
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  paymentStatus
                 }
               });
             }
@@ -271,10 +374,16 @@ exports.makePayment = async (req, res) => {
               where: { id: allocation.id }
             });
             if (order) {
+              const totalCost = order.totalWashingCost || 0;
+              const newPaidAmount = (order.paidAmount || 0) + allocAmount;
+              const newRemainingAmount = Math.max(0, totalCost - newPaidAmount);
+              const paymentStatus = newRemainingAmount <= 0 ? 'PAID' : newPaidAmount > 0 ? 'PARTIAL' : 'PENDING';
               await tx.washingOrder.update({
                 where: { id: allocation.id },
                 data: {
-                  amountPaid: order.amountPaid + allocAmount
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  paymentStatus
                 }
               });
             }

@@ -545,12 +545,19 @@ exports.recordCustomerPayment = async (req, res) => {
             
             if (!officeInvoice) continue;
             
-            // تحديث المبلغ المدفوع في فاتورة المكتب
+            const newPaidAmount = officeInvoice.paidAmount + parseFloat(allocation.amount);
+            const newRemainingAmount = officeInvoice.remainingAmount - parseFloat(allocation.amount);
+            
+            // تحديث الحالة إلى "مكتملة" إذا تم سداد كامل المبلغ
+            const newStatus = newRemainingAmount <= 0.01 ? 'COMPLETED' : officeInvoice.status;
+            
+            // تحديث المبلغ المدفوع والحالة في فاتورة المكتب
             await tx.officeInvoice.update({
               where: { id: allocation.officeInvoiceId },
               data: {
-                paidAmount: officeInvoice.paidAmount + parseFloat(allocation.amount),
-                remainingAmount: officeInvoice.remainingAmount - parseFloat(allocation.amount)
+                paidAmount: newPaidAmount,
+                remainingAmount: newRemainingAmount,
+                status: newStatus
               }
             });
           }

@@ -31,6 +31,7 @@ const vaultRoutes = require('./routes/vault.routes');
 const fabricRoutes = require('./routes/fabric.routes');
 const manufacturingRoutes = require('./routes/manufacturing.routes');
 const officeInvoiceRoutes = require('./routes/officeInvoice.routes');
+const officeCustomerRoutes = require('./routes/officeCustomer.routes');
 const shipmentRoutes = require('./routes/shipment.routes');
 const auditRoutes = require('./routes/audit.routes');
 const errorHandler = require('./middleware/errorHandler');
@@ -104,6 +105,7 @@ app.use(`${API_PREFIX}/vault`, vaultRoutes);
 app.use(`${API_PREFIX}/fabric`, fabricRoutes);
 app.use(`${API_PREFIX}/production`, manufacturingRoutes);
 app.use(`${API_PREFIX}/office-invoices`, officeInvoiceRoutes);
+app.use(`${API_PREFIX}/office-customers`, officeCustomerRoutes);
 app.use(`${API_PREFIX}/shipments`, shipmentRoutes);
 app.use(`${API_PREFIX}/audits`, auditRoutes);
 

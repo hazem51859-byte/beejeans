@@ -747,6 +747,37 @@ model Customer {
   @@map("customers")
 }
 
+// =====================
+// Office Customers (عملاء المكتب - زباين عادية وشحن)
+// =====================
+
+model OfficeCustomer {
+  id                String            @id @default(uuid())
+  name              String            // اسم العميل/الزبون
+  phone             String            @unique // رقم الهاتف (مفتاح للبحث)
+  type              String            // REGULAR (زبون عادي), SHIPMENT (شحن)
+  
+  // إحصائيات
+  totalInvoices     Int               @default(0) // عدد الفواتير
+  totalSales        Float             @default(0) // إجمالي المبيعات
+  totalPaid         Float             @default(0) // إجمالي المدفوع
+  lastInvoiceDate   DateTime?         // آخر فاتورة
+  
+  // بيانات إضافية للشحن
+  shipmentCompany   String?           // شركة الشحن المفضلة (للشحن)
+  address           String?
+  notes             String?
+  
+  isActive          Boolean           @default(true)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@index([phone])
+  @@index([type])
+  @@map("office_customers")
+}
+
 model CustomerPayment {
   id              String            @id @default(uuid())
   

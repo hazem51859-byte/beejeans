@@ -247,6 +247,15 @@ exports.createOfficeInvoice = async (req, res) => {
       return newInvoice;
     });
 
+    // 5. حفظ/تحديث بيانات عميل المكتب (REGULAR & SHIPMENT only)
+    if ((type === 'REGULAR' || type === 'SHIPMENT') && customerPhone) {
+      const officeCustomerController = require('./officeCustomer.controller');
+      await officeCustomerController.updateStatistics(customerPhone, {
+        total,
+        paidAmount: actualPaidAmount
+      });
+    }
+
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     console.error('Error creating office invoice:', error);

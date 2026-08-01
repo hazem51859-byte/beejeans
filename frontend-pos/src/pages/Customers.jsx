@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer, Trash2 } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer, Trash2, Search } from 'lucide-react';
 import api from '../services/api';
 import dayjs from 'dayjs';
 
@@ -16,6 +16,10 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [expandedSaleId, setExpandedSaleId] = useState(null);
+  
+  // Office Customers
+  const [officeCustomerSearch, setOfficeCustomerSearch] = useState('');
+  const [selectedType, setSelectedType] = useState('ALL'); // ALL, REGULAR, SHIPMENT
   
   const [formData, setFormData] = useState({
     name: '',
@@ -60,6 +64,14 @@ export default function Customers() {
     queryKey: ['products'],
     queryFn: async () => {
       const response = await api.get('/products', { params: { status: 'ACTIVE' } });
+      return response.data;
+    },
+  });
+
+  const { data: officeCustomers } = useQuery({
+    queryKey: ['officeCustomers'],
+    queryFn: async () => {
+      const response = await api.get('/office-customers');
       return response.data;
     },
   });
@@ -605,6 +617,15 @@ export default function Customers() {
 
   const saleTotal = saleData.items.reduce((sum, item) => sum + item.total, 0);
 
+  // Filter office customers
+  const filteredOfficeCustomers = officeCustomers?.data?.filter(customer => {
+    const matchesSearch = officeCustomerSearch.length === 0 || 
+      customer.phone.includes(officeCustomerSearch) ||
+      customer.name.toLowerCase().includes(officeCustomerSearch.toLowerCase());
+    const matchesType = selectedType === 'ALL' || customer.type === selectedType;
+    return matchesSearch && matchesType;
+  }) || [];
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -682,6 +703,123 @@ export default function Customers() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Office Customers Section */}
+      <div className="mt-12">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">🛒 عملاء المكتب (زباين عاديين وشحن)</h2>
+            <p className="text-gray-600 mt-1">تتبع الزباين اللي بيشتروا من المكتب</p>
+          </div>
+        </div>
+
+        {/* Search and Filter */}
+        <div className="bg-white rounded-lg shadow p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <Search className="absolute right-3 top-3 text-gray-400" size={20} />
+              <input
+                type="text"
+                value={officeCustomerSearch}
+                onChange={(e) => setOfficeCustomerSearch(e.target.value)}
+                placeholder="ابحث برقم الهاتف أو الاسم..."
+                className="w-full p-3 pr-10 border rounded-lg"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedType('ALL')}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedType === 'ALL'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                الكل ({officeCustomers?.data?.length || 0})
+              </button>
+              <button
+                onClick={() => setSelectedType('REGULAR')}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedType === 'REGULAR'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                🛒 زباين عاديين ({officeCustomers?.data?.filter(c => c.type === 'REGULAR').length || 0})
+              </button>
+              <button
+                onClick={() => setSelectedType('SHIPMENT')}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedType === 'SHIPMENT'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                📦 شحن ({officeCustomers?.data?.filter(c => c.type === 'SHIPMENT').length || 0})
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Office Customers Grid */}
+        {filteredOfficeCustomers.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredOfficeCustomers.map((customer) => (
+              <div key={customer.id} className={`card ${customer.type === 'REGULAR' ? 'border-l-4 border-green-500' : 'border-l-4 border-purple-500'}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs px-2 py-1 rounded font-medium ${
+                        customer.type === 'REGULAR' 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {customer.type === 'REGULAR' ? '🛒 زبون عادي' : '📦 شحن'}
+                      </span>
+                      {!customer.isActive && (
+                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                          غير نشط
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-bold text-lg">{customer.name}</h3>
+                    <p className="text-sm text-gray-600">📱 {customer.phone}</p>
+                    {customer.shipmentCompany && (
+                      <p className="text-xs text-purple-600 mt-1">📦 {customer.shipmentCompany}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-blue-50 p-2 rounded">
+                    <p className="text-xs text-gray-600">عدد الفواتير</p>
+                    <p className="text-lg font-bold text-blue-700">{customer.totalInvoices}</p>
+                  </div>
+                  <div className="bg-green-50 p-2 rounded">
+                    <p className="text-xs text-gray-600">إجمالي المبيعات</p>
+                    <p className="text-sm font-bold text-green-700">{customer.totalSales.toFixed(2)} ج</p>
+                  </div>
+                </div>
+
+                {customer.lastInvoiceDate && (
+                  <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
+                    آخر فاتورة: {dayjs(customer.lastInvoiceDate).format('DD/MM/YYYY')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-gray-50 rounded-lg p-8 text-center">
+            <p className="text-gray-600">
+              {officeCustomerSearch ? 'لا توجد نتائج للبحث' : 'لا يوجد عملاء مكتب حتى الآن'}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              سيتم تسجيل العملاء تلقائياً عند إنشاء فواتير مكتب
+            </p>
+          </div>
+        )}
       </div>
 
       {showModal && (

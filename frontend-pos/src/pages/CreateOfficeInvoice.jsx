@@ -11,6 +11,11 @@ export default function CreateOfficeInvoice() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   
+  // Office Customers (REGULAR/SHIPMENT)
+  const [officeCustomers, setOfficeCustomers] = useState([]);
+  const [phoneSearch, setPhoneSearch] = useState('');
+  const [searchingPhone, setSearchingPhone] = useState(false);
+  
   // بيانات الفاتورة
   const [invoiceType, setInvoiceType] = useState('REGULAR'); // REGULAR, SHIPMENT, CLIENT
   const [customerId, setCustomerId] = useState('');
@@ -31,6 +36,18 @@ export default function CreateOfficeInvoice() {
     fetchProducts();
     fetchCustomers();
   }, []);
+
+  // البحث عن office customers بالهاتف مع debounce
+  useEffect(() => {
+    if (invoiceType !== 'CLIENT' && phoneSearch.length >= 3) {
+      const timer = setTimeout(() => {
+        searchOfficeCustomersByPhone(phoneSearch);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setOfficeCustomers([]);
+    }
+  }, [phoneSearch, invoiceType]);
 
   const fetchProducts = async () => {
     try {
@@ -53,6 +70,42 @@ export default function CreateOfficeInvoice() {
       console.error('Error fetching customers:', error);
       setCustomers([]);
     }
+  };
+
+  // البحث عن Office Customers بالهاتف
+  const searchOfficeCustomersByPhone = async (phone) => {
+    if (!phone || phone.length < 3) {
+      setOfficeCustomers([]);
+      return;
+    }
+    
+    setSearchingPhone(true);
+    try {
+      const response = await api.get('/office-customers/search', {
+        params: { 
+          phone,
+          type: invoiceType // REGULAR or SHIPMENT
+        }
+      });
+      const data = response.data?.data || response.data;
+      setOfficeCustomers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error searching office customers:', error);
+      setOfficeCustomers([]);
+    } finally {
+      setSearchingPhone(false);
+    }
+  };
+
+  // اختيار office customer
+  const selectOfficeCustomer = (customer) => {
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone);
+    setPhoneSearch(customer.phone);
+    if (customer.shipmentCompany) {
+      setShipmentCompany(customer.shipmentCompany);
+    }
+    setOfficeCustomers([]);
   };
 
   // بحث المنتج بالكود
@@ -347,6 +400,61 @@ export default function CreateOfficeInvoice() {
               </div>
             )}
 
+            {/* رقم الهاتف للـ REGULAR & SHIPMENT */}
+            {invoiceType !== 'CLIENT' && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  رقم الهاتف {invoiceType === 'REGULAR' ? '(للبحث عن زبون سابق)' : '(للبحث عن عميل شحن سابق)'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={phoneSearch}
+                    onChange={(e) => {
+                      setPhoneSearch(e.target.value);
+                      setCustomerPhone(e.target.value);
+                    }}
+                    className="w-full p-3 border rounded-lg"
+                    placeholder="اكتب رقم الهاتف للبحث..."
+                  />
+                  
+                  {searchingPhone && (
+                    <div className="absolute left-3 top-3 text-gray-400">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                    </div>
+                  )}
+                  
+                  {/* نتائج البحث - Office Customers */}
+                  {phoneSearch.length >= 3 && officeCustomers.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {officeCustomers.map(customer => (
+                        <div
+                          key={customer.id}
+                          onClick={() => selectOfficeCustomer(customer)}
+                          className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0"
+                        >
+                          <div className="font-medium">{customer.name}</div>
+                          <div className="text-sm text-gray-600">
+                            📱 {customer.phone}
+                            {customer.shipmentCompany && ` • 📦 ${customer.shipmentCompany}`}
+                          </div>
+                          <div className="text-sm text-green-600 mt-1">
+                            {customer.totalInvoices} فاتورة • {customer.totalSales.toFixed(2)} ج إجمالي
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {phoneSearch.length >= 3 && !searchingPhone && officeCustomers.length === 0 && (
+                    <div className="mt-2 text-sm text-gray-500">
+                      💡 زبون جديد - اكتب بياناته بالأسفل
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 {invoiceType === 'CLIENT' ? 'اسم العميل' : 'اسم الزبون'} *
@@ -361,16 +469,18 @@ export default function CreateOfficeInvoice() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهاتف</label>
-              <input
-                type="tel"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full p-3 border rounded-lg"
-                disabled={invoiceType === 'CLIENT' && selectedCustomer}
-              />
-            </div>
+            {invoiceType === 'CLIENT' && (
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهاتف</label>
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                  disabled={invoiceType === 'CLIENT' && selectedCustomer}
+                />
+              </div>
+            )}
           </div>
 
           {/* بيانات الشحن */}

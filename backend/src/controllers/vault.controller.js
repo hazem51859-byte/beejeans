@@ -65,6 +65,7 @@ exports.getAllVaults = async (req, res, next) => {
         code: true,
         vaultBalance: true,
         cardVaultBalance: true,
+        walletBalance: true,
         _count: {
           select: {
             vaultTransactions: true
@@ -102,6 +103,7 @@ exports.getAllVaults = async (req, res, next) => {
     // Get total across NON-MAIN branches only
     const totalVaultBalance = nonMainBranches.reduce((sum, b) => sum + b.vaultBalance, 0);
     const totalCardVaultBalance = nonMainBranches.reduce((sum, b) => sum + (b.cardVaultBalance || 0), 0);
+    const totalWalletBalance = nonMainBranches.reduce((sum, b) => sum + (b.walletBalance || 0), 0);
 
     res.json({
       success: true,
@@ -111,6 +113,7 @@ exports.getAllVaults = async (req, res, next) => {
         summary: {
           totalVaultBalance,
           totalCardVaultBalance,
+          totalWalletBalance,
           totalCardPayments: cardPaymentsTotal._sum.amount || 0,
           branchCount: nonMainBranches.length // Exclude MAIN branch
         }
@@ -336,6 +339,269 @@ exports.getVaultTransactions = async (req, res, next) => {
 };
 
 module.exports = exports;
+
+/**
+ * Convert between vault types (CASH, CARD, WALLET)
+ * تحويل بين أنواع الخزائن
+ * Branch Manager: Can convert CARD/WALLET to CASH locally, or WALLET to Main
+ * Main Warehouse: Can convert between any types
+ */
+exports.convertVaultType = async (req, res, next) => {
+  try {
+    const { fromType, toType, amount, branchId, notes } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const userBranchId = req.user.branchId;
+
+    // Validation
+    const validTypes = ['CASH', 'CARD', 'WALLET'];
+    if (!validTypes.includes(fromType) || !validTypes.includes(toType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'نوع الخزنة غير صحيح. الأنواع المتاحة: CASH, CARD, WALLET'
+      });
+    }
+
+    if (fromType === toType) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا يمكن التحويل لنفس النوع'
+      });
+    }
+
+    const convertAmount = parseFloat(amount);
+    if (convertAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'المبلغ يجب أن يكون أكبر من صفر'
+      });
+    }
+
+    // Determine target branch
+    const targetBranchId = branchId || userBranchId;
+    
+    // Get branch
+    const branch = await prisma.branch.findUnique({
+      where: { id: targetBranchId }
+    });
+
+    if (!branch) {
+      return res.status(404).json({
+        success: false,
+        message: 'الفرع غير موجود'
+      });
+    }
+
+    const isMainBranch = branch.code === 'MAIN';
+
+    // Permission check
+    if (userRole === 'MANAGER') {
+      // Manager can only:
+      // 1. Convert in their own branch
+      // 2. Convert CARD/WALLET to CASH locally
+      // 3. Cannot do CASH to CARD/WALLET
+      if (targetBranchId !== userBranchId) {
+        return res.status(403).json({
+          success: false,
+          message: 'يمكنك فقط التحويل في فرعك'
+        });
+      }
+
+      if (fromType === 'CASH') {
+        return res.status(403).json({
+          success: false,
+          message: 'لا يمكن للمانجر تحويل النقدي إلى فيزا أو محفظة'
+        });
+      }
+    } else if (userRole !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'فقط المانجر أو الأدمن يمكنهم تحويل الخزائن'
+      });
+    }
+
+    // Get vault field names
+    const vaultFields = {
+      'CASH': 'vaultBalance',
+      'CARD': 'cardVaultBalance',
+      'WALLET': 'walletBalance'
+    };
+
+    const fromField = vaultFields[fromType];
+    const toField = vaultFields[toType];
+
+    // Check source balance
+    if (branch[fromField] < convertAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `رصيد ${fromType === 'CASH' ? 'النقدي' : fromType === 'CARD' ? 'الفيزا' : 'المحفظة'} غير كافي. المتاح: ${branch[fromField]}`
+      });
+    }
+
+    // Perform conversion
+    const result = await prisma.$transaction(async (tx) => {
+      // Deduct from source
+      const updatedBranch = await tx.branch.update({
+        where: { id: targetBranchId },
+        data: {
+          [fromField]: branch[fromField] - convertAmount,
+          [toField]: branch[toField] + convertAmount
+        }
+      });
+
+      // Create vault transactions
+      const fromTransaction = await tx.vaultTransaction.create({
+        data: {
+          branchId: targetBranchId,
+          type: `${fromType}_WITHDRAWAL`,
+          amount: convertAmount,
+          description: `تحويل من ${fromType} إلى ${toType}`,
+          notes: notes || `تحويل داخلي بين الخزائن`,
+          createdBy: userId,
+          balanceBefore: branch[fromField],
+          balanceAfter: branch[fromField] - convertAmount
+        }
+      });
+
+      const toTransaction = await tx.vaultTransaction.create({
+        data: {
+          branchId: targetBranchId,
+          type: `${toType}_DEPOSIT`,
+          amount: convertAmount,
+          description: `استلام من ${fromType}`,
+          notes: notes || `تحويل داخلي بين الخزائن`,
+          createdBy: userId,
+          balanceBefore: branch[toField],
+          balanceAfter: branch[toField] + convertAmount
+        }
+      });
+
+      return { updatedBranch, fromTransaction, toTransaction };
+    });
+
+    res.json({
+      success: true,
+      message: `تم تحويل ${convertAmount} جنيه من ${fromType} إلى ${toType} بنجاح`,
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Zero out a vault (Admin only)
+ * تصفير خزنة (كأن المبلغ تم سحبه)
+ */
+exports.zeroVault = async (req, res, next) => {
+  try {
+    const { branchId, vaultType, reason } = req.body;
+    const userId = req.user.id;
+
+    // Only admin can zero vaults
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'فقط الأدمن يمكنه تصفير الخزائن'
+      });
+    }
+
+    const validTypes = ['CASH', 'CARD', 'WALLET', 'ALL'];
+    if (!validTypes.includes(vaultType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'نوع الخزنة غير صحيح. الأنواع: CASH, CARD, WALLET, ALL'
+      });
+    }
+
+    // Get branch
+    const branch = await prisma.branch.findUnique({
+      where: { id: branchId }
+    });
+
+    if (!branch) {
+      return res.status(404).json({
+        success: false,
+        message: 'الفرع غير موجود'
+      });
+    }
+
+    // Prepare updates and transactions
+    const updates = {};
+    const transactions = [];
+
+    const vaultFields = {
+      'CASH': { field: 'vaultBalance', type: 'CASH_WITHDRAWAL', label: 'النقدي' },
+      'CARD': { field: 'cardVaultBalance', type: 'CARD_WITHDRAWAL', label: 'الفيزا' },
+      'WALLET': { field: 'walletBalance', type: 'WALLET_WITHDRAWAL', label: 'المحفظة' }
+    };
+
+    // Determine which vaults to zero
+    const vaultsToZero = vaultType === 'ALL' ? ['CASH', 'CARD', 'WALLET'] : [vaultType];
+
+    // Build update data and transaction records
+    for (const type of vaultsToZero) {
+      const vaultInfo = vaultFields[type];
+      const currentBalance = branch[vaultInfo.field];
+
+      if (currentBalance > 0) {
+        updates[vaultInfo.field] = 0;
+        transactions.push({
+          type: type,
+          amount: currentBalance,
+          vaultInfo: vaultInfo,
+          balanceBefore: currentBalance
+        });
+      }
+    }
+
+    if (transactions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'الخزائن المحددة فارغة بالفعل'
+      });
+    }
+
+    // Execute zeroing
+    const result = await prisma.$transaction(async (tx) => {
+      // Update branch vaults
+      const updatedBranch = await tx.branch.update({
+        where: { id: branchId },
+        data: updates
+      });
+
+      // Create vault transactions
+      const createdTransactions = [];
+      for (const trans of transactions) {
+        const vaultTrans = await tx.vaultTransaction.create({
+          data: {
+            branchId,
+            type: trans.vaultInfo.type,
+            amount: trans.amount,
+            description: `تصفير خزنة ${trans.vaultInfo.label}`,
+            notes: reason || 'تم سحب الرصيد بالكامل',
+            createdBy: userId,
+            balanceBefore: trans.balanceBefore,
+            balanceAfter: 0
+          }
+        });
+        createdTransactions.push(vaultTrans);
+      }
+
+      return { updatedBranch, transactions: createdTransactions };
+    });
+
+    const totalZeroed = transactions.reduce((sum, t) => sum + t.amount, 0);
+
+    res.json({
+      success: true,
+      message: `تم تصفير ${vaultType === 'ALL' ? 'كل الخزائن' : vaultFields[vaultType].label} - إجمالي: ${totalZeroed} جنيه`,
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 
 /**

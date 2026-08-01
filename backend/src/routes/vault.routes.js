@@ -80,4 +80,20 @@ router.get(
   vaultController.getAllDrawers
 );
 
+// Convert between vault types (CASH, CARD, WALLET)
+router.post(
+  '/convert',
+  authenticate,
+  authorize('MANAGER', 'ADMIN'),
+  vaultController.convertVaultType
+);
+
+// Zero out a vault (Admin only)
+router.post(
+  '/zero',
+  authenticate,
+  authorize('ADMIN'),
+  vaultController.zeroVault
+);
+
 module.exports = router;

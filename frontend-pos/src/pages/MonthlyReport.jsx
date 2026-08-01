@@ -213,6 +213,19 @@ export default function MonthlyReport() {
   const totalReturnsCost = returnsData.reduce((sum, ret) => sum + (ret.totalCostAmount || 0), 0);
   const netSales = totalSales - totalReturns;
   
+  // تفصيل المبيعات حسب طريقة الدفع
+  const salesByPayment = salesData.reduce((acc, sale) => {
+    const method = sale.paymentMethod || 'CASH';
+    if (!acc[method]) acc[method] = 0;
+    acc[method] += sale.total || 0;
+    return acc;
+  }, {});
+  const cashSales = salesByPayment.CASH || 0;
+  const cardSales = salesByPayment.CARD || 0;
+  const walletSales = salesByPayment.WALLET || 0;
+  const creditSales = salesByPayment.CREDIT || 0;
+  const mixedSales = salesByPayment.MIXED || 0;
+  
   // المشتريات = المشتريات العادية + مشتريات الإنتاج (قماش + تصنيع + غسيل)
   const regularPurchases = purchasesData.reduce((sum, purchase) => sum + (purchase.totalAmount || 0), 0);
   const totalPurchases = regularPurchases + totalProductionCost;
@@ -428,6 +441,41 @@ export default function MonthlyReport() {
               <div className="flex justify-between items-center pb-2 border-b border-green-200">
                 <span className="text-sm">مبيعات الفروع</span>
                 <span className="font-medium text-green-700">{totalSales.toFixed(2)}</span>
+              </div>
+              
+              {/* تفصيل المبيعات حسب طريقة الدفع */}
+              <div className="bg-white p-2 rounded mb-2 border border-green-300">
+                <div className="text-xs font-bold text-gray-700 mb-1">تفصيل حسب طريقة الدفع:</div>
+                {cashSales > 0 && (
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-600">💵 نقدي</span>
+                    <span className="text-gray-700">{cashSales.toFixed(2)} ج</span>
+                  </div>
+                )}
+                {cardSales > 0 && (
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-600">💳 فيزا</span>
+                    <span className="text-gray-700">{cardSales.toFixed(2)} ج</span>
+                  </div>
+                )}
+                {walletSales > 0 && (
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-600">📱 محفظة</span>
+                    <span className="text-gray-700">{walletSales.toFixed(2)} ج</span>
+                  </div>
+                )}
+                {creditSales > 0 && (
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-600">📝 آجل</span>
+                    <span className="text-gray-700">{creditSales.toFixed(2)} ج</span>
+                  </div>
+                )}
+                {mixedSales > 0 && (
+                  <div className="flex justify-between items-center text-xs px-2">
+                    <span className="text-gray-600">🔀 مختلط</span>
+                    <span className="text-gray-700">{mixedSales.toFixed(2)} ج</span>
+                  </div>
+                )}
               </div>
               
               <div className="flex justify-between items-center pb-2 border-b border-green-200">

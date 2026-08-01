@@ -15,7 +15,10 @@ export default function POS() {
   const [amountPaid, setAmountPaid] = useState('');
   const [cardConfirmed, setCardConfirmed] = useState(false);
   const [cardDestination, setCardDestination] = useState('BRANCH'); // 'BRANCH' or 'MAIN'
+  const [walletConfirmed, setWalletConfirmed] = useState(false);
+  const [walletDestination, setWalletDestination] = useState('BRANCH'); // 'BRANCH' or 'MAIN'
   const [showCardConfirm, setShowCardConfirm] = useState(false);
+  const [showWalletConfirm, setShowWalletConfirm] = useState(false);
   const [currentShift, setCurrentShift] = useState(null);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -255,6 +258,12 @@ export default function POS() {
       return;
     }
 
+    // Wallet payment requires confirmation
+    if (paymentMethod === 'WALLET' && !walletConfirmed) {
+      setShowWalletConfirm(true);
+      return;
+    }
+
     // Cash payment requires sufficient amount
     if (paymentMethod === 'CASH') {
       const paid = parseFloat(amountPaid) || 0;
@@ -264,7 +273,7 @@ export default function POS() {
       }
     }
 
-    const paid = paymentMethod === 'CARD' ? total : (parseFloat(amountPaid) || 0);
+    const paid = paymentMethod === 'CARD' || paymentMethod === 'WALLET' ? total : (parseFloat(amountPaid) || 0);
 
     const saleData = {
       branchId: user.branchId,
@@ -284,6 +293,10 @@ export default function POS() {
       ...(paymentMethod === 'CARD' && { 
         cardConfirmed: true,
         cardDestination: cardDestination 
+      }),
+      ...(paymentMethod === 'WALLET' && { 
+        walletConfirmed: true,
+        walletDestination: walletDestination 
       }),
       customerName: customerName || undefined,
       customerPhone: customerPhone || undefined,
@@ -841,7 +854,8 @@ export default function POS() {
                   onChange={(e) => {
                     setPaymentMethod(e.target.value);
                     setCardConfirmed(false);
-                    if (e.target.value === 'CARD') {
+                    setWalletConfirmed(false);
+                    if (e.target.value === 'CARD' || e.target.value === 'WALLET') {
                       setAmountPaid(total.toString());
                     }
                   }}
@@ -849,6 +863,7 @@ export default function POS() {
                 >
                   <option value="CASH">💵 كاش (نقدي)</option>
                   <option value="CARD">💳 بطاقة (فيزا / شبكة)</option>
+                  <option value="WALLET">📱 محفظة إلكترونية</option>
                   <option value="CREDIT">📋 آجل (حساب عميل)</option>
                 </select>
               </div>
@@ -880,6 +895,13 @@ export default function POS() {
                 <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 text-center">
                   <p className="text-xs font-bold text-emerald-900">💳 سيتم معالجة الدفع عبر الفيزا</p>
                   <p className="text-xs text-emerald-700 font-semibold mt-0.5">المبلغ الإجمالي المطلوب: {total.toFixed(2)} ج.م</p>
+                </div>
+              )}
+
+              {paymentMethod === 'WALLET' && (
+                <div className="bg-blue-50/80 border border-blue-200/80 rounded-xl p-3 text-center">
+                  <p className="text-xs font-bold text-blue-900">📱 سيتم معالجة الدفع عبر المحفظة الإلكترونية</p>
+                  <p className="text-xs text-blue-700 font-semibold mt-0.5">المبلغ الإجمالي المطلوب: {total.toFixed(2)} ج.م</p>
                 </div>
               )}
 
@@ -1050,6 +1072,64 @@ export default function POS() {
                 className="btn-secondary flex-1 py-3 text-sm font-bold"
               >
                 إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wallet Payment Confirmation Modal */}
+      {showWalletConfirm && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200">
+            <div className="text-center mb-5">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-3xl">📱</span>
+              </div>
+              <h3 className="text-lg font-black text-slate-900 mb-2">تأكيد دفع بالمحفظة</h3>
+              <p className="text-sm text-slate-600 font-medium">
+                هل تم استلام المبلغ <span className="font-black text-blue-700">{total.toFixed(2)} ج.م</span> عبر المحفظة الإلكترونية بنجاح؟
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                توجيه الأموال الحسابي
+              </label>
+              <select
+                value={walletDestination}
+                onChange={(e) => setWalletDestination(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-900 outline-none"
+              >
+                <option value="BRANCH">محفظة الفرع 🏪</option>
+                <option value="MAIN">محفظة المخزن الرئيسي 🏭</option>
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1.5 font-medium">
+                {walletDestination === 'BRANCH' 
+                  ? 'الأموال ستضاف إلى رصيد محفظة الفرع الحالي' 
+                  : 'الأموال ستضاف مباشرة إلى رصيد المخزن الرئيسي'}
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              <button
+                onClick={() => {
+                  setWalletConfirmed(true);
+                  setShowWalletConfirm(false);
+                  setTimeout(() => handleCompleteSale(), 100);
+                }}
+                className="btn-primary w-full py-3 text-sm font-bold"
+              >
+                نعم، تم الدفع واستلام التأكيد
+              </button>
+              <button
+                onClick={() => {
+                  setShowWalletConfirm(false);
+                  setWalletConfirmed(false);
+                }}
+                className="btn-secondary w-full py-2.5 text-sm font-bold"
+              >
+                إلغاء العملية
               </button>
             </div>
           </div>

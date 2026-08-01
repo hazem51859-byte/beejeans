@@ -125,6 +125,7 @@ export default function VaultManagement() {
   const mainFactoryVault = vaults.branches?.find(b => b.id === '1') || {};
   const mainFactoryBalance = mainFactoryVault.vaultBalance || 0;
   const mainFactoryCardBalance = mainFactoryVault.cardVaultBalance || 0;
+  const mainFactoryWalletBalance = mainFactoryVault.walletBalance || 0;
 
   // Get branches list for transfer dropdown (exclude main factory)
   const transferableBranches = vaults.branches?.filter(b => 
@@ -160,6 +161,10 @@ export default function VaultManagement() {
     switch(type) {
       case 'CARD_PAYMENT':
         return <CreditCard size={16} className="text-blue-500" />;
+      case 'WALLET_PAYMENT':
+        return <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>;
       case 'CASH_DEPOSIT':
       case 'DRAWER_TRANSFER':
       case 'MONEY_TRANSFER_IN':
@@ -175,6 +180,7 @@ export default function VaultManagement() {
   const getTransactionTypeLabel = (type) => {
     const types = {
       'CARD_PAYMENT': 'دفع فيزا',
+      'WALLET_PAYMENT': 'دفع محفظة',
       'CASH_DEPOSIT': 'إيداع نقدي',
       'CASH_WITHDRAWAL': 'سحب نقدي',
       'DRAWER_TRANSFER': 'تحويل من الدرج',
@@ -231,7 +237,7 @@ export default function VaultManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">
@@ -259,6 +265,23 @@ export default function VaultManagement() {
           </p>
           <p className="text-xs opacity-75 mt-2">
             معاملات الفيزا
+          </p>
+        </div>
+
+        <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">
+              رصيد المحفظة
+            </h3>
+            <svg className="w-6 h-6 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-3xl font-bold">
+            {(mainFactoryWalletBalance || 0).toLocaleString('ar-EG')} جنيه
+          </p>
+          <p className="text-xs opacity-75 mt-2">
+            المحفظة الإلكترونية
           </p>
         </div>
 

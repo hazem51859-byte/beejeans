@@ -61,6 +61,7 @@ model Branch {
   // Branch Vault (الخزينة)
   vaultBalance      Float    @default(0) // رصيد الخزينة النقدي
   cardVaultBalance  Float    @default(0) // رصيد الفيزا في الخزينة
+  walletBalance     Float    @default(0) // رصيد المحفظة الإلكترونية
   
   users         User[]
   inventory     Inventory[]

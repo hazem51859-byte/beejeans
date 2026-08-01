@@ -35,6 +35,10 @@ export default function BranchVaults() {
     switch(type) {
       case 'CARD_PAYMENT':
         return <CreditCard size={16} className="text-blue-500" />;
+      case 'WALLET_PAYMENT':
+        return <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>;
       case 'CASH_DEPOSIT':
       case 'DRAWER_TRANSFER':
       case 'MONEY_TRANSFER_IN':
@@ -50,6 +54,7 @@ export default function BranchVaults() {
   const getTransactionTypeLabel = (type) => {
     const types = {
       'CARD_PAYMENT': 'دفع فيزا',
+      'WALLET_PAYMENT': 'دفع محفظة',
       'CASH_DEPOSIT': 'إيداع نقدي',
       'CASH_WITHDRAWAL': 'سحب نقدي',
       'DRAWER_TRANSFER': 'تحويل من الدرج',
@@ -85,7 +90,7 @@ export default function BranchVaults() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Total Vault Balance */}
         <div className="card bg-gradient-to-br from-emerald-600 to-teal-600 text-white">
           <div className="flex items-center justify-between mb-2">
@@ -111,6 +116,22 @@ export default function BranchVaults() {
           </p>
           <p className="text-xs opacity-75 mt-2">
             معاملات الفيزا
+          </p>
+        </div>
+
+        {/* Wallet Balance */}
+        <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">إجمالي المحفظة</h3>
+            <svg className="w-6 h-6 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-3xl font-bold">
+            {(vaults.summary?.totalWalletBalance || 0).toLocaleString('ar-EG')} جنيه
+          </p>
+          <p className="text-xs opacity-75 mt-2">
+            المحفظة الإلكترونية
           </p>
         </div>
 
@@ -143,6 +164,7 @@ export default function BranchVaults() {
                 <th className="text-right py-3 px-4 font-semibold">الكود</th>
                 <th className="text-right py-3 px-4 font-semibold">الخزينة (نقدي)</th>
                 <th className="text-right py-3 px-4 font-semibold">الفيزا</th>
+                <th className="text-right py-3 px-4 font-semibold">المحفظة</th>
                 <th className="text-right py-3 px-4 font-semibold">عدد المعاملات</th>
               </tr>
             </thead>
@@ -159,6 +181,11 @@ export default function BranchVaults() {
                   <td className="py-3 px-4">
                     <span className="font-bold text-blue-600">
                       {(branch.cardVaultBalance || 0).toLocaleString('ar-EG')} ج
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="font-bold text-purple-600">
+                      {(branch.walletBalance || 0).toLocaleString('ar-EG')} ج
                     </span>
                   </td>
                   <td className="py-3 px-4 text-gray-600">

@@ -210,8 +210,8 @@ exports.createOfficeInvoice = async (req, res) => {
       }
 
       // 4. إضافة للخزينة فقط إذا لم يكن شحن
-      if (type !== 'SHIPMENT' && (paymentMethod === 'CASH' || paymentMethod === 'CARD') && actualPaidAmount > 0) {
-        const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : 'cardVaultBalance';
+      if (type !== 'SHIPMENT' && (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'WALLET') && actualPaidAmount > 0) {
+        const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : (paymentMethod === 'CARD' ? 'cardVaultBalance' : 'walletBalance');
         
         // جلب الرصيد الحالي
         const currentWarehouse = await tx.branch.findUnique({
@@ -233,7 +233,7 @@ exports.createOfficeInvoice = async (req, res) => {
         await tx.vaultTransaction.create({
           data: {
             branchId: mainWarehouse.id,
-            type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : 'CARD_PAYMENT',
+            type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : (paymentMethod === 'CARD' ? 'CARD_PAYMENT' : 'WALLET_PAYMENT'),
             amount: actualPaidAmount,
             description: `فاتورة مكتب ${invoiceNumber}`,
             notes: `دفعة من ${customerName}`,
@@ -356,8 +356,8 @@ exports.updatePayment = async (req, res) => {
       where: { code: 'MAIN' }
     });
 
-    if (mainWarehouse && (paymentMethod === 'CASH' || paymentMethod === 'CARD')) {
-      const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : 'cardVaultBalance';
+    if (mainWarehouse && (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'WALLET')) {
+      const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : (paymentMethod === 'CARD' ? 'cardVaultBalance' : 'walletBalance');
       
       await prisma.branch.update({
         where: { id: mainWarehouse.id },
@@ -371,7 +371,7 @@ exports.updatePayment = async (req, res) => {
       await prisma.vaultTransaction.create({
         data: {
           branchId: mainWarehouse.id,
-          type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : 'CARD_PAYMENT',
+          type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : (paymentMethod === 'CARD' ? 'CARD_PAYMENT' : 'WALLET_PAYMENT'),
           amount: paidAmount,
           description: `دفعة على فاتورة ${invoice.invoiceNumber}`,
           createdBy: userId,

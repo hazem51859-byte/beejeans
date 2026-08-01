@@ -155,7 +155,9 @@ exports.createSale = async (req, res, next) => {
       paymentMethod,
       amountPaid,
       cardConfirmed = false,
+      walletConfirmed = false,
       cardDestination, // 'BRANCH' or 'MAIN' - لتحديد وجهة الفيزا
+      walletDestination, // 'BRANCH' or 'MAIN' - لتحديد وجهة المحفظة
       customerName,
       customerPhone,
       discountAmount = 0,
@@ -190,6 +192,23 @@ exports.createSale = async (req, res, next) => {
         return res.status(400).json({
           success: false,
           message: 'يجب تحديد وجهة الفيزا: الفرع أو المخزن الرئيسي'
+        });
+      }
+    }
+
+    // Validate wallet payment confirmation
+    if (paymentMethod === 'WALLET') {
+      if (!walletConfirmed) {
+        return res.status(400).json({
+          success: false,
+          message: 'Wallet payment must be confirmed'
+        });
+      }
+      
+      if (!walletDestination || !['BRANCH', 'MAIN'].includes(walletDestination)) {
+        return res.status(400).json({
+          success: false,
+          message: 'يجب تحديد وجهة المحفظة: الفرع أو المخزن الرئيسي'
         });
       }
     }
@@ -291,6 +310,7 @@ exports.createSale = async (req, res, next) => {
     const total = subtotal; // السعر النهائي = المجموع فقط، بدون ضرائب أو خصومات
     const paid = parseFloat(amountPaid);
     const cardAmount = paymentMethod === 'CARD' ? total : 0;
+    const walletAmount = paymentMethod === 'WALLET' ? total : 0;
     const changeAmount = paymentMethod === 'CASH' ? paid - total : 0;
 
     if (paymentMethod === 'CASH' && changeAmount < 0) {
@@ -392,7 +412,7 @@ exports.createSale = async (req, res, next) => {
             await tx.branch.update({
               where: { id: mainBranch.id },
               data: {
-                vaultBalance: {
+                cardVaultBalance: {
                   increment: cardAmount
                 }
               }
@@ -408,8 +428,8 @@ exports.createSale = async (req, res, next) => {
                 description: `دفع فيزا من فرع ${shift.branch.name} → المخزن الرئيسي`,
                 notes: `فاتورة ${invoiceNumber}`,
                 createdBy: cashierId,
-                balanceBefore: mainBranch.vaultBalance,
-                balanceAfter: mainBranch.vaultBalance + cardAmount
+                balanceBefore: mainBranch.cardVaultBalance,
+                balanceAfter: mainBranch.cardVaultBalance + cardAmount
               }
             });
           }
@@ -440,6 +460,71 @@ exports.createSale = async (req, res, next) => {
               createdBy: cashierId,
               balanceBefore: currentBranch.cardVaultBalance || 0,
               balanceAfter: (currentBranch.cardVaultBalance || 0) + cardAmount
+            }
+          });
+        }
+      }
+
+      // Handle wallet payment - transfer to selected vault
+      if (paymentMethod === 'WALLET') {
+        if (walletDestination === 'MAIN') {
+          // تحويل للمخزن الرئيسي
+          const mainBranch = await tx.branch.findFirst({
+            where: { code: 'MAIN' }
+          });
+
+          if (mainBranch) {
+            await tx.branch.update({
+              where: { id: mainBranch.id },
+              data: {
+                walletBalance: {
+                  increment: walletAmount
+                }
+              }
+            });
+
+            await tx.vaultTransaction.create({
+              data: {
+                branchId: mainBranch.id,
+                type: 'WALLET_PAYMENT',
+                amount: walletAmount,
+                saleId: newSale.id,
+                invoiceNumber: newSale.invoiceNumber,
+                description: `دفع محفظة من فرع ${shift.branch.name} → المخزن الرئيسي`,
+                notes: `فاتورة ${invoiceNumber}`,
+                createdBy: cashierId,
+                balanceBefore: mainBranch.walletBalance,
+                balanceAfter: mainBranch.walletBalance + walletAmount
+              }
+            });
+          }
+        } else {
+          // تحويل لمحفظة الفرع
+          const currentBranch = await tx.branch.findUnique({
+            where: { id: branchId }
+          });
+
+          await tx.branch.update({
+            where: { id: branchId },
+            data: {
+              walletBalance: {
+                increment: walletAmount
+              }
+            }
+          });
+
+          await tx.vaultTransaction.create({
+            data: {
+              branchId: branchId,
+              type: 'WALLET_PAYMENT',
+              amount: walletAmount,
+              saleId: newSale.id,
+              invoiceNumber: newSale.invoiceNumber,
+              description: `دفع محفظة - ${shift.branch.name}`,
+              notes: `فاتورة ${invoiceNumber} - محفظة الفرع`,
+              createdBy: cashierId,
+              balanceBefore: currentBranch.walletBalance || 0,
+              balanceAfter: (currentBranch.walletBalance || 0) + walletAmount
             }
           });
         }

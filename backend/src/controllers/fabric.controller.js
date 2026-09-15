@@ -360,27 +360,19 @@ exports.getFabricWarehouse = async (req, res) => {
   try {
     const stock = await prisma.fabricStock.findMany({
       include: {
-        fabricType: {
-          include: {
-            _count: {
-              select: {
-                fabricPurchases: true,
-                manufacturingOrders: true
-              }
-            }
-          }
-        }
+        fabricType: true
       },
       orderBy: {
-        fabricType: {
-          name: 'asc'
-        }
+        lastUpdated: 'desc'
       }
     });
 
+    // Filter out any null fabricTypes
+    const validStock = stock.filter(s => s.fabricType !== null);
+
     res.json({
       success: true,
-      data: stock
+      data: validStock
     });
   } catch (error) {
     console.error('Error fetching fabric warehouse:', error);

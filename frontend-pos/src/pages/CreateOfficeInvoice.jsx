@@ -56,11 +56,18 @@ export default function CreateOfficeInvoice() {
 
   const fetchProducts = async () => {
     try {
-      const response = await api.get('/products', { params: { status: 'ACTIVE' } });
+      const response = await api.get('/products', { 
+        params: { 
+          status: 'ACTIVE',
+          limit: 1000 // جيب كل المنتجات
+        } 
+      });
       const productData = response.data?.data || response.data;
-      setProducts(Array.isArray(productData) ? productData : []);
+      const productList = Array.isArray(productData) ? productData : [];
+      console.log('📦 Products loaded:', productList.length);
+      setProducts(productList);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('❌ Error fetching products:', error);
       setProducts([]);
     }
   };
@@ -129,12 +136,18 @@ export default function CreateOfficeInvoice() {
     const updated = [...items];
     updated[index].productCode = code;
     
-    // البحث عن المنتج بالكود
+    console.log('🔍 Searching for product:', code);
+    console.log('📦 Available products:', products.length);
+    
+    // البحث عن المنتج بالكود (SKU أو Barcode)
     const product = products.find(p => 
-      p.code?.toLowerCase() === code.toLowerCase() ||
+      p.sku === code ||
+      p.barcode === code ||
       p.sku?.toLowerCase() === code.toLowerCase() ||
-      p.barcode === code
+      p.barcode?.toLowerCase() === code.toLowerCase()
     );
+    
+    console.log('✅ Found product:', product?.name || 'Not found');
     
     if (product) {
       updated[index].productId = product.id;
@@ -144,15 +157,16 @@ export default function CreateOfficeInvoice() {
       try {
         const inventoryRes = await api.get(`/inventory/product/${product.id}`);
         const inventoryData = inventoryRes.data?.data || inventoryRes.data;
-        // البحث عن المخزن الرئيسي بكود MAIN أو أكبر كمية موجودة
+        // البحث عن المخزن الرئيسي بكود MAIN
         const mainInventory = inventoryData.find(inv => 
-          inv.branch?.code === 'MAIN' || inv.branchId === '550e8400-e29b-41d4-a716-446655440000'
+          inv.branch?.code === 'MAIN' || inv.branchId === '9e415f52-f384-4155-be58-52b645d4d308'
         );
         // لو ملقاش MAIN خد الإجمالي
         const totalQty = mainInventory 
           ? mainInventory.quantity 
           : inventoryData.reduce((sum, inv) => sum + (inv.quantity || 0), 0);
         updated[index].availableQuantity = totalQty;
+        console.log('📊 Available quantity:', totalQty);
       } catch (err) {
         console.error('Error fetching inventory:', err);
         updated[index].availableQuantity = 0;

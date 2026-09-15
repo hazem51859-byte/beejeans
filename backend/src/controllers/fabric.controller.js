@@ -358,27 +358,54 @@ exports.createFabricPurchase = async (req, res) => {
 // Get fabric warehouse (all stock)
 exports.getFabricWarehouse = async (req, res) => {
   try {
-    const stock = await prisma.fabricStock.findMany({
-      include: {
-        fabricType: true
-      },
-      orderBy: {
-        lastUpdated: 'desc'
-      }
+    console.log('🔍 Fetching fabric warehouse...');
+    
+    // First get all fabric types
+    const fabricTypes = await prisma.fabricType.findMany({
+      where: { isActive: true }
     });
-
-    // Filter out any null fabricTypes
-    const validStock = stock.filter(s => s.fabricType !== null);
+    
+    console.log(`📦 Found ${fabricTypes.length} active fabric types`);
+    
+    // Then get stock for each type
+    const stockData = await Promise.all(
+      fabricTypes.map(async (type) => {
+        const stock = await prisma.fabricStock.findUnique({
+          where: { fabricTypeId: type.id }
+        });
+        
+        return {
+          id: stock?.id || `temp-${type.id}`,
+          fabricTypeId: type.id,
+          fabricType: type,
+          availableMeters: stock?.availableMeters || 0,
+          reservedMeters: stock?.reservedMeters || 0,
+          totalPurchased: stock?.totalPurchased || 0,
+          totalUsed: stock?.totalUsed || 0,
+          lastUpdated: stock?.lastUpdated || new Date(),
+          createdAt: stock?.createdAt || new Date()
+        };
+      })
+    );
+    
+    console.log(`✅ Processed ${stockData.length} stock entries`);
 
     res.json({
       success: true,
-      data: validStock
+      data: stockData
     });
   } catch (error) {
-    console.error('Error fetching fabric warehouse:', error);
+    console.error('❌ Error fetching fabric warehouse:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      meta: error.meta,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
-      message: 'فشل في جلب مخزن القماش'
+      message: 'فشل في جلب مخزن القماش',
+      error: error.message
     });
   }
 };

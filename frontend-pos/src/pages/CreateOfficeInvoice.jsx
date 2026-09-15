@@ -131,10 +131,28 @@ export default function CreateOfficeInvoice() {
     setOfficeCustomers([]);
   };
 
-  // بحث المنتج بالكود
-  const handleProductCodeChange = async (index, code) => {
+  // بحث المنتج بالكود مع debounce
+  const handleProductCodeChange = (index, code) => {
     const updated = [...items];
     updated[index].productCode = code;
+    setItems(updated);
+    
+    // Cancel previous timer
+    if (updated[index].searchTimer) {
+      clearTimeout(updated[index].searchTimer);
+    }
+    
+    // فقط لو الكود 4 أرقام أو أكتر
+    if (code.length >= 4) {
+      updated[index].searchTimer = setTimeout(() => {
+        searchProduct(index, code);
+      }, 300); // انتظر 300ms بعد آخر حرف
+      setItems(updated);
+    }
+  };
+  
+  const searchProduct = async (index, code) => {
+    const updated = [...items];
     
     console.log('🔍 Searching for product:', code);
     console.log('📦 Available products:', products.length);
@@ -157,16 +175,22 @@ export default function CreateOfficeInvoice() {
       try {
         const inventoryRes = await api.get(`/inventory/product/${product.id}`);
         const inventoryData = inventoryRes.data?.data || inventoryRes.data;
-        // البحث عن المخزن الرئيسي بكود MAIN
-        const mainInventory = inventoryData.find(inv => 
-          inv.branch?.code === 'MAIN' || inv.branchId === '9e415f52-f384-4155-be58-52b645d4d308'
-        );
-        // لو ملقاش MAIN خد الإجمالي
-        const totalQty = mainInventory 
-          ? mainInventory.quantity 
-          : inventoryData.reduce((sum, inv) => sum + (inv.quantity || 0), 0);
-        updated[index].availableQuantity = totalQty;
-        console.log('📊 Available quantity:', totalQty);
+        
+        if (Array.isArray(inventoryData) && inventoryData.length > 0) {
+          // البحث عن المخزن الرئيسي بكود MAIN
+          const mainInventory = inventoryData.find(inv => 
+            inv.branch?.code === 'MAIN' || inv.branchId === '9e415f52-f384-4155-be58-52b645d4d308'
+          );
+          // لو ملقاش MAIN خد الإجمالي
+          const totalQty = mainInventory 
+            ? mainInventory.quantity 
+            : inventoryData.reduce((sum, inv) => sum + (inv.quantity || 0), 0);
+          updated[index].availableQuantity = totalQty;
+          console.log('📊 Available quantity:', totalQty);
+        } else {
+          updated[index].availableQuantity = 0;
+          console.log('⚠️ No inventory data');
+        }
       } catch (err) {
         console.error('Error fetching inventory:', err);
         updated[index].availableQuantity = 0;

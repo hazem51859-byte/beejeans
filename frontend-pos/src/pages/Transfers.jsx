@@ -187,22 +187,38 @@ export default function Transfers() {
 
   const handleBarcodeChange = (value) => {
     setCurrentItem({ ...currentItem, barcode: value });
+  };
+
+  const searchProductByBarcode = () => {
+    const value = currentItem.barcode;
+    console.log('🔍 Searching for:', value);
+    console.log('📦 Total products:', products.length);
     
     if (value.length >= 3) {
-      const product = products.find(p => 
-        p.sku?.toLowerCase().includes(value.toLowerCase()) ||
-        p.barcode?.toLowerCase().includes(value.toLowerCase())
-      );
+      const product = products.find(p => {
+        const barcode = String(p.barcode || '');
+        const searchValue = value;
+        // Exact match on barcode only
+        return barcode === searchValue;
+      });
+      
+      console.log('✅ Found product:', product);
       
       if (product) {
         const inventory = sourceInventory.find(inv => inv.productId === product.id);
         setCurrentItem({
           ...currentItem,
-          barcode: value,
           productId: product.id,
           costPrice: product.costPrice || 0,
           sellingPrice: product.sellingPrice || 0
         });
+        toast.success(`تم العثور على: ${product.name}`);
+        // Focus on quantity input after finding product
+        setTimeout(() => {
+          document.getElementById('quantity-input-transfer')?.focus();
+        }, 100);
+      } else {
+        toast.error('لم يتم العثور على المنتج');
       }
     }
   };
@@ -553,13 +569,11 @@ export default function Transfers() {
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            if (currentItem.productId) {
-                              document.getElementById('quantity-input-transfer')?.focus();
-                            }
+                            searchProductByBarcode();
                           }
                         }}
                         className="w-full border-2 border-emerald-300 rounded-lg px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-emerald-500"
-                        placeholder="اكتب أو امسح الباركود..."
+                        placeholder="اكتب أو امسح الباركود واضغط Enter..."
                         autoFocus
                       />
                     </div>
@@ -571,6 +585,8 @@ export default function Transfers() {
                         min="1"
                         value={currentItem.quantity}
                         onChange={(e) => setCurrentItem({ ...currentItem, quantity: e.target.value })}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => e.target.select()}
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
@@ -593,7 +609,7 @@ export default function Transfers() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-bold text-slate-900">{product.name}</p>
-                            <p className="text-xs text-slate-500">SKU: {product.sku}</p>
+                            <p className="text-xs text-slate-500">الكود: {product.barcode}</p>
                           </div>
                           <span className={`px-2 py-1 rounded text-xs font-bold ${
                             availableQty >= currentItem.quantity ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'

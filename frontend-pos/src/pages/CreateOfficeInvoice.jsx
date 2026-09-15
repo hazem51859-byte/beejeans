@@ -157,11 +157,9 @@ export default function CreateOfficeInvoice() {
     console.log('🔍 Searching for product:', code);
     console.log('📦 Available products:', products.length);
     
-    // البحث عن المنتج بالكود (SKU أو Barcode)
+    // البحث عن المنتج بالباركود فقط
     const product = products.find(p => 
-      p.sku === code ||
       p.barcode === code ||
-      p.sku?.toLowerCase() === code.toLowerCase() ||
       p.barcode?.toLowerCase() === code.toLowerCase()
     );
     

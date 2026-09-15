@@ -130,7 +130,6 @@ export default function Manufacturing() {
     
     if (code.trim().length >= 3) {
       const product = products.find(p => 
-        p.sku.toLowerCase() === code.toLowerCase().trim() ||
         p.barcode?.toLowerCase() === code.toLowerCase().trim()
       );
       
@@ -310,7 +309,7 @@ export default function Manufacturing() {
                         ✓ {selectedProduct.name}
                       </p>
                       <p className="text-xs text-green-600 mt-1">
-                        الكود: {selectedProduct.sku}
+                        الكود: {selectedProduct.barcode}
                       </p>
                     </div>
                   )}

@@ -3,7 +3,7 @@ const prisma = require('../config/database');
 exports.getInventoryByBranch = async (req, res, next) => {
   try {
     const { branchId } = req.params;
-    const { page = 1, limit = 50 } = req.query;
+    const { page = 1, limit = 200 } = req.query;
 
     const inventory = await prisma.inventory.findMany({
       where: { branchId },
@@ -102,7 +102,9 @@ exports.getInventoryByProduct = async (req, res, next) => {
     const { productId } = req.params;
 
     const inventory = await prisma.inventory.findMany({
-      where: { productId },
+      where: { 
+        productId
+      },
       include: {
         branch: { select: { id: true, name: true, code: true } }
       }

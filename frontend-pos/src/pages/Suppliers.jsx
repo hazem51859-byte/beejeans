@@ -1329,7 +1329,7 @@ export default function Suppliers() {
                   <option value="">-- اختر الصنف من القائمة --</option>
                   {productsList.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.sku || p.barcode || 'بدون كود'}) - التكلفة الحالية: {p.costPrice || 0} ج.م
+                      {p.name} ({p.barcode || 'بدون كود'}) - التكلفة الحالية: {p.costPrice || 0} ج.م
                     </option>
                   ))}
                 </select>

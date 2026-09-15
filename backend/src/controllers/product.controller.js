@@ -20,7 +20,7 @@ exports.createProduct = async (req, res, next) => {
 
 exports.getProducts = async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, categoryId, status } = req.query;
+    const { page = 1, limit = 200, categoryId, status } = req.query;
     const where = {};
     if (categoryId) where.categoryId = categoryId;
     if (status) where.status = status;

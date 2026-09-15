@@ -163,7 +163,6 @@ export default function WashingOrders() {
     
     if (code.trim().length >= 3) {
       const product = masterProducts.find(p => 
-        p.sku?.toLowerCase() === code.toLowerCase().trim() ||
         p.barcode?.toLowerCase() === code.toLowerCase().trim()
       );
       
@@ -550,7 +549,7 @@ export default function WashingOrders() {
                           ✓ {selectedProduct.name}
                         </p>
                         <p className="text-xs text-green-600 mt-1">
-                          الكود: {selectedProduct.sku} | Barcode: {selectedProduct.barcode}
+                          الكود: {selectedProduct.barcode}
                         </p>
                       </div>
                     )}

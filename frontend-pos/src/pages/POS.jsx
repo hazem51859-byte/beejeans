@@ -84,8 +84,7 @@ export default function POS() {
       // Check for exact barcode or SKU match
       const exactMatch = products.find(p => 
         p.barcode === searchQuery || 
-        p.sku === searchQuery ||
-        p.sku?.toLowerCase() === searchQuery.toLowerCase()
+        p.barcode?.toLowerCase() === searchQuery.toLowerCase()
       );
       
       if (exactMatch) {
@@ -100,7 +99,6 @@ export default function POS() {
   const filteredProducts = searchQuery.length >= 2
     ? products.filter(p => 
         p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.barcode?.includes(searchQuery)
       )
     : [];
@@ -515,7 +513,7 @@ export default function POS() {
                     >
                       <div className="font-bold text-slate-900 text-sm group-hover:text-emerald-600 transition-colors">{product.name}</div>
                       <div className="text-xs text-slate-400 font-mono mt-1">
-                        {product.sku} {product.color && `• ${product.color}`}
+                        {product.barcode} {product.color && `• ${product.color}`}
                       </div>
                       <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-100">
                         <span className="text-sm font-black text-emerald-700">
@@ -589,9 +587,9 @@ export default function POS() {
                         <div className="flex-1 pr-1">
                           <h3 className="font-bold text-slate-900 text-sm">{item.name}</h3>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
-                            {item.sku && (
+                            {item.barcode && (
                               <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono">
-                                {item.sku}
+                                {item.barcode}
                               </span>
                             )}
                             {item.color && (

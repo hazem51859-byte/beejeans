@@ -296,7 +296,7 @@ export default function AuditDetails() {
                   <tr key={item.id} className={item.actualQty === null ? 'bg-yellow-50' : ''}>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">{item.product.name}</div>
-                      <div className="text-sm text-gray-500">{item.product.sku}</div>
+                      <div className="text-sm text-gray-500">{item.product.barcode}</div>
                       {item.product.size && (
                         <span className="text-xs text-gray-400">مقاس: {item.product.size}</span>
                       )}

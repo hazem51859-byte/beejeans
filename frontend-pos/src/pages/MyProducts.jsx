@@ -101,9 +101,9 @@ export default function MyProducts() {
                   <div className="flex-1">
                     <h3 className="font-semibold text-lg">{item.product?.name}</h3>
                     <div className="flex gap-2 mt-1">
-                      {item.product?.sku && (
+                      {item.product?.barcode && (
                         <span className="inline-block px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-mono">
-                          {item.product.sku}
+                          {item.product.barcode}
                         </span>
                       )}
                       {item.product?.color && (

@@ -38,7 +38,9 @@ export default function ProductMaster() {
       const productsResponse = await axios.get(`${API_URL}/products`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setProducts(productsResponse.data.data || productsResponse.data);
+      const fetchedProducts = productsResponse.data.data || productsResponse.data;
+      console.log('📦 Fetched products:', fetchedProducts.length);
+      setProducts(fetchedProducts);
 
       // Get main branch
       const branchesResponse = await axios.get(`${API_URL}/branches`, {
@@ -49,12 +51,16 @@ export default function ProductMaster() {
       
       if (mainBranch) {
         setMainBranchId(mainBranch.id);
+        console.log('🏢 Main branch:', mainBranch.id);
         
         // Get inventory for main branch
         const inventoryResponse = await axios.get(`${API_URL}/inventory/branch/${mainBranch.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setInventory(inventoryResponse.data.data || inventoryResponse.data);
+        const fetchedInventory = inventoryResponse.data.data || inventoryResponse.data;
+        console.log('📊 Fetched inventory:', fetchedInventory.length);
+        console.log('📊 First inventory item:', fetchedInventory[0]);
+        setInventory(fetchedInventory);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -108,7 +114,7 @@ export default function ProductMaster() {
     setEditingProduct(product);
     setFormData({
       name: product.name,
-      sku: product.sku,
+      barcode: product.barcode,
       description: product.description || '',
       sellingPrice: product.sellingPrice || '',
       retailPrice: product.retailPrice || ''
@@ -147,7 +153,7 @@ export default function ProductMaster() {
 
         // 1. Create and add BARCODE - HIGH QUALITY
         const barcodeCanvas = document.createElement('canvas');
-        JsBarcode(barcodeCanvas, selectedProduct.sku, {
+        JsBarcode(barcodeCanvas, selectedProduct.barcode, {
           format: 'CODE128',
           width: 3, // Increased from 2.5
           height: 80, // Increased from 50
@@ -158,32 +164,32 @@ export default function ProductMaster() {
         const barcodeX = (pageWidth - barcodeWidth) / 2;
         pdf.addImage(barcodeImgData, 'PNG', barcodeX, currentY, barcodeWidth, barcodeHeight);
 
-        // 2. Create and add SKU (NEW canvas each time)
-        const skuCanvas = document.createElement('canvas');
-        const skuCtx = skuCanvas.getContext('2d');
-        const skuText = String(selectedProduct.sku);
-        const skuFontSize = 48;
+        // 2. Create and add Barcode Text (NEW canvas each time)
+        const barcodeTextCanvas = document.createElement('canvas');
+        const barcodeTextCtx = barcodeTextCanvas.getContext('2d');
+        const barcodeText = String(selectedProduct.barcode);
+        const barcodeTextFontSize = 48;
         
         // Set canvas to high resolution
-        skuCanvas.width = 800;
-        skuCanvas.height = 120;
+        barcodeTextCanvas.width = 800;
+        barcodeTextCanvas.height = 120;
         
         // Scale for retina
-        skuCtx.scale(2, 2);
+        barcodeTextCtx.scale(2, 2);
         
-        // Draw SKU text
-        skuCtx.font = `bold ${skuFontSize}px Arial`;
-        skuCtx.textAlign = 'center';
-        skuCtx.textBaseline = 'middle';
-        skuCtx.fillStyle = '#000000';
-        skuCtx.fillText(skuText, 200, 30);
+        // Draw barcode text
+        barcodeTextCtx.font = `bold ${barcodeTextFontSize}px Arial`;
+        barcodeTextCtx.textAlign = 'center';
+        barcodeTextCtx.textBaseline = 'middle';
+        barcodeTextCtx.fillStyle = '#000000';
+        barcodeTextCtx.fillText(barcodeText, 200, 30);
         
-        // Add SKU to PDF
-        const skuImgData = skuCanvas.toDataURL('image/png');
-        const skuImgWidth = 60;
-        const skuImgHeight = 9;
-        const skuX = (pageWidth - skuImgWidth) / 2;
-        pdf.addImage(skuImgData, 'PNG', skuX, currentY + barcodeHeight + 2, skuImgWidth, skuImgHeight);
+        // Add barcode text to PDF
+        const barcodeTextImgData = barcodeTextCanvas.toDataURL('image/png');
+        const barcodeTextImgWidth = 60;
+        const barcodeTextImgHeight = 9;
+        const barcodeTextX = (pageWidth - barcodeTextImgWidth) / 2;
+        pdf.addImage(barcodeTextImgData, 'PNG', barcodeTextX, currentY + barcodeHeight + 2, barcodeTextImgWidth, barcodeTextImgHeight);
 
         // 3. Create and add PRODUCT NAME (COMPLETELY NEW canvas)
         const nameCanvas = document.createElement('canvas');
@@ -240,7 +246,7 @@ export default function ProductMaster() {
       }
 
       // Save PDF
-      pdf.save(`barcodes-${selectedProduct.sku}-${barcodeQuantity}.pdf`);
+      pdf.save(`barcodes-${selectedProduct.barcode}-${barcodeQuantity}.pdf`);
       
       // Close modal
       setShowBarcodeModal(false);
@@ -269,7 +275,7 @@ export default function ProductMaster() {
 
   // Filter products based on search term
   const filteredProducts = products.filter(product => 
-    product.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    product.barcode.toLowerCase().includes(searchTerm.toLowerCase()) || 
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -344,7 +350,7 @@ export default function ProductMaster() {
               
               return (
                 <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4 whitespace-nowrap font-mono text-sm">{product.sku}</td>
+                  <td className="px-4 py-4 whitespace-nowrap font-mono text-sm">{product.barcode}</td>
                   <td className="px-4 py-4 whitespace-nowrap font-medium">{product.name}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600">
                     {totalMetersUsed > 0 ? (
@@ -588,7 +594,7 @@ export default function ProductMaster() {
               <div className="text-sm text-gray-600 mb-1">الصنف:</div>
               <div className="font-bold text-lg">{selectedProduct.name}</div>
               <div className="text-sm text-gray-600 mt-2">الكود:</div>
-              <div className="font-mono font-bold">{selectedProduct.sku}</div>
+              <div className="font-mono font-bold">{selectedProduct.barcode}</div>
             </div>
 
             {/* اختيار نوع السعر */}

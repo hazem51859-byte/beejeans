@@ -289,7 +289,7 @@ exports.createSale = async (req, res, next) => {
       }
 
       // السعر من المنتج مباشرة - بدون أي ضرائب أو خصومات
-      const unitPrice = parseFloat(item.unitPrice || product.sellingPrice);
+      const unitPrice = parseFloat(item.unitPrice || product.retailPrice || product.sellingPrice);
       const itemTotal = unitPrice * item.quantity;
 
       subtotal += itemTotal;
@@ -299,6 +299,8 @@ exports.createSale = async (req, res, next) => {
         serialNumber: item.serialNumber || null,
         quantity: item.quantity,
         unitPrice,
+        unitCostPrice: parseFloat(product.costPrice || 0),
+        unitRetailPrice: parseFloat(product.retailPrice || product.sellingPrice || 0), // snapshot سعر القطاعي لحظة البيع
         discount: 0, // لا توجد خصومات
         taxRate: 0,  // لا توجد ضرائب
         total: itemTotal,

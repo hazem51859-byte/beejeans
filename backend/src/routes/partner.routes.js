@@ -19,7 +19,9 @@ router.post('/', partnerController.createPartner);
 router.put('/:id', partnerController.updatePartner);
 router.delete('/:id', partnerController.deletePartner);
 
-// Partner Transactions
+// Partner Transactions & Vault Profit Withdrawals
+router.post('/adjust-capital', partnerController.adjustCapital);
+router.post('/withdraw-profit', partnerController.withdrawProfitFromVault);
 router.post('/transactions', partnerController.addPartnerTransaction);
 router.get('/:partnerId/transactions', partnerController.getPartnerTransactions);
 

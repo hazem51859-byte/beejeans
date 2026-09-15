@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Clear All Storage</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+    button {
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 15px 30px;
+      font-size: 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin: 10px;
+      font-weight: bold;
+    }
+    button:hover {
+      transform: scale(1.05);
+    }
+    .success {
+      color: #4ade80;
+      font-size: 24px;
+      margin-top: 20px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 Clear All Cache & Storage</h1>
+    <p>This will clear all stored data and cache</p>
+    <button onclick="clearAll()">Clear Everything</button>
+    <button onclick="goBack()">Go Back to App</button>
+    <div class="success" id="success">✅ All cleared! Please refresh the app.</div>
+  </div>
+
+  <script>
+    function clearAll() {
+      // Clear localStorage
+      localStorage.clear();
+      
+      // Clear sessionStorage
+      sessionStorage.clear();
+      
+      // Clear all cookies
+      document.cookie.split(";").forEach(function(c) {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+      
+      // Show success message
+      document.getElementById('success').style.display = 'block';
+      
+      console.log('All storage cleared!');
+    }
+    
+    function goBack() {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

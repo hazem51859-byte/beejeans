@@ -15,10 +15,7 @@ router.put('/:id', checkPermission('ADMIN'), supplierController.updateSupplier);
 router.delete('/:id', checkPermission('ADMIN'), supplierController.deleteSupplier);
 
 // Supplier Payments
-router.post('/:supplierId/payment', supplierController.makePayment);
-router.get('/:supplierId/payments', supplierController.getSupplierPayments);
-
-// Supplier Payments
+router.post('/:supplierId/payment', checkPermission('ADMIN'), supplierController.makePayment);
 router.post('/:supplierId/payments', checkPermission('ADMIN'), supplierController.makePayment);
 router.get('/:supplierId/payments', supplierController.getSupplierPayments);
 
@@ -26,5 +23,9 @@ router.get('/:supplierId/payments', supplierController.getSupplierPayments);
 router.delete('/fabric-purchases/:purchaseId', checkPermission('ADMIN'), supplierController.deleteCompletedFabricPurchase);
 router.delete('/manufacturing-orders/:orderId', checkPermission('ADMIN'), supplierController.deleteCompletedManufacturingOrder);
 router.delete('/washing-orders/:orderId', checkPermission('ADMIN'), supplierController.deleteCompletedWashingOrder);
+
+// Miscellaneous Expenses
+router.post('/:supplierId/miscellaneous-expenses', checkPermission('ADMIN'), supplierController.createMiscellaneousExpense);
+router.delete('/miscellaneous-expenses/:expenseId', checkPermission('ADMIN'), supplierController.deleteCompletedMiscellaneousExpense);
 
 module.exports = router;

@@ -39,6 +39,7 @@ import ProductionDashboard from './pages/ProductionDashboard';
 import CreateOfficeInvoice from './pages/CreateOfficeInvoice';
 import OfficeInvoices from './pages/OfficeInvoices';
 import OfficeInvoicePrint from './pages/OfficeInvoicePrint';
+import WholesaleEmployees from './pages/WholesaleEmployees';
 import Shipments from './pages/Shipments';
 import InventoryAudit from './pages/InventoryAudit';
 import AuditDetails from './pages/AuditDetails';
@@ -142,6 +143,7 @@ function App() {
             <Route path="production-dashboard" element={<ProductionDashboard />} />
             <Route path="office-invoices" element={<OfficeInvoices />} />
             <Route path="office-invoices/create" element={<CreateOfficeInvoice />} />
+            <Route path="wholesale-employees" element={<WholesaleEmployees />} />
             <Route path="shipments" element={<Shipments />} />
             <Route path="audit" element={<InventoryAudit />} />
             <Route path="audit/:id" element={<AuditDetails />} />

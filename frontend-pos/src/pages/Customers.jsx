@@ -19,7 +19,7 @@ export default function Customers() {
   
   // Office Customers
   const [officeCustomerSearch, setOfficeCustomerSearch] = useState('');
-  const [selectedType, setSelectedType] = useState('ALL'); // ALL, REGULAR, SHIPMENT
+  const [selectedType, setSelectedType] = useState('ALL'); // ALL, REGULAR, SHIPMENT, CLIENT
   
   const [formData, setFormData] = useState({
     name: '',
@@ -440,7 +440,6 @@ export default function Customers() {
               <th style="width: 30px;">#</th>
               <th>المنتج</th>
               <th style="width: 60px;">اللون</th>
-              <th style="width: 60px;">المقاس</th>
               <th style="width: 50px;">الكمية</th>
               <th style="width: 70px;">السعر</th>
               <th style="width: 80px;">الإجمالي</th>
@@ -452,7 +451,6 @@ export default function Customers() {
                 <td style="text-align: center;">${index + 1}</td>
                 <td><strong>${item.product?.name || 'غير محدد'}</strong></td>
                 <td>${item.color || '-'}</td>
-                <td>${item.size || '-'}</td>
                 <td style="text-align: center;">${item.quantity}</td>
                 <td>${item.unitPrice.toFixed(2)}</td>
                 <td><strong>${item.total.toFixed(2)}</strong></td>
@@ -617,15 +615,6 @@ export default function Customers() {
 
   const saleTotal = saleData.items.reduce((sum, item) => sum + item.total, 0);
 
-  // Filter office customers
-  const filteredOfficeCustomers = officeCustomers?.data?.filter(customer => {
-    const matchesSearch = officeCustomerSearch.length === 0 || 
-      customer.phone.includes(officeCustomerSearch) ||
-      customer.name.toLowerCase().includes(officeCustomerSearch.toLowerCase());
-    const matchesType = selectedType === 'ALL' || customer.type === selectedType;
-    return matchesSearch && matchesType;
-  }) || [];
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -639,178 +628,235 @@ export default function Customers() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {customers?.data?.map((customer) => (
-          <div key={customer.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-100 w-12 h-12 rounded-lg flex items-center justify-center">
-                  <DollarSign className="text-blue-600" size={24} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg">{customer.name}</h3>
-                  <p className="text-sm text-gray-500">{customer.phone || 'بدون هاتف'}</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleEdit(customer)} className="text-gray-600 hover:text-gray-800">
-                  <Edit2 size={18} />
-                </button>
-                <button 
-                  onClick={() => {
-                    if (confirm(`هل أنت متأكد من حذف العميل "${customer.name}"؟`)) {
-                      deleteMutation.mutate(customer.id);
-                    }
-                  }}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <p className="text-xs text-gray-600 mb-1">إجمالي المبيعات</p>
-                <p className="text-lg font-bold text-blue-700">{(customer.totalSales || 0).toFixed(2)} ج.م</p>
-              </div>
-              <div className="bg-green-50 p-3 rounded-lg">
-                <p className="text-xs text-gray-600 mb-1">المدفوع</p>
-                <p className="text-lg font-bold text-green-700">{(customer.totalPaid || 0).toFixed(2)} ج.م</p>
-              </div>
-              <div className={`p-3 rounded-lg ${customer.balance > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
-                <p className="text-xs text-gray-600 mb-1">المتبقي (لنا)</p>
-                <p className={`text-lg font-bold ${customer.balance > 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                  {(customer.balance || 0).toFixed(2)} ج.م
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => openSaleModal(customer)} className="btn-primary flex-1">
-                <Receipt size={16} />
-                فاتورة جديدة
-              </button>
-              {customer.balance > 0 && (
-                <button onClick={() => openPaymentModal(customer)} className="btn-primary flex-1 bg-green-600 hover:bg-green-700">
-                  <DollarSign size={16} />
-                  تحصيل
-                </button>
-              )}
-              <button onClick={() => openDetailsModal(customer)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
-                <Eye size={16} />
-              </button>
-            </div>
+      {/* Search and Filter Tabs - at the top */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="flex flex-col gap-4">
+          <div className="relative">
+            <Search className="absolute right-3 top-3 text-gray-400" size={20} />
+            <input
+              type="text"
+              value={officeCustomerSearch}
+              onChange={(e) => setOfficeCustomerSearch(e.target.value)}
+              placeholder="ابحث برقم الهاتف أو الاسم..."
+              className="w-full p-3 pr-10 border rounded-lg"
+            />
           </div>
-        ))}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setSelectedType('ALL')}
+              className={`flex-1 min-w-[100px] px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedType === 'ALL'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              الكل ({(customers?.data?.length || 0) + (officeCustomers?.data?.length || 0)})
+            </button>
+            <button
+              onClick={() => setSelectedType('CLIENT')}
+              className={`flex-1 min-w-[100px] px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedType === 'CLIENT'
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              👤 عملاء دائمين ({(customers?.data?.length || 0) + (officeCustomers?.data?.filter(c => c.type === 'CLIENT').length || 0)})
+            </button>
+            <button
+              onClick={() => setSelectedType('REGULAR')}
+              className={`flex-1 min-w-[100px] px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedType === 'REGULAR'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🛒 زباين عاديين ({officeCustomers?.data?.filter(c => c.type === 'REGULAR').length || 0})
+            </button>
+            <button
+              onClick={() => setSelectedType('SHIPMENT')}
+              className={`flex-1 min-w-[100px] px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedType === 'SHIPMENT'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📦 شحن ({officeCustomers?.data?.filter(c => c.type === 'SHIPMENT').length || 0})
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Office Customers Section */}
-      <div className="mt-12">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">🛒 عملاء المكتب (زباين عاديين وشحن)</h2>
-            <p className="text-gray-600 mt-1">تتبع الزباين اللي بيشتروا من المكتب</p>
-          </div>
-        </div>
+      {/* Wholesale Customers (عملاء دائمين) - show when ALL or CLIENT */}
+      {(selectedType === 'ALL' || selectedType === 'CLIENT') && (() => {
+        const filteredWholesale = customers?.data?.filter(customer => {
+          if (!officeCustomerSearch) return true;
+          return customer.name?.toLowerCase().includes(officeCustomerSearch.toLowerCase()) ||
+            customer.phone?.includes(officeCustomerSearch);
+        }) || [];
+        
+        return filteredWholesale.length > 0 ? (
+          <div className="mb-8">
+            {selectedType === 'ALL' && (
+              <h2 className="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                👤 عملاء دائمين (الجملة)
+                <span className="text-sm font-normal text-gray-500">({filteredWholesale.length} عميل)</span>
+              </h2>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredWholesale.map((customer) => (
+                <div key={customer.id} className="card">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-100 w-12 h-12 rounded-lg flex items-center justify-center">
+                        <DollarSign className="text-blue-600" size={24} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg">{customer.name}</h3>
+                        <p className="text-sm text-gray-500">{customer.phone || 'بدون هاتف'}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEdit(customer)} className="text-gray-600 hover:text-gray-800">
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (confirm(`هل أنت متأكد من حذف العميل "${customer.name}"؟`)) {
+                            deleteMutation.mutate(customer.id);
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
 
-        {/* Search and Filter */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <Search className="absolute right-3 top-3 text-gray-400" size={20} />
-              <input
-                type="text"
-                value={officeCustomerSearch}
-                onChange={(e) => setOfficeCustomerSearch(e.target.value)}
-                placeholder="ابحث برقم الهاتف أو الاسم..."
-                className="w-full p-3 pr-10 border rounded-lg"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setSelectedType('ALL')}
-                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  selectedType === 'ALL'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                الكل ({officeCustomers?.data?.length || 0})
-              </button>
-              <button
-                onClick={() => setSelectedType('REGULAR')}
-                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  selectedType === 'REGULAR'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                🛒 زباين عاديين ({officeCustomers?.data?.filter(c => c.type === 'REGULAR').length || 0})
-              </button>
-              <button
-                onClick={() => setSelectedType('SHIPMENT')}
-                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  selectedType === 'SHIPMENT'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                📦 شحن ({officeCustomers?.data?.filter(c => c.type === 'SHIPMENT').length || 0})
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Office Customers Grid */}
-        {filteredOfficeCustomers.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredOfficeCustomers.map((customer) => (
-              <div key={customer.id} className={`card ${customer.type === 'REGULAR' ? 'border-l-4 border-green-500' : 'border-l-4 border-purple-500'}`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs px-2 py-1 rounded font-medium ${
-                        customer.type === 'REGULAR' 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-purple-100 text-purple-700'
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-xs text-gray-600 mb-1">إجمالي المبيعات</p>
+                      <p className="text-lg font-bold text-blue-700">{(customer.totalSales || 0).toFixed(2)} ج.م</p>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <p className="text-xs text-gray-600 mb-1">المدفوع</p>
+                      <p className="text-lg font-bold text-green-700">{(customer.totalPaid || 0).toFixed(2)} ج.م</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${
+                      customer.balance > 0 ? 'bg-red-50' : 
+                      customer.balance < 0 ? 'bg-orange-50' : 
+                      'bg-gray-50'
+                    }`}>
+                      <p className="text-xs text-gray-600 mb-1">
+                        {customer.balance > 0 ? 'المتبقي (لنا)' : customer.balance < 0 ? 'علينا ليه' : 'لا يوجد'}
+                      </p>
+                      <p className={`text-lg font-bold ${
+                        customer.balance > 0 ? 'text-red-700' : 
+                        customer.balance < 0 ? 'text-orange-700' : 
+                        'text-gray-700'
                       }`}>
-                        {customer.type === 'REGULAR' ? '🛒 زبون عادي' : '📦 شحن'}
-                      </span>
-                      {!customer.isActive && (
-                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
-                          غير نشط
+                        {Math.abs(customer.balance || 0).toFixed(2)} ج.م
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => openSaleModal(customer)} className="btn-primary flex-1">
+                      <Receipt size={16} />
+                      فاتورة جديدة
+                    </button>
+                    {customer.balance > 0 && (
+                      <button onClick={() => openPaymentModal(customer)} className="btn-primary flex-1 bg-green-600 hover:bg-green-700">
+                        <DollarSign size={16} />
+                        تحصيل
+                      </button>
+                    )}
+                    <button onClick={() => openDetailsModal(customer)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                      <Eye size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null;
+      })()}
+
+      {/* Office Customers (زباين عاديين وشحن) - show when ALL, REGULAR, or SHIPMENT */}
+      {(selectedType === 'ALL' || selectedType === 'REGULAR' || selectedType === 'SHIPMENT' || selectedType === 'CLIENT') && (() => {
+        const filteredOffice = officeCustomers?.data?.filter(customer => {
+          const matchesSearch = officeCustomerSearch.length === 0 || 
+            customer.phone.includes(officeCustomerSearch) ||
+            customer.name.toLowerCase().includes(officeCustomerSearch.toLowerCase());
+          const matchesType = selectedType === 'ALL' || customer.type === selectedType;
+          return matchesSearch && matchesType;
+        }) || [];
+
+        // Don't show wholesale customers again under CLIENT tab (they're already shown above)
+        const officeFiltered = selectedType === 'CLIENT' 
+          ? filteredOffice.filter(c => c.type === 'CLIENT')
+          : filteredOffice;
+        
+        return officeFiltered.length > 0 ? (
+          <div>
+            {selectedType === 'ALL' && (
+              <h2 className="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                🛒 عملاء المكتب (زباين عاديين وشحن)
+                <span className="text-sm font-normal text-gray-500">({officeFiltered.length} عميل)</span>
+              </h2>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {officeFiltered.map((customer) => (
+                <div key={customer.id} className={`card ${
+                  customer.type === 'CLIENT' ? 'border-l-4 border-teal-500' :
+                  customer.type === 'REGULAR' ? 'border-l-4 border-green-500' : 
+                  'border-l-4 border-purple-500'
+                }`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-xs px-2 py-1 rounded font-medium ${
+                          customer.type === 'CLIENT' ? 'bg-teal-100 text-teal-700' :
+                          customer.type === 'REGULAR' ? 'bg-green-100 text-green-700' : 
+                          'bg-purple-100 text-purple-700'
+                        }`}>
+                          {customer.type === 'CLIENT' ? '👤 عميل دائم' : 
+                           customer.type === 'REGULAR' ? '🛒 زبون عادي' : '📦 شحن'}
                         </span>
+                        {!customer.isActive && (
+                          <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                            غير نشط
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-bold text-lg">{customer.name}</h3>
+                      <p className="text-sm text-gray-600">📱 {customer.phone}</p>
+                      {customer.shipmentCompany && (
+                        <p className="text-xs text-purple-600 mt-1">📦 {customer.shipmentCompany}</p>
                       )}
                     </div>
-                    <h3 className="font-bold text-lg">{customer.name}</h3>
-                    <p className="text-sm text-gray-600">📱 {customer.phone}</p>
-                    {customer.shipmentCompany && (
-                      <p className="text-xs text-purple-600 mt-1">📦 {customer.shipmentCompany}</p>
-                    )}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="bg-blue-50 p-2 rounded">
-                    <p className="text-xs text-gray-600">عدد الفواتير</p>
-                    <p className="text-lg font-bold text-blue-700">{customer.totalInvoices}</p>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-blue-50 p-2 rounded">
+                      <p className="text-xs text-gray-600">عدد الفواتير</p>
+                      <p className="text-lg font-bold text-blue-700">{customer.totalInvoices}</p>
+                    </div>
+                    <div className="bg-green-50 p-2 rounded">
+                      <p className="text-xs text-gray-600">إجمالي المبيعات</p>
+                      <p className="text-sm font-bold text-green-700">{customer.totalSales.toFixed(2)} ج</p>
+                    </div>
                   </div>
-                  <div className="bg-green-50 p-2 rounded">
-                    <p className="text-xs text-gray-600">إجمالي المبيعات</p>
-                    <p className="text-sm font-bold text-green-700">{customer.totalSales.toFixed(2)} ج</p>
-                  </div>
-                </div>
 
-                {customer.lastInvoiceDate && (
-                  <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
-                    آخر فاتورة: {dayjs(customer.lastInvoiceDate).format('DD/MM/YYYY')}
-                  </div>
-                )}
-              </div>
-            ))}
+                  {customer.lastInvoiceDate && (
+                    <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
+                      آخر فاتورة: {dayjs(customer.lastInvoiceDate).format('DD/MM/YYYY')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        ) : (
+        ) : (selectedType !== 'ALL' && selectedType !== 'CLIENT') ? (
           <div className="bg-gray-50 rounded-lg p-8 text-center">
             <p className="text-gray-600">
               {officeCustomerSearch ? 'لا توجد نتائج للبحث' : 'لا يوجد عملاء مكتب حتى الآن'}
@@ -819,8 +865,8 @@ export default function Customers() {
               سيتم تسجيل العملاء تلقائياً عند إنشاء فواتير مكتب
             </p>
           </div>
-        )}
-      </div>
+        ) : null;
+      })()}
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -934,15 +980,6 @@ export default function Customers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium mb-1">المقاس</label>
-                    <input
-                      type="text"
-                      value={saleItem.size}
-                      onChange={(e) => setSaleItem({ ...saleItem, size: e.target.value })}
-                      className="input-field text-sm"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-xs font-medium mb-1">اللون</label>
                     <input
                       type="text"
@@ -990,7 +1027,6 @@ export default function Customers() {
                       <tr>
                         <th className="p-2 text-right text-sm">#</th>
                         <th className="p-2 text-right text-sm">المنتج</th>
-                        <th className="p-2 text-right text-sm">المقاس</th>
                         <th className="p-2 text-right text-sm">اللون</th>
                         <th className="p-2 text-right text-sm">الكمية</th>
                         <th className="p-2 text-right text-sm">السعر</th>
@@ -1003,7 +1039,6 @@ export default function Customers() {
                         <tr key={index} className="border-t">
                           <td className="p-2 text-sm">{index + 1}</td>
                           <td className="p-2 text-sm font-medium">{item.productName}</td>
-                          <td className="p-2 text-sm">{item.size || '-'}</td>
                           <td className="p-2 text-sm">{item.color || '-'}</td>
                           <td className="p-2 text-sm">{item.quantity}</td>
                           <td className="p-2 text-sm">{item.unitPrice.toFixed(2)}</td>
@@ -1093,9 +1128,23 @@ export default function Customers() {
           <div className="bg-white rounded-lg p-6 w-full max-w-3xl my-8">
             <h2 className="text-xl font-bold mb-4">تسجيل دفعة - {selectedCustomer.name}</h2>
             <form onSubmit={handlePaymentSubmit} className="space-y-4">
-              <div className="bg-red-50 p-4 rounded-lg mb-4">
-                <p className="text-sm text-gray-600">المتبقي على العميل</p>
-                <p className="text-2xl font-bold text-red-700">{selectedCustomer.balance.toFixed(2)} ج.م</p>
+              <div className={`p-4 rounded-lg ${
+                selectedCustomer.balance > 0 ? 'bg-red-50' : 
+                selectedCustomer.balance < 0 ? 'bg-orange-50' : 
+                'bg-gray-50'
+              }`}>
+                <p className="text-sm text-gray-600">
+                  {selectedCustomer.balance > 0 ? 'المتبقي على العميل (لنا)' : 
+                   selectedCustomer.balance < 0 ? 'علينا للعميل' : 
+                   'لا يوجد رصيد'}
+                </p>
+                <p className={`text-2xl font-bold ${
+                  selectedCustomer.balance > 0 ? 'text-red-700' : 
+                  selectedCustomer.balance < 0 ? 'text-orange-700' : 
+                  'text-gray-700'
+                }`}>
+                  {Math.abs(selectedCustomer.balance).toFixed(2)} ج.م
+                </p>
               </div>
 
               {/* الفواتير المستحقة */}
@@ -1126,7 +1175,7 @@ export default function Customers() {
                             </td>
                             <td className="p-2 font-medium">{invoice.invoiceNumber}</td>
                             <td className="p-2">{invoice.total.toFixed(2)} ج.م</td>
-                            <td className="p-2 text-green-700">{invoice.amountPaid.toFixed(2)} ج.م</td>
+                            <td className="p-2">{invoice.amountPaid.toFixed(2)} ج.م</td>
                             <td className="p-2 text-red-700 font-bold">{invoice.remaining.toFixed(2)} ج.م</td>
                             <td className="p-2">
                               <input
@@ -1270,9 +1319,23 @@ export default function Customers() {
                 <p className="text-xs text-gray-600 mb-1">المدفوع</p>
                 <p className="text-xl font-bold text-green-700">{selectedCustomer.totalPaid.toFixed(2)} ج.م</p>
               </div>
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="text-xs text-gray-600 mb-1">المتبقي</p>
-                <p className="text-xl font-bold text-red-700">{selectedCustomer.balance.toFixed(2)} ج.م</p>
+              <div className={`p-4 rounded-lg ${
+                selectedCustomer.balance > 0 ? 'bg-red-50' : 
+                selectedCustomer.balance < 0 ? 'bg-orange-50' : 
+                'bg-gray-50'
+              }`}>
+                <p className="text-xs text-gray-600 mb-1">
+                  {selectedCustomer.balance > 0 ? 'المتبقي (لنا)' : 
+                   selectedCustomer.balance < 0 ? 'علينا ليه' : 
+                   'لا يوجد'}
+                </p>
+                <p className={`text-xl font-bold ${
+                  selectedCustomer.balance > 0 ? 'text-red-700' : 
+                  selectedCustomer.balance < 0 ? 'text-orange-700' : 
+                  'text-gray-700'
+                }`}>
+                  {Math.abs(selectedCustomer.balance).toFixed(2)} ج.م
+                </p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-xs text-gray-600 mb-1">عدد الفواتير</p>
@@ -1517,8 +1580,18 @@ export default function Customers() {
                   <p className="text-xl font-bold text-green-700">{selectedCustomer.totalPaid.toFixed(2)} ج.م</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">الرصيد المتبقي</p>
-                  <p className="text-xl font-bold text-red-700">{selectedCustomer.balance.toFixed(2)} ج.م</p>
+                  <p className="text-sm text-gray-600">
+                    {selectedCustomer.balance > 0 ? 'الرصيد المتبقي (لنا)' : 
+                     selectedCustomer.balance < 0 ? 'علينا للعميل' : 
+                     'لا يوجد رصيد'}
+                  </p>
+                  <p className={`text-xl font-bold ${
+                    selectedCustomer.balance > 0 ? 'text-red-700' : 
+                    selectedCustomer.balance < 0 ? 'text-orange-700' : 
+                    'text-gray-700'
+                  }`}>
+                    {Math.abs(selectedCustomer.balance).toFixed(2)} ج.م
+                  </p>
                 </div>
               </div>
             </div>
@@ -1668,7 +1741,6 @@ export default function Customers() {
                               <tr>
                                 <th className="p-2 text-right">#</th>
                                 <th className="p-2 text-right">المنتج</th>
-                                <th className="p-2 text-right">المقاس</th>
                                 <th className="p-2 text-right">اللون</th>
                                 <th className="p-2 text-right">الكمية</th>
                                 <th className="p-2 text-right">السعر</th>
@@ -1680,7 +1752,6 @@ export default function Customers() {
                                 <tr key={idx} className="border-t">
                                   <td className="p-2">{idx + 1}</td>
                                   <td className="p-2 font-medium">{saleItem.product?.name || saleItem.productName || 'غير محدد'}</td>
-                                  <td className="p-2">{saleItem.size || '-'}</td>
                                   <td className="p-2">{saleItem.color || '-'}</td>
                                   <td className="p-2">{saleItem.quantity}</td>
                                   <td className="p-2">{saleItem.unitPrice.toFixed(2)} ج.م</td>

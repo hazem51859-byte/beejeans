@@ -301,7 +301,6 @@ export default function CustomerInvoicePrint() {
             <th style={{ width: '50px' }}>#</th>
             <th>المنتج</th>
             <th>اللون</th>
-            <th>المقاس</th>
             <th style={{ width: '80px' }}>الكمية</th>
             <th style={{ width: '100px' }}>السعر</th>
             <th style={{ width: '120px' }}>الإجمالي</th>
@@ -313,7 +312,6 @@ export default function CustomerInvoicePrint() {
               <td style={{ textAlign: 'center' }}>{index + 1}</td>
               <td><strong>{item.product?.name || item.description}</strong></td>
               <td>{item.color || '-'}</td>
-              <td>{item.size || '-'}</td>
               <td style={{ textAlign: 'center' }}>{item.quantity}</td>
               <td style={{ textAlign: 'left' }}>{item.unitPrice.toFixed(2)} ج.م</td>
               <td style={{ textAlign: 'left' }}><strong>{(item.quantity * item.unitPrice).toFixed(2)} ج.م</strong></td>

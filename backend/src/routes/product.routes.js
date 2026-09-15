@@ -15,7 +15,8 @@ router.post('/',
     body('name').notEmpty().withMessage('Product name is required'),
     body('categoryId').optional(),
     body('costPrice').optional().isNumeric().withMessage('Cost price must be a number'),
-    body('sellingPrice').optional().isNumeric().withMessage('Selling price must be a number')
+    body('sellingPrice').optional().isNumeric().withMessage('Selling price must be a number'),
+    body('retailPrice').optional().isNumeric().withMessage('Retail price must be a number')
   ],
   validate,
   productController.createProduct

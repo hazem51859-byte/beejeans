@@ -33,9 +33,11 @@ exports.getAllCustomers = async (req, res) => {
         const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
         
         // الرصيد الصحيح:
-        // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة
-        // ملاحظة: paidAmount على فاتورة المكتب يأتي من customerPayment لذا نستخدم totalPayments فقط لتجنب الحساب المزدوج
-        const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments;
+        // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة + رصيد المحفظة
+        // walletBalance: سالب = علينا ليه، موجب = هو دفع زيادة
+        // balance موجب = لينا عنده، سالب = علينا ليه
+        const walletBalance = customer.walletBalance || 0;
+        const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments + walletBalance;
         
         // Debug logging
         if (customer.name) {
@@ -43,6 +45,7 @@ exports.getAllCustomers = async (req, res) => {
           console.log(`   فواتير التقسيط: ${totalSales} (مدفوع مباشر: ${totalPaidOnSales})`);
           console.log(`   فواتير المكتب: ${totalOfficeInvoices} (مدفوع: ${totalPaidOnOfficeInvoices})`);
           console.log(`   دفعات مسجلة: ${totalPayments}`);
+          console.log(`   رصيد المحفظة: ${walletBalance}`);
           console.log(`   الرصيد المحسوب: ${balance.toFixed(2)}`);
         }
         
@@ -50,6 +53,7 @@ exports.getAllCustomers = async (req, res) => {
           ...customer,
           totalSales: totalSales + totalOfficeInvoices,
           totalPaid: totalPaidOnSales + totalPayments,
+          walletBalance: parseFloat(walletBalance.toFixed(2)),
           balance: parseFloat(balance.toFixed(2))
         };
       })
@@ -122,9 +126,10 @@ exports.getCustomerById = async (req, res) => {
     const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
     
     // الرصيد الصحيح:
-    // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة
+    // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة - رصيد المحفظة
     // ملاحظة: paidAmount على فاتورة المكتب يأتي من customerPayment لذا نستخدم totalPayments فقط لتجنب الحساب المزدوج
-    const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments;
+    const walletBalance = customer.walletBalance || 0;
+    const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments - walletBalance;
     
     res.json({
       success: true,
@@ -132,6 +137,7 @@ exports.getCustomerById = async (req, res) => {
         ...customer,
         totalSales: totalSales + totalOfficeInvoices,
         totalPaid: totalPaidOnSales + totalPayments,
+        walletBalance: parseFloat(walletBalance.toFixed(2)),
         balance: parseFloat(balance.toFixed(2)),
         sales,
         officeInvoices, // إضافة فواتير المكتب
@@ -404,6 +410,18 @@ exports.createCustomerSale = async (req, res) => {
     
     const total = subtotal; // Assuming no tax/discount on direct sales for now
     
+    // التحقق من رصيد المحفظة للعميل
+    let walletDeduction = 0;
+    let walletBalanceBefore = customer.walletBalance || 0;
+    
+    if (walletBalanceBefore > 0) {
+      // خصم من المحفظة (كل المبلغ أو جزء منه حسب الرصيد)
+      walletDeduction = Math.min(walletBalanceBefore, total);
+      console.log(`💰 سيتم خصم ${walletDeduction} جنيه من محفظة العميل (رصيد المحفظة: ${walletBalanceBefore})`);
+    }
+    
+    const totalPaid = parseFloat(paidAmount) + walletDeduction;
+    
     // Execute atomic transaction for sale creation and inventory deduction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create Sale
@@ -420,7 +438,7 @@ exports.createCustomerSale = async (req, res) => {
           discountAmount: 0,
           total,
           paymentMethod,
-          amountPaid: parseFloat(paidAmount),
+          amountPaid: totalPaid,
           changeAmount: 0,
           status: 'COMPLETED',
           notes,
@@ -469,6 +487,33 @@ exports.createCustomerSale = async (req, res) => {
         }
       }
       
+      // 3. خصم من محفظة العميل وتسجيل الدفعة
+      if (walletDeduction > 0) {
+        // تحديث رصيد المحفظة
+        await tx.customer.update({
+          where: { id: customerId },
+          data: {
+            walletBalance: {
+              decrement: walletDeduction
+            }
+          }
+        });
+
+        // تسجيل دفعة من المحفظة
+        await tx.customerPayment.create({
+          data: {
+            customerId,
+            amount: walletDeduction,
+            paymentMethod: 'WALLET',
+            referenceNumber: invoiceNumber,
+            notes: `خصم تلقائي من المحفظة (رصيد سابق: ${walletBalanceBefore.toFixed(2)} جنيه)`,
+            createdBy: cashierId
+          }
+        });
+
+        console.log(`✅ تم خصم ${walletDeduction} جنيه من محفظة العميل وتسجيلها كدفعة`);
+      }
+      
       return sale;
     });
     
@@ -502,51 +547,73 @@ exports.recordCustomerPayment = async (req, res) => {
       });
     }
     
-    // إذا كان في توزيع على الفواتير، نستخدمه
-    if ((invoiceAllocations && invoiceAllocations.length > 0) || (officeInvoicesAllocations && officeInvoicesAllocations.length > 0)) {
-      await prisma.$transaction(async (tx) => {
-        // تسجيل الدفعة الرئيسية
-        const payment = await tx.customerPayment.create({
-          data: {
-            customerId,
-            amount: parseFloat(amount),
-            paymentMethod,
-            referenceNumber: referenceNumber || null,
-            notes: notes || null,
-            createdBy
-          }
-        });
-        
-        // توزيع المبلغ على فواتير التقسيط
-        if (invoiceAllocations && invoiceAllocations.length > 0) {
-          for (const allocation of invoiceAllocations) {
-            const sale = await tx.sale.findUnique({
-              where: { id: allocation.saleId }
-            });
-            
-            if (!sale) continue;
+    const paymentAmount = parseFloat(amount);
+    
+    await prisma.$transaction(async (tx) => {
+      // تسجيل الدفعة الرئيسية
+      const payment = await tx.customerPayment.create({
+        data: {
+          customerId,
+          amount: paymentAmount,
+          paymentMethod,
+          referenceNumber: referenceNumber || null,
+          notes: notes || null,
+          createdBy
+        }
+      });
+      
+      let remainingAmount = paymentAmount;
+      
+      // أولاً: نحاول نستخدم رصيد المحفظة الموجود عشان نخصم من الفواتير
+      let walletBalance = customer.walletBalance || 0;
+      
+      // توزيع المبلغ على فواتير التقسيط
+      if (invoiceAllocations && invoiceAllocations.length > 0) {
+        for (const allocation of invoiceAllocations) {
+          const sale = await tx.sale.findUnique({
+            where: { id: allocation.saleId }
+          });
+          
+          if (!sale) continue;
+          
+          const allocAmount = parseFloat(allocation.amount);
+          
+          // نشوف لو رصيد المحفظة يكفي للخصم من الفاتورة دي
+          if (walletBalance > 0) {
+            const amountFromWallet = Math.min(walletBalance, allocAmount);
+            walletBalance -= amountFromWallet;
             
             // تحديث المبلغ المدفوع في الفاتورة
             await tx.sale.update({
               where: { id: allocation.saleId },
               data: {
-                amountPaid: sale.amountPaid + parseFloat(allocation.amount)
+                amountPaid: sale.amountPaid + amountFromWallet
               }
             });
           }
+          
+          remainingAmount -= allocAmount;
         }
-        
-        // توزيع المبلغ على فواتير المكتب
-        if (officeInvoicesAllocations && officeInvoicesAllocations.length > 0) {
-          for (const allocation of officeInvoicesAllocations) {
-            const officeInvoice = await tx.officeInvoice.findUnique({
-              where: { id: allocation.officeInvoiceId }
-            });
+      }
+      
+      // توزيع المبلغ على فواتير المكتب
+      if (officeInvoicesAllocations && officeInvoicesAllocations.length > 0) {
+        for (const allocation of officeInvoicesAllocations) {
+          const officeInvoice = await tx.officeInvoice.findUnique({
+            where: { id: allocation.officeInvoiceId }
+          });
+          
+          if (!officeInvoice) continue;
+          
+          const allocAmount = parseFloat(allocation.amount);
+          
+          // نشوف لو رصيد المحفظة يكفي للخصم من الفاتورة دي
+          if (walletBalance > 0) {
+            const amountFromWallet = Math.min(walletBalance, allocAmount);
+            walletBalance -= amountFromWallet;
             
-            if (!officeInvoice) continue;
-            
-            const newPaidAmount = officeInvoice.paidAmount + parseFloat(allocation.amount);
-            const newRemainingAmount = officeInvoice.remainingAmount - parseFloat(allocation.amount);
+            const newPaidAmount = officeInvoice.paidAmount + amountFromWallet;
+            const newRemainingAmount = officeInvoice.remainingAmount - amountFromWallet;
             
             // تحديث الحالة إلى "مكتملة" إذا تم سداد كامل المبلغ
             const newStatus = newRemainingAmount <= 0.01 ? 'COMPLETED' : officeInvoice.status;
@@ -561,21 +628,25 @@ exports.recordCustomerPayment = async (req, res) => {
               }
             });
           }
+          
+          remainingAmount -= allocAmount;
         }
-      });
-    } else {
-      // الطريقة القديمة: دفعة عامة بدون توزيع
-      await prisma.customerPayment.create({
+      }
+      
+      // الفلوس الزيادة: نضيفها للمحفظة
+      // remainingAmount لو موجب يبقى فلوس زيادة، لو سالب يبقى مش كفاية (مفروض ميحصلش بس للأمان)
+      if (remainingAmount > 0.01) {
+        walletBalance += remainingAmount;
+      }
+      
+      // تحديث رصيد المحفظة في الداتابيز
+      await tx.customer.update({
+        where: { id: customerId },
         data: {
-          customerId,
-          amount: parseFloat(amount),
-          paymentMethod,
-          referenceNumber: referenceNumber || null,
-          notes: notes || null,
-          createdBy
+          walletBalance: walletBalance
         }
       });
-    }
+    });
     
     res.status(201).json({
       success: true,

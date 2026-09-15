@@ -18,6 +18,7 @@ export default function OfficeExpenses() {
     category: 'RENT',
     description: '',
     amount: 0,
+    vaultType: 'CASH',
     expenseDate: new Date().toISOString().split('T')[0],
     receiptNumber: '',
     notes: '',
@@ -60,12 +61,13 @@ export default function OfficeExpenses() {
     mutationFn: (data) => api.post('/expenses', data),
     onSuccess: () => {
       queryClient.invalidateQueries(['office-expenses']);
+      queryClient.invalidateQueries(['vault']);
       setShowModal(false);
       resetForm();
-      toast.success('تم تسجيل المصروف بنجاح');
+      toast.success('تم تسجيل المصروف خصماً من الخزنة بنجاح');
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'حدث خطأ ما');
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'حدث خطأ في التسجيل');
     }
   });
 
@@ -99,6 +101,7 @@ export default function OfficeExpenses() {
       category: 'RENT',
       description: '',
       amount: 0,
+      vaultType: 'CASH',
       expenseDate: new Date().toISOString().split('T')[0],
       receiptNumber: '',
       notes: '',
@@ -331,6 +334,20 @@ export default function OfficeExpenses() {
                   placeholder="مثال: فاتورة كهرباء شهر يوليو"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">مصدر الخزنة للخصم *</label>
+                <select
+                  value={formData.vaultType || 'CASH'}
+                  onChange={(e) => setFormData({ ...formData, vaultType: e.target.value })}
+                  className="input-field font-bold text-gray-800 bg-amber-50 border-amber-300"
+                  required
+                >
+                  <option value="CASH">💵 خزنة نقدية (كاش الرئيسي)</option>
+                  <option value="CARD">💳 حساب الفيزا (Card Vault)</option>
+                  <option value="WALLET">📱 محفظة إلكترونية (Wallet Vault)</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

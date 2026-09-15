@@ -180,9 +180,9 @@ export default function BranchSales() {
             <thead>
               <tr className="border-b bg-gray-50">
                 <th className="text-right py-3 px-4 font-semibold">الفرع</th>
-                <th className="text-right py-3 px-4 font-semibold">قيمة التكلفة</th>
-                <th className="text-right py-3 px-4 font-semibold">المبيعات</th>
-                <th className="text-right py-3 px-4 font-semibold">الربح</th>
+                <th className="text-right py-3 px-4 font-semibold">تكلفة المبيعات</th>
+                <th className="text-right py-3 px-4 font-semibold">الإيرادات (قطاعي)</th>
+                <th className="text-right py-3 px-4 font-semibold">الربح (قطاعي - تكلفة)</th>
                 <th className="text-right py-3 px-4 font-semibold">عدد الفواتير</th>
                 <th className="text-right py-3 px-4 font-semibold">هامش الربح</th>
               </tr>

@@ -52,15 +52,15 @@ model Branch {
   id            String   @id @default(uuid())
   name          String
   code          String   @unique
-  url           String   @unique // URL خاص بالفرع
+  url           String   @unique // URL ╪«╪º╪╡ ╪¿╪º┘ä┘ü╪▒╪╣
   address       String?
   phone         String?
   city          String?
   isActive      Boolean  @default(true)
   
-  // Branch Vault (الخزينة)
-  vaultBalance      Float    @default(0) // رصيد الخزينة النقدي
-  cardVaultBalance  Float    @default(0) // رصيد الفيزا في الخزينة
+  // Branch Vault (╪º┘ä╪«╪▓┘è┘å╪⌐)
+  vaultBalance      Float    @default(0) // ╪▒╪╡┘è╪» ╪º┘ä╪«╪▓┘è┘å╪⌐ ╪º┘ä┘å┘é╪»┘è
+  cardVaultBalance  Float    @default(0) // ╪▒╪╡┘è╪» ╪º┘ä┘ü┘è╪▓╪º ┘ü┘è ╪º┘ä╪«╪▓┘è┘å╪⌐
   walletBalance     Float    @default(0) // رصيد المحفظة الإلكترونية
   
   users         User[]
@@ -99,11 +99,11 @@ model Category {
   parent        Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children      Category[]          @relation("CategoryHierarchy")
   
-  // قالب التفاصيل (JSON string)
-  // مثال: {
+  // ┘é╪º┘ä╪¿ ╪º┘ä╪¬┘ü╪º╪╡┘è┘ä (JSON string)
+  // ┘à╪½╪º┘ä: {
   //   "fields": [
-  //     {"name": "المقاس", "type": "select", "options": ["S", "M", "L", "XL"], "required": true},
-  //     {"name": "اللون", "type": "select", "options": ["أبيض", "أسود", "أزرق"], "required": true}
+  //     {"name": "╪º┘ä┘à┘é╪º╪│", "type": "select", "options": ["S", "M", "L", "XL"], "required": true},
+  //     {"name": "╪º┘ä┘ä┘ê┘å", "type": "select", "options": ["╪ú╪¿┘è╪╢", "╪ú╪│┘ê╪»", "╪ú╪▓╪▒┘é"], "required": true}
   //   ],
   //   "pricing": {
   //     "costPrice": 150,
@@ -118,8 +118,8 @@ model Category {
   attributes          String?
   
   // Serial tracking for category
-  serialStartNumber   Int?      // رقم البداية للسيريالات (مثلاً 1000)
-  lastSerialUsed      Int?      // آخر رقم سيريال تم استخدامه
+  serialStartNumber   Int?      // ╪▒┘é┘à ╪º┘ä╪¿╪»╪º┘è╪⌐ ┘ä┘ä╪│┘è╪▒┘è╪º┘ä╪º╪¬ (┘à╪½┘ä╪º┘ï 1000)
+  lastSerialUsed      Int?      // ╪ó╪«╪▒ ╪▒┘é┘à ╪│┘è╪▒┘è╪º┘ä ╪¬┘à ╪º╪│╪¬╪«╪»╪º┘à┘ç
   
   products      Product[]
   
@@ -131,29 +131,30 @@ model Category {
 
 model Product {
   id            String        @id @default(uuid())
-  sku           String        @unique // كود المنتج الثابت للباركود
-  barcode       String?       @unique // الباركود (نفس الـ SKU لكل القطع من نفس النوع)
+  sku           String        @unique // ┘â┘ê╪» ╪º┘ä┘à┘å╪¬╪¼ ╪º┘ä╪½╪º╪¿╪¬ ┘ä┘ä╪¿╪º╪▒┘â┘ê╪»
+  barcode       String?       @unique // ╪º┘ä╪¿╪º╪▒┘â┘ê╪» (┘å┘ü╪│ ╪º┘ä┘Ç SKU ┘ä┘â┘ä ╪º┘ä┘é╪╖╪╣ ┘à┘å ┘å┘ü╪│ ╪º┘ä┘å┘ê╪╣)
   name          String
   description   String?
   
   categoryId    String?
   category      Category?     @relation(fields: [categoryId], references: [id])
   
-  // التفاصيل الإضافية حسب القالب (JSON string)
-  // مثال: {"المقاس": "L", "اللون": "أبيض", "النوع": "جينز"}
+  // ╪º┘ä╪¬┘ü╪º╪╡┘è┘ä ╪º┘ä╪Ñ╪╢╪º┘ü┘è╪⌐ ╪¡╪│╪¿ ╪º┘ä┘é╪º┘ä╪¿ (JSON string)
+  // ┘à╪½╪º┘ä: {"╪º┘ä┘à┘é╪º╪│": "L", "╪º┘ä┘ä┘ê┘å": "╪ú╪¿┘è╪╢", "╪º┘ä┘å┘ê╪╣": "╪¼┘è┘å╪▓"}
   attributes    String?
   
   costPrice     Float         @default(0) // سعر التكلفة - يتحسب تلقائياً (قماش + تصنيع + غسيل)
-  sellingPrice  Float         @default(0) // سعر البيع - قابل للتعديل
+  sellingPrice  Float         @default(0) // سعر البيع بالجملة - من المخزن الرئيسي للفروع
+  retailPrice   Float         @default(0) // سعر القطاعي - الفروع تبيع بيه للعملاء
   
-  // تفاصيل التكلفة (للشفافية)
-  fabricCost        Float?    @default(0) // تكلفة القماش للقطعة
-  fabricMetersUsed  Float?    @default(0) // إجمالي الأمتار المستخدمة لكل القطع المنتجة
-  manufacturingCost Float?    @default(0) // تكلفة التصنيع للقطعة
-  washingCost       Float?    @default(0) // تكلفة الغسيل للقطعة
+  // ╪¬┘ü╪º╪╡┘è┘ä ╪º┘ä╪¬┘â┘ä┘ü╪⌐ (┘ä┘ä╪┤┘ü╪º┘ü┘è╪⌐)
+  fabricCost        Float?    @default(0) // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä┘é┘à╪º╪┤ ┘ä┘ä┘é╪╖╪╣╪⌐
+  fabricMetersUsed  Float?    @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪│╪¬╪«╪»┘à╪⌐ ┘ä┘â┘ä ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à┘å╪¬╪¼╪⌐
+  manufacturingCost Float?    @default(0) // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¬╪╡┘å┘è╪╣ ┘ä┘ä┘é╪╖╪╣╪⌐
+  washingCost       Float?    @default(0) // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪║╪│┘è┘ä ┘ä┘ä┘é╪╖╪╣╪⌐
   
-  // Tracking للدورة الإنتاجية
-  totalPiecesProduced Int     @default(0) // إجمالي القطع المنتجة
+  // Tracking ┘ä┘ä╪»┘ê╪▒╪⌐ ╪º┘ä╪Ñ┘å╪¬╪º╪¼┘è╪⌐
+  totalPiecesProduced Int     @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à┘å╪¬╪¼╪⌐
   
   size          String?
   color         String?
@@ -187,31 +188,31 @@ model Product {
   @@map("products")
 }
 
-// تسجيل السيريالات للمنتجات
+// ╪¬╪│╪¼┘è┘ä ╪º┘ä╪│┘è╪▒┘è╪º┘ä╪º╪¬ ┘ä┘ä┘à┘å╪¬╪¼╪º╪¬
 model ProductSerial {
   id            String    @id @default(uuid())
   
   productId     String
   product       Product   @relation(fields: [productId], references: [id])
   
-  serialNumber  String // السيريال (نفس الرقم لكل قطع المنتج)
+  serialNumber  String // ╪º┘ä╪│┘è╪▒┘è╪º┘ä (┘å┘ü╪│ ╪º┘ä╪▒┘é┘à ┘ä┘â┘ä ┘é╪╖╪╣ ╪º┘ä┘à┘å╪¬╪¼)
   
   branchId      String?
   branch        Branch?   @relation(fields: [branchId], references: [id])
   
-  registeredBy  String    // User ID الذي سجل السيريال
+  registeredBy  String    // User ID ╪º┘ä╪░┘è ╪│╪¼┘ä ╪º┘ä╪│┘è╪▒┘è╪º┘ä
   registeredAt  DateTime  @default(now())
   
   status        String    @default("AVAILABLE") // AVAILABLE, SOLD, RETURNED, IN_TRANSIT
   
   soldAt        DateTime?
-  soldInSaleId  String?   // Sale ID إذا تم بيعه
+  soldInSaleId  String?   // Sale ID ╪Ñ╪░╪º ╪¬┘à ╪¿┘è╪╣┘ç
   
   // Tracking
-  purchaseId    String?   // ربط بالشراء اللي جاء منه
+  purchaseId    String?   // ╪▒╪¿╪╖ ╪¿╪º┘ä╪┤╪▒╪º╪í ╪º┘ä┘ä┘è ╪¼╪º╪í ┘à┘å┘ç
   purchase      Purchase? @relation(fields: [purchaseId], references: [id])
   
-  transferId    String?   // ربط بالتوريد اللي راح فيه
+  transferId    String?   // ╪▒╪¿╪╖ ╪¿╪º┘ä╪¬┘ê╪▒┘è╪» ╪º┘ä┘ä┘è ╪▒╪º╪¡ ┘ü┘è┘ç
   transfer      Transfer? @relation(fields: [transferId], references: [id])
   
   notes         String?
@@ -327,17 +328,17 @@ model Sale {
   changeAmount      Float         @default(0) // Changed from Decimal to Float
   
   // Card payment tracking
-  cardConfirmed         Boolean       @default(false) // تأكيد دفع الفيزا
-  cardAmount            Float         @default(0) // المبلغ المدفوع بالفيزا
-  cardDestinationBranch String?       // وجهة الفيزا: branchId أو null للمخزن الرئيسي
+  cardConfirmed         Boolean       @default(false) // ╪¬╪ú┘â┘è╪» ╪»┘ü╪╣ ╪º┘ä┘ü┘è╪▓╪º
+  cardAmount            Float         @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪»┘ü┘ê╪╣ ╪¿╪º┘ä┘ü┘è╪▓╪º
+  cardDestinationBranch String?       // ┘ê╪¼┘ç╪⌐ ╪º┘ä┘ü┘è╪▓╪º: branchId ╪ú┘ê null ┘ä┘ä┘à╪«╪▓┘å ╪º┘ä╪▒╪ª┘è╪│┘è
   
   status            String        @default("COMPLETED") // COMPLETED, PENDING, CANCELLED, REFUNDED
   
-  // للإرجاعات
+  // ┘ä┘ä╪Ñ╪▒╪¼╪º╪╣╪º╪¬
   isReturn          Boolean       @default(false)
-  originalSaleId    String?       // رقم الفاتورة الأصلية لو كانت إرجاع
-  returnReason      String?       // سبب الإرجاع
-  refundAmount      Float         @default(0) // المبلغ المرتجع من هذه الفاتورة
+  originalSaleId    String?       // ╪▒┘é┘à ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪º┘ä╪ú╪╡┘ä┘è╪⌐ ┘ä┘ê ┘â╪º┘å╪¬ ╪Ñ╪▒╪¼╪º╪╣
+  returnReason      String?       // ╪│╪¿╪¿ ╪º┘ä╪Ñ╪▒╪¼╪º╪╣
+  refundAmount      Float         @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪▒╪¬╪¼╪╣ ┘à┘å ┘ç╪░┘ç ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐
   
   notes             String?
   
@@ -366,18 +367,20 @@ model SaleItem {
   productId     String
   product       Product  @relation(fields: [productId], references: [id])
   
-  serialNumber  String?  // السيريال المستخدم في البيع
-  size          String?  // المقاس المختار
-  color         String?  // اللون المختار
+  serialNumber  String?  // ╪º┘ä╪│┘è╪▒┘è╪º┘ä ╪º┘ä┘à╪│╪¬╪«╪»┘à ┘ü┘è ╪º┘ä╪¿┘è╪╣
+  size          String?  // ╪º┘ä┘à┘é╪º╪│ ╪º┘ä┘à╪«╪¬╪º╪▒
+  color         String?  // ╪º┘ä┘ä┘ê┘å ╪º┘ä┘à╪«╪¬╪º╪▒
   
-  quantity      Int
-  unitPrice     Float    // Changed from Decimal to Float
-  discount      Float    @default(0) // Changed from Decimal to Float
-  taxRate       Float    @default(0) // Changed from Decimal to Float
-  total         Float    // Changed from Decimal to Float
+  quantity        Int
+  unitPrice       Float    // سعر البيع الفعلي المستخدم في الفاتورة
+  unitCostPrice   Float    @default(0) // سعر التكلفة لحظة البيع
+  unitRetailPrice Float    @default(0) // سعر القطاعي لحظة البيع (لحساب ربح الفروع)
+  discount        Float    @default(0) // Changed from Decimal to Float
+  taxRate         Float    @default(0) // Changed from Decimal to Float
+  total           Float    // Changed from Decimal to Float
   
   status        String   @default("SOLD") // SOLD, RETURNED
-  isReturned    Boolean  @default(false) // هل تم إرجاع هذا المنتج
+  isReturned    Boolean  @default(false) // ┘ç┘ä ╪¬┘à ╪Ñ╪▒╪¼╪º╪╣ ┘ç╪░╪º ╪º┘ä┘à┘å╪¬╪¼
   
   @@index([saleId])
   @@index([productId])
@@ -395,8 +398,8 @@ model Partner {
   email             String?             @unique
   phone             String?
   
-  capitalPaid       Float               // رأس المال المدفوع
-  sharePercentage   Float               // نسبة الشراكة (%)
+  capitalPaid       Float               // ╪▒╪ú╪│ ╪º┘ä┘à╪º┘ä ╪º┘ä┘à╪»┘ü┘ê╪╣
+  sharePercentage   Float               // ┘å╪│╪¿╪⌐ ╪º┘ä╪┤╪▒╪º┘â╪⌐ (%)
   
   joinDate          DateTime            @default(now())
   isActive          Boolean             @default(true)
@@ -411,7 +414,7 @@ model Partner {
   @@map("partners")
 }
 
-// Partner Transactions (معاملات الشركاء - دفعات، سحوبات، توزيع أرباح)
+// Partner Transactions (┘à╪╣╪º┘à┘ä╪º╪¬ ╪º┘ä╪┤╪▒┘â╪º╪í - ╪»┘ü╪╣╪º╪¬╪î ╪│╪¡┘ê╪¿╪º╪¬╪î ╪¬┘ê╪▓┘è╪╣ ╪ú╪▒╪¿╪º╪¡)
 model PartnerTransaction {
   id                String      @id @default(uuid())
   
@@ -420,7 +423,9 @@ model PartnerTransaction {
   
   type              String      // CAPITAL, WITHDRAWAL, PROFIT_DISTRIBUTION, LOSS_DISTRIBUTION
   amount            Float
+  vaultType         String?     @default("CASH") // CASH, CARD, WALLET
   description       String?
+  notes             String?
   
   transactionDate   DateTime    @default(now())
   
@@ -432,10 +437,10 @@ model PartnerTransaction {
 }
 
 // =====================
-// Purchases Management (المشتريات - البضاعة)
+// Purchases Management (╪º┘ä┘à╪┤╪¬╪▒┘è╪º╪¬ - ╪º┘ä╪¿╪╢╪º╪╣╪⌐)
 // =====================
 
-// Suppliers (الموردين)
+// Suppliers (╪º┘ä┘à┘ê╪▒╪»┘è┘å)
 model Supplier {
   id              String      @id @default(uuid())
   name            String
@@ -443,13 +448,13 @@ model Supplier {
   email           String?
   address         String?
   
-  // نوع المورد
-  type            String      // FABRIC (قماش), MANUFACTURING (تصنيع), WASHING (غسيل)
+  // ┘å┘ê╪╣ ╪º┘ä┘à┘ê╪▒╪»
+  type            String      // FABRIC (قماش), MANUFACTURING (تصنيع), WASHING (غسيل), READY (بضاعة جاهزة), MISCELLANEOUS (مصروفات متنوعة)
   
-  // الحسابات
-  totalPurchases  Float       @default(0) // إجمالي المشتريات
-  totalPaid       Float       @default(0) // إجمالي المدفوع
-  balance         Float       @default(0) // الرصيد (المتبقي/الزائد)
+  // ╪º┘ä╪¡╪│╪º╪¿╪º╪¬
+  totalPurchases  Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘à╪┤╪¬╪▒┘è╪º╪¬
+  totalPaid       Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘à╪»┘ü┘ê╪╣
+  balance         Float       @default(0) // ╪º┘ä╪▒╪╡┘è╪» (╪º┘ä┘à╪¬╪¿┘é┘è/╪º┘ä╪▓╪º╪ª╪»)
   
   notes           String?
   isActive        Boolean     @default(true)
@@ -459,6 +464,7 @@ model Supplier {
   fabricPurchases FabricPurchase[]
   manufacturingOrders ManufacturingOrder[]
   washingOrders   WashingOrder[]
+  miscellaneousExpenses MiscellaneousExpense[]
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -467,21 +473,21 @@ model Supplier {
   @@map("suppliers")
 }
 
-// Supplier Payments (دفعات الموردين)
+// Supplier Payments (╪»┘ü╪╣╪º╪¬ ╪º┘ä┘à┘ê╪▒╪»┘è┘å)
 model SupplierPayment {
   id              String      @id @default(uuid())
   
   supplierId      String
   supplier        Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   
-  purchaseId      String?     // ربط الدفعة بفاتورة محددة (اختياري)
+  purchaseId      String?     // ╪▒╪¿╪╖ ╪º┘ä╪»┘ü╪╣╪⌐ ╪¿┘ü╪º╪¬┘ê╪▒╪⌐ ┘à╪¡╪»╪»╪⌐ (╪º╪«╪¬┘è╪º╪▒┘è)
   purchase        Purchase?   @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   
   amount          Float
   paymentMethod   String      // CASH, BANK_TRANSFER, CHECK
   paymentDate     DateTime    @default(now())
   
-  referenceNumber String?     // رقم الشيك/التحويل
+  referenceNumber String?     // ╪▒┘é┘à ╪º┘ä╪┤┘è┘â/╪º┘ä╪¬╪¡┘ê┘è┘ä
   notes           String?
   
   createdBy       String
@@ -517,12 +523,12 @@ model Purchase {
   notes             String?
   
   // Serial tracking for products
-  startSerial       String?         // رقم السيريال الأول
-  endSerial         String?         // رقم السيريال الأخير
+  startSerial       String?         // ╪▒┘é┘à ╪º┘ä╪│┘è╪▒┘è╪º┘ä ╪º┘ä╪ú┘ê┘ä
+  endSerial         String?         // ╪▒┘é┘à ╪º┘ä╪│┘è╪▒┘è╪º┘ä ╪º┘ä╪ú╪«┘è╪▒
   
   items             PurchaseItem[]
   productSerials    ProductSerial[]
-  payments          SupplierPayment[] // الدفعات المرتبطة بهذه الفاتورة
+  payments          SupplierPayment[] // ╪º┘ä╪»┘ü╪╣╪º╪¬ ╪º┘ä┘à╪▒╪¬╪¿╪╖╪⌐ ╪¿┘ç╪░┘ç ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐
   
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -553,6 +559,35 @@ model PurchaseItem {
   @@index([purchaseId])
   @@index([productId])
   @@map("purchase_items")
+}
+
+// المصروفات المتنوعة من الموردين (Miscellaneous Expenses from Suppliers)
+model MiscellaneousExpense {
+  id              String      @id @default(uuid())
+  expenseNumber   String      @unique // رقم المصروف
+  
+  supplierId      String
+  supplier        Supplier    @relation(fields: [supplierId], references: [id])
+  
+  description     String      // وصف المصروف (مثل: صيانة, نقل, خدمات, إلخ)
+  totalAmount     Float       // إجمالي قيمة المصروف
+  
+  paidAmount      Float       @default(0)
+  remainingAmount Float       @default(0)
+  paymentStatus   String      @default("PENDING") // PAID, PARTIAL, PENDING
+  
+  expenseDate     DateTime    @default(now())
+  notes           String?
+  
+  createdBy       String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([supplierId])
+  @@index([expenseNumber])
+  @@index([expenseDate])
+  @@index([paymentStatus])
+  @@map("miscellaneous_expenses")
 }
 
 // =====================
@@ -615,7 +650,7 @@ model SyncLog {
 }
 
 // =====================
-// Transfer Management (نظام التوريدات بين الفروع)
+// Transfer Management (┘å╪╕╪º┘à ╪º┘ä╪¬┘ê╪▒┘è╪»╪º╪¬ ╪¿┘è┘å ╪º┘ä┘ü╪▒┘ê╪╣)
 // =====================
 
 model Transfer {
@@ -635,23 +670,23 @@ model Transfer {
   
   notes             String?
   
-  // من أرسل (عادة Admin)
+  // ┘à┘å ╪ú╪▒╪│┘ä (╪╣╪º╪»╪⌐ Admin)
   sentBy            String
   sentByUser        User            @relation("TransferSentBy", fields: [sentBy], references: [id])
   sentAt            DateTime        @default(now())
   
-  // من استلم (Cashier في الفرع)
+  // ┘à┘å ╪º╪│╪¬┘ä┘à (Cashier ┘ü┘è ╪º┘ä┘ü╪▒╪╣)
   receivedBy        String?
   receivedByUser    User?           @relation("TransferReceivedBy", fields: [receivedBy], references: [id])
   receivedAt        DateTime?
   
-  receiverNotes     String?         // ملاحظات المستلم
-  hasDiscrepancy    Boolean         @default(false) // هل يوجد فروق؟
-  discrepancyType   String?         // SHORTAGE (نقص) أو EXCESS (زيادة)
-  discrepancyNotes  String?         // تفاصيل الفروقات
+  receiverNotes     String?         // ┘à┘ä╪º╪¡╪╕╪º╪¬ ╪º┘ä┘à╪│╪¬┘ä┘à
+  hasDiscrepancy    Boolean         @default(false) // ┘ç┘ä ┘è┘ê╪¼╪» ┘ü╪▒┘ê┘é╪ƒ
+  discrepancyType   String?         // SHORTAGE (┘å┘é╪╡) ╪ú┘ê EXCESS (╪▓┘è╪º╪»╪⌐)
+  discrepancyNotes  String?         // ╪¬┘ü╪º╪╡┘è┘ä ╪º┘ä┘ü╪▒┘ê┘é╪º╪¬
 
-  totalCost         Float?          @default(0) // إجمالي تكلفة البضاعة (للأدمن)
-  totalSellingPrice Float?          @default(0) // إجمالي سعر البيع للبضاعة
+  totalCost         Float?          @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¿╪╢╪º╪╣╪⌐ (┘ä┘ä╪ú╪»┘à┘å)
+  totalSellingPrice Float?          @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣ ┘ä┘ä╪¿╪╢╪º╪╣╪⌐
   
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -669,20 +704,21 @@ model TransferItem {
   transferId        String
   transfer          Transfer    @relation(fields: [transferId], references: [id], onDelete: Cascade)
   
-  productId         String      // المنتج من Product Master
+  productId         String      // ╪º┘ä┘à┘å╪¬╪¼ ┘à┘å Product Master
   product           Product     @relation(fields: [productId], references: [id])
   
-  // الكميات
-  quantityRequested Int         // الكمية المطلوبة
-  quantityReceived  Int?        // الكمية المستلمة فعلياً
+  // ╪º┘ä┘â┘à┘è╪º╪¬
+  quantityRequested Int         // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘à╪╖┘ä┘ê╪¿╪⌐
+  quantityReceived  Int?        // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘à╪│╪¬┘ä┘à╪⌐ ┘ü╪╣┘ä┘è╪º┘ï
 
   costPrice         Float?      @default(0) // سعر التكلفة للقطعة
-  sellingPrice      Float?      @default(0) // سعر البيع للقطعة
+  sellingPrice      Float?      @default(0) // سعر البيع بالجملة للقطعة (من المخزن الرئيسي للفروع)
+  retailPrice       Float?      @default(0) // سعر القطاعي للقطعة (لحساب قيمة البضاعة في الفروع)
   
-  // حالة العنصر
+  // ╪¡╪º┘ä╪⌐ ╪º┘ä╪╣┘å╪╡╪▒
   status            String      @default("PENDING") // PENDING, DELIVERED, CANCELLED
   
-  // ملاحظات
+  // ┘à┘ä╪º╪¡╪╕╪º╪¬
   notes             String?
   
   createdAt         DateTime    @default(now())
@@ -694,7 +730,7 @@ model TransferItem {
 }
 
 // =====================
-// Activity Log (تتبع نشاط المستخدمين)
+// Activity Log (╪¬╪¬╪¿╪╣ ┘å╪┤╪º╪╖ ╪º┘ä┘à╪│╪¬╪«╪»┘à┘è┘å)
 // =====================
 
 model ActivityLog {
@@ -707,8 +743,8 @@ model ActivityLog {
   entity          String?     // sale, product, transfer, etc.
   entityId        String?
   
-  description     String      // وصف النشاط
-  metadata        String?     // JSON string للبيانات الإضافية
+  description     String      // ┘ê╪╡┘ü ╪º┘ä┘å╪┤╪º╪╖
+  metadata        String?     // JSON string ┘ä┘ä╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪Ñ╪╢╪º┘ü┘è╪⌐
   
   ipAddress       String?
   userAgent       String?
@@ -726,7 +762,7 @@ model ActivityLog {
 }
 
 // =====================
-// Customers Management (العملاء)
+// Customers Management (╪º┘ä╪╣┘à┘ä╪º╪í)
 // =====================
 
 model Customer {
@@ -736,6 +772,7 @@ model Customer {
   address         String?
   notes           String?
   isActive        Boolean           @default(true)
+  walletBalance   Float             @default(0)
   
   sales           Sale[]
   payments        CustomerPayment[]
@@ -745,37 +782,6 @@ model Customer {
   updatedAt       DateTime          @updatedAt
   
   @@map("customers")
-}
-
-// =====================
-// Office Customers (عملاء المكتب - زباين عادية وشحن)
-// =====================
-
-model OfficeCustomer {
-  id                String            @id @default(uuid())
-  name              String            // اسم العميل/الزبون
-  phone             String            @unique // رقم الهاتف (مفتاح للبحث)
-  type              String            // REGULAR (زبون عادي), SHIPMENT (شحن)
-  
-  // إحصائيات
-  totalInvoices     Int               @default(0) // عدد الفواتير
-  totalSales        Float             @default(0) // إجمالي المبيعات
-  totalPaid         Float             @default(0) // إجمالي المدفوع
-  lastInvoiceDate   DateTime?         // آخر فاتورة
-  
-  // بيانات إضافية للشحن
-  shipmentCompany   String?           // شركة الشحن المفضلة (للشحن)
-  address           String?
-  notes             String?
-  
-  isActive          Boolean           @default(true)
-  
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  
-  @@index([phone])
-  @@index([type])
-  @@map("office_customers")
 }
 
 model CustomerPayment {
@@ -801,7 +807,7 @@ model CustomerPayment {
 }
 
 // =====================
-// Vault Management (نظام الخزينة)
+// Vault Management (┘å╪╕╪º┘à ╪º┘ä╪«╪▓┘è┘å╪⌐)
 // =====================
 
 model VaultTransaction {
@@ -814,14 +820,14 @@ model VaultTransaction {
   amount            Float
   
   // For card payments
-  saleId            String?     // إذا كانت من عملية بيع بالفيزا
+  saleId            String?     // ╪Ñ╪░╪º ┘â╪º┘å╪¬ ┘à┘å ╪╣┘à┘ä┘è╪⌐ ╪¿┘è╪╣ ╪¿╪º┘ä┘ü┘è╪▓╪º
   invoiceNumber     String?
   
   // For drawer transfers
-  shiftId           String?     // إذا كانت تحويل من/إلى الدرج
+  shiftId           String?     // ╪Ñ╪░╪º ┘â╪º┘å╪¬ ╪¬╪¡┘ê┘è┘ä ┘à┘å/╪Ñ┘ä┘ë ╪º┘ä╪»╪▒╪¼
   
   // For money transfers
-  moneyTransferId   String?     // إذا كانت تحويل أموال بين فروع
+  moneyTransferId   String?     // ╪Ñ╪░╪º ┘â╪º┘å╪¬ ╪¬╪¡┘ê┘è┘ä ╪ú┘à┘ê╪º┘ä ╪¿┘è┘å ┘ü╪▒┘ê╪╣
   
   description       String
   notes             String?
@@ -829,8 +835,8 @@ model VaultTransaction {
   createdBy         String      // User ID
   createdAt         DateTime    @default(now())
   
-  balanceBefore     Float       // الرصيد قبل العملية
-  balanceAfter      Float       // الرصيد بعد العملية
+  balanceBefore     Float       // ╪º┘ä╪▒╪╡┘è╪» ┘é╪¿┘ä ╪º┘ä╪╣┘à┘ä┘è╪⌐
+  balanceAfter      Float       // ╪º┘ä╪▒╪╡┘è╪» ╪¿╪╣╪» ╪º┘ä╪╣┘à┘ä┘è╪⌐
   
   @@index([branchId])
   @@index([type])
@@ -841,7 +847,7 @@ model VaultTransaction {
 }
 
 // =====================
-// Money Transfers (تحويلات الأموال بين الفروع والمصنع)
+// Money Transfers (╪¬╪¡┘ê┘è┘ä╪º╪¬ ╪º┘ä╪ú┘à┘ê╪º┘ä ╪¿┘è┘å ╪º┘ä┘ü╪▒┘ê╪╣ ┘ê╪º┘ä┘à╪╡┘å╪╣)
 // =====================
 
 model MoneyTransfer {
@@ -865,7 +871,7 @@ model MoneyTransfer {
   confirmedAt       DateTime?
   
   notes             String?
-  reason            String?     // سبب التحويل
+  reason            String?     // ╪│╪¿╪¿ ╪º┘ä╪¬╪¡┘ê┘è┘ä
   
   @@index([fromBranchId])
   @@index([toBranchId])
@@ -875,14 +881,14 @@ model MoneyTransfer {
 }
 
 // =====================
-// Fabric Management (إدارة القماش)
+// Fabric Management (╪Ñ╪»╪º╪▒╪⌐ ╪º┘ä┘é┘à╪º╪┤)
 // =====================
 
-// أنواع الخامات
+// ╪ú┘å┘ê╪º╪╣ ╪º┘ä╪«╪º┘à╪º╪¬
 model FabricType {
   id              String              @id @default(uuid())
-  name            String              @unique // اسم الخامة (مثلاً: قطن، جينز، بوليستر)
-  pricePerMeter   Float               // سعر المتر
+  name            String              @unique // ╪º╪│┘à ╪º┘ä╪«╪º┘à╪⌐ (┘à╪½┘ä╪º┘ï: ┘é╪╖┘å╪î ╪¼┘è┘å╪▓╪î ╪¿┘ê┘ä┘è╪│╪¬╪▒)
+  pricePerMeter   Float               // ╪│╪╣╪▒ ╪º┘ä┘à╪¬╪▒
   description     String?
   isActive        Boolean             @default(true)
   
@@ -896,7 +902,7 @@ model FabricType {
   @@map("fabric_types")
 }
 
-// مشتريات القماش من الموردين
+// ┘à╪┤╪¬╪▒┘è╪º╪¬ ╪º┘ä┘é┘à╪º╪┤ ┘à┘å ╪º┘ä┘à┘ê╪▒╪»┘è┘å
 model FabricPurchase {
   id              String      @id @default(uuid())
   invoiceNumber   String      @unique
@@ -907,9 +913,9 @@ model FabricPurchase {
   fabricTypeId    String
   fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id])
   
-  meters          Float       // عدد الأمتار المشتراة
-  pricePerMeter   Float       // سعر المتر وقت الشراء
-  totalCost       Float       // التكلفة الإجمالية (محسوبة تلقائياً)
+  meters          Float       // ╪╣╪»╪» ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪┤╪¬╪▒╪º╪⌐
+  pricePerMeter   Float       // ╪│╪╣╪▒ ╪º┘ä┘à╪¬╪▒ ┘ê┘é╪¬ ╪º┘ä╪┤╪▒╪º╪í
+  totalCost       Float       // ╪º┘ä╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è╪⌐ (┘à╪¡╪│┘ê╪¿╪⌐ ╪¬┘ä┘é╪º╪ª┘è╪º┘ï)
   
   paidAmount      Float       @default(0)
   remainingAmount Float       @default(0)
@@ -929,19 +935,19 @@ model FabricPurchase {
   @@map("fabric_purchases")
 }
 
-// مخزن القماش
+// ┘à╪«╪▓┘å ╪º┘ä┘é┘à╪º╪┤
 model FabricStock {
   id              String      @id @default(uuid())
   
   fabricTypeId    String
-  fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id])
+  fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id], onDelete: Cascade)
   
-  availableMeters Float       // عدد الأمتار المتاحة
-  reservedMeters  Float       @default(0) // الأمتار المحجوزة للتصنيع
+  availableMeters Float       // ╪╣╪»╪» ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪¬╪º╪¡╪⌐
+  reservedMeters  Float       @default(0) // ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪¡╪¼┘ê╪▓╪⌐ ┘ä┘ä╪¬╪╡┘å┘è╪╣
   
   // Tracking
-  totalPurchased  Float       @default(0) // إجمالي ما تم شراؤه
-  totalUsed       Float       @default(0) // إجمالي ما تم استخدامه
+  totalPurchased  Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘à╪º ╪¬┘à ╪┤╪▒╪º╪ñ┘ç
+  totalUsed       Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘à╪º ╪¬┘à ╪º╪│╪¬╪«╪»╪º┘à┘ç
   
   lastUpdated     DateTime    @updatedAt
   createdAt       DateTime    @default(now())
@@ -950,7 +956,7 @@ model FabricStock {
   @@map("fabric_stock")
 }
 
-// أوامر التصنيع (إرسال القماش للمورد للتصنيع)
+// ╪ú┘ê╪º┘à╪▒ ╪º┘ä╪¬╪╡┘å┘è╪╣ (╪Ñ╪▒╪│╪º┘ä ╪º┘ä┘é┘à╪º╪┤ ┘ä┘ä┘à┘ê╪▒╪» ┘ä┘ä╪¬╪╡┘å┘è╪╣)
 model ManufacturingOrder {
   id                  String      @id @default(uuid())
   orderNumber         String      @unique
@@ -961,23 +967,23 @@ model ManufacturingOrder {
   fabricTypeId        String
   fabricType          FabricType  @relation(fields: [fabricTypeId], references: [id])
   
-  // الصنف المطلوب تصنيعه
+  // ╪º┘ä╪╡┘å┘ü ╪º┘ä┘à╪╖┘ä┘ê╪¿ ╪¬╪╡┘å┘è╪╣┘ç
   productId           String?
   product             Product?    @relation(fields: [productId], references: [id])
   
-  metersUsed          Float       // عدد الأمتار المستخدمة
-  fabricCostPerMeter  Float       // تكلفة المتر من القماش
+  metersUsed          Float       // ╪╣╪»╪» ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪│╪¬╪«╪»┘à╪⌐
+  fabricCostPerMeter  Float       // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä┘à╪¬╪▒ ┘à┘å ╪º┘ä┘é┘à╪º╪┤
   
   status              String      @default("SENT") // SENT, IN_PRODUCTION, COMPLETED
   
-  // عند الإرسال
+  // ╪╣┘å╪» ╪º┘ä╪Ñ╪▒╪│╪º┘ä
   sentDate            DateTime    @default(now())
   sentBy              String
   
-  // عند الاستلام
-  piecesReceived      Int?        // عدد القطع المستلمة
-  manufacturingCostPerPiece Float? // تكلفة التصنيع للقطعة
-  totalManufacturingCost    Float? // إجمالي تكلفة التصنيع
+  // ╪╣┘å╪» ╪º┘ä╪º╪│╪¬┘ä╪º┘à
+  piecesReceived      Int?        // ╪╣╪»╪» ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪│╪¬┘ä┘à╪⌐
+  manufacturingCostPerPiece Float? // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¬╪╡┘å┘è╪╣ ┘ä┘ä┘é╪╖╪╣╪⌐
+  totalManufacturingCost    Float? // ╪Ñ╪¼┘à╪º┘ä┘è ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¬╪╡┘å┘è╪╣
   
   paidAmount          Float       @default(0)
   remainingAmount     Float       @default(0)
@@ -1001,7 +1007,7 @@ model ManufacturingOrder {
   @@map("manufacturing_orders")
 }
 
-// أوامر الغسيل (إرسال القطع المصنعة للغسيل)
+// ╪ú┘ê╪º┘à╪▒ ╪º┘ä╪║╪│┘è┘ä (╪Ñ╪▒╪│╪º┘ä ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪╡┘å╪╣╪⌐ ┘ä┘ä╪║╪│┘è┘ä)
 model WashingOrder {
   id                      String              @id @default(uuid())
   orderNumber             String              @unique
@@ -1012,18 +1018,18 @@ model WashingOrder {
   manufacturingOrderId    String?
   manufacturingOrder      ManufacturingOrder? @relation(fields: [manufacturingOrderId], references: [id])
   
-  piecesSent              Int                 // عدد القطع المرسلة
+  piecesSent              Int                 // ╪╣╪»╪» ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪▒╪│┘ä╪⌐
   
   status                  String              @default("SENT") // SENT, IN_WASHING, COMPLETED
   
-  // عند الإرسال
+  // ╪╣┘å╪» ╪º┘ä╪Ñ╪▒╪│╪º┘ä
   sentDate                DateTime            @default(now())
   sentBy                  String
   
-  // عند الاستلام
-  piecesReceived          Int?                // عدد القطع المستلمة
-  washingCostPerPiece     Float?              // تكلفة الغسيل للقطعة
-  totalWashingCost        Float?              // إجمالي تكلفة الغسيل
+  // ╪╣┘å╪» ╪º┘ä╪º╪│╪¬┘ä╪º┘à
+  piecesReceived          Int?                // ╪╣╪»╪» ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪│╪¬┘ä┘à╪⌐
+  washingCostPerPiece     Float?              // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪║╪│┘è┘ä ┘ä┘ä┘é╪╖╪╣╪⌐
+  totalWashingCost        Float?              // ╪Ñ╪¼┘à╪º┘ä┘è ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪║╪│┘è┘ä
   
   paidAmount              Float               @default(0)
   remainingAmount         Float               @default(0)
@@ -1032,8 +1038,8 @@ model WashingOrder {
   receivedDate            DateTime?
   receivedBy              String?
   
-  // ربط بالمنتج النهائي
-  productId               String?             // المنتج النهائي بعد اكتمال الدورة
+  // ╪▒╪¿╪╖ ╪¿╪º┘ä┘à┘å╪¬╪¼ ╪º┘ä┘å┘ç╪º╪ª┘è
+  productId               String?             // ╪º┘ä┘à┘å╪¬╪¼ ╪º┘ä┘å┘ç╪º╪ª┘è ╪¿╪╣╪» ╪º┘â╪¬┘à╪º┘ä ╪º┘ä╪»┘ê╪▒╪⌐
   
   notes                   String?
   
@@ -1049,54 +1055,54 @@ model WashingOrder {
 
 
 // =====================
-// Returns Management (نظام المرتجعات)
+// Returns Management (┘å╪╕╪º┘à ╪º┘ä┘à╪▒╪¬╪¼╪╣╪º╪¬)
 // =====================
 
 model Return {
   id                String        @id @default(uuid())
   returnNumber      String        @unique // RET-YYYYMMDD-XXXXX
   
-  // بيانات الفاتورة الأصلية
+  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪º┘ä╪ú╪╡┘ä┘è╪⌐
   saleId            String
   sale              Sale          @relation(fields: [saleId], references: [id])
   
   branchId          String
   branch            Branch        @relation(fields: [branchId], references: [id])
   
-  // بيانات العميل
+  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪╣┘à┘è┘ä
   customerName      String?
   customerPhone     String?
   
-  // الأصناف المرتجعة
+  // ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘à╪▒╪¬╪¼╪╣╪⌐
   items             ReturnItem[]
   
-  // المبلغ الإجمالي (سعر البيع)
+  // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è (╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
   totalSaleAmount   Float
-  // المبلغ الإجمالي (سعر التكلفة)
+  // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è (╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐)
   totalCostAmount   Float
   
-  refundMethod      String        // CASH, CARD, EXCHANGE (نقدي/فيزا/استبدال)
+  refundMethod      String        // CASH, CARD, EXCHANGE (┘å┘é╪»┘è/┘ü┘è╪▓╪º/╪º╪│╪¬╪¿╪»╪º┘ä)
   
-  // السبب
-  returnReason      String        // عيب تصنيع/مقاس غير مناسب/لون غير مناسب/أخرى
+  // ╪º┘ä╪│╪¿╪¿
+  returnReason      String        // ╪╣┘è╪¿ ╪¬╪╡┘å┘è╪╣/┘à┘é╪º╪│ ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/┘ä┘ê┘å ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/╪ú╪«╪▒┘ë
   notes             String?
   
-  // حالة المرتجع
+  // ╪¡╪º┘ä╪⌐ ╪º┘ä┘à╪▒╪¬╪¼╪╣
   status            String        @default("PENDING_MANAGER") 
-  // PENDING_MANAGER → SENT_TO_LOCAL/SENT_TO_MAIN → COMPLETED
+  // PENDING_MANAGER ΓåÆ SENT_TO_LOCAL/SENT_TO_MAIN ΓåÆ COMPLETED
   
-  // قرار المانجر (وجهة المرتجع)
+  // ┘é╪▒╪º╪▒ ╪º┘ä┘à╪º┘å╪¼╪▒ (┘ê╪¼┘ç╪⌐ ╪º┘ä┘à╪▒╪¬╪¼╪╣)
   managerDecision   String?       // SEND_TO_LOCAL, SEND_TO_MAIN
   managerNotes      String?
   reviewedByManagerId String?
   reviewedByManager User?         @relation("ReturnManagerReviewer", fields: [reviewedByManagerId], references: [id])
   managerReviewAt   DateTime?
   
-  // تم إرجاعه للمخزون
+  // ╪¬┘à ╪Ñ╪▒╪¼╪º╪╣┘ç ┘ä┘ä┘à╪«╪▓┘ê┘å
   returnedToInventory Boolean     @default(false)
   returnedToInventoryAt DateTime?
   
-  // من قام بإنشاء المرتجع (الكاشير)
+  // ┘à┘å ┘é╪º┘à ╪¿╪Ñ┘å╪┤╪º╪í ╪º┘ä┘à╪▒╪¬╪¼╪╣ (╪º┘ä┘â╪º╪┤┘è╪▒)
   createdById       String
   createdBy         User          @relation("ReturnCreator", fields: [createdById], references: [id])
   
@@ -1123,16 +1129,16 @@ model ReturnItem {
   quantity          Int
   size              String?
   
-  // السعر
-  unitSalePrice     Float         // سعر البيع
-  unitCostPrice     Float         // سعر التكلفة
-  totalSalePrice    Float         // إجمالي سعر البيع
-  totalCostPrice    Float         // إجمالي سعر التكلفة
+  // ╪º┘ä╪│╪╣╪▒
+  unitSalePrice     Float         // ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣
+  unitCostPrice     Float         // ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐
+  totalSalePrice    Float         // ╪Ñ╪¼┘à╪º┘ä┘è ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣
+  totalCostPrice    Float         // ╪Ñ╪¼┘à╪º┘ä┘è ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐
   
-  // سبب الإرجاع لكل منتج
-  returnReason      String        // عيب تصنيع/مقاس غير مناسب/لون غير مناسب/أخرى
+  // ╪│╪¿╪¿ ╪º┘ä╪Ñ╪▒╪¼╪º╪╣ ┘ä┘â┘ä ┘à┘å╪¬╪¼
+  returnReason      String        // ╪╣┘è╪¿ ╪¬╪╡┘å┘è╪╣/┘à┘é╪º╪│ ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/┘ä┘ê┘å ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/╪ú╪«╪▒┘ë
   
-  // حالة المنتج
+  // ╪¡╪º┘ä╪⌐ ╪º┘ä┘à┘å╪¬╪¼
   condition         String        @default("GOOD") // GOOD, DAMAGED, DEFECTIVE
   conditionNotes    String?
   
@@ -1145,54 +1151,59 @@ model ReturnItem {
 }
 
 // =====================
-// Office Invoices Management (فواتير المكتب/المخزن الرئيسي)
+// Office Invoices Management (┘ü┘ê╪º╪¬┘è╪▒ ╪º┘ä┘à┘â╪¬╪¿/╪º┘ä┘à╪«╪▓┘å ╪º┘ä╪▒╪ª┘è╪│┘è)
 // =====================
 
 model OfficeInvoice {
   id                String              @id @default(uuid())
   invoiceNumber     String              @unique // OF-YYYYMMDD-XXXXX
   
-  type              String              // REGULAR (زبون عادي), SHIPMENT (شحن), CLIENT (عميل)
+  type              String              // REGULAR (╪▓╪¿┘ê┘å ╪╣╪º╪»┘è), SHIPMENT (╪┤╪¡┘å), CLIENT (╪╣┘à┘è┘ä)
   
-  // بيانات العميل
+  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪╣┘à┘è┘ä
   customerId        String?
   customer          Customer?           @relation(fields: [customerId], references: [id])
   
   customerName      String              // اسم العميل/الزبون
   customerPhone     String?             // رقم الهاتف
   
-  // بيانات الشحن (إذا كان Type = SHIPMENT)
-  shipmentCompany   String?             // اسم شركة الشحن
-  shipmentBill      String?             // رقم بوليصة الشحن
+  // بيانات البائع (موظف الجملة)
+  sellerId          String?
+  sellerName        String?             // اسم موظف الجملة البائع
+  seller            WholesaleEmployee?  @relation(fields: [sellerId], references: [id])
   
-  // الأصناف
+  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪┤╪¡┘å (╪Ñ╪░╪º ┘â╪º┘å Type = SHIPMENT)
+  shipmentCompany   String?             // ╪º╪│┘à ╪┤╪▒┘â╪⌐ ╪º┘ä╪┤╪¡┘å
+  shipmentBill      String?             // ╪▒┘é┘à ╪¿┘ê┘ä┘è╪╡╪⌐ ╪º┘ä╪┤╪¡┘å
+  
+  // ╪º┘ä╪ú╪╡┘å╪º┘ü
   items             OfficeInvoiceItem[]
   
-  // المبالغ
-  subtotal          Float               // المجموع قبل الخصم
-  discountAmount    Float               @default(0) // الخصم
-  total             Float               // الإجمالي النهائي
+  // ╪º┘ä┘à╪¿╪º┘ä╪║
+  subtotal          Float               // ╪º┘ä┘à╪¼┘à┘ê╪╣ ┘é╪¿┘ä ╪º┘ä╪«╪╡┘à
+  discountAmount    Float               @default(0) // ╪º┘ä╪«╪╡┘à
+  total             Float               // ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘å┘ç╪º╪ª┘è
   
-  // التكلفة (للحسابات الداخلية)
-  totalCost         Float               // إجمالي التكلفة
-  profit            Float               // الربح (total - totalCost)
+  // ╪º┘ä╪¬┘â┘ä┘ü╪⌐ (┘ä┘ä╪¡╪│╪º╪¿╪º╪¬ ╪º┘ä╪»╪º╪«┘ä┘è╪⌐)
+  totalCost         Float               // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪¬┘â┘ä┘ü╪⌐
+  profit            Float               // ╪º┘ä╪▒╪¿╪¡ (total - totalCost)
   
-  // الدفع
-  paymentMethod     String              // CASH (نقدي), CARD (فيزا), CREDIT (آجل)
-  paidAmount        Float               @default(0) // المبلغ المدفوع
-  remainingAmount   Float               @default(0) // المبلغ المتبقي
+  // ╪º┘ä╪»┘ü╪╣
+  paymentMethod     String              // CASH (┘å┘é╪»┘è), CARD (┘ü┘è╪▓╪º), CREDIT (╪ó╪¼┘ä)
+  paidAmount        Float               @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪»┘ü┘ê╪╣
+  remainingAmount   Float               @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪¬╪¿┘é┘è
   
   status            String              @default("PENDING") 
-  // PENDING (معلقة), COMPLETED (مكتملة), CANCELLED (ملغاة)
-  // للشحن: SHIPPED (تم الشحن), DELIVERED (تم التسليم)
+  // PENDING (┘à╪╣┘ä┘é╪⌐), COMPLETED (┘à┘â╪¬┘à┘ä╪⌐), CANCELLED (┘à┘ä╪║╪º╪⌐)
+  // ┘ä┘ä╪┤╪¡┘å: SHIPPED (╪¬┘à ╪º┘ä╪┤╪¡┘å), DELIVERED (╪¬┘à ╪º┘ä╪¬╪│┘ä┘è┘à)
   
-  // ربط بالشحنة إذا كان شحن
+  // ╪▒╪¿╪╖ ╪¿╪º┘ä╪┤╪¡┘å╪⌐ ╪Ñ╪░╪º ┘â╪º┘å ╪┤╪¡┘å
   shipment          Shipment?
   
-  // ملاحظات
+  // ┘à┘ä╪º╪¡╪╕╪º╪¬
   notes             String?
   
-  // من قام بالإنشاء (الأدمن)
+  // ┘à┘å ┘é╪º┘à ╪¿╪º┘ä╪Ñ┘å╪┤╪º╪í (╪º┘ä╪ú╪»┘à┘å)
   createdBy         String
   
   createdAt         DateTime            @default(now())
@@ -1218,11 +1229,11 @@ model OfficeInvoiceItem {
   quantity          Int
   size              String?
   
-  // السعر (الأدمن يحدده)
-  unitCostPrice     Float               // سعر التكلفة
-  unitSalePrice     Float               // سعر البيع (يحدده الأدمن)
-  totalCost         Float               // إجمالي التكلفة
-  totalSale         Float               // إجمالي البيع
+  // ╪º┘ä╪│╪╣╪▒ (╪º┘ä╪ú╪»┘à┘å ┘è╪¡╪»╪»┘ç)
+  unitCostPrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐
+  unitSalePrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣ (┘è╪¡╪»╪»┘ç ╪º┘ä╪ú╪»┘à┘å)
+  totalCost         Float               // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪¬┘â┘ä┘ü╪⌐
+  totalSale         Float               // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪¿┘è╪╣
   
   createdAt         DateTime            @default(now())
   
@@ -1232,46 +1243,46 @@ model OfficeInvoiceItem {
 }
 
 // =====================
-// Shipment Tracking (تتبع الشحنات)
+// Shipment Tracking (╪¬╪¬╪¿╪╣ ╪º┘ä╪┤╪¡┘å╪º╪¬)
 // =====================
 
 model Shipment {
   id                String              @id @default(uuid())
   shipmentNumber    String              @unique // SH-YYYYMMDD-XXXXX
   
-  // الفاتورة المرتبطة
+  // ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪º┘ä┘à╪▒╪¬╪¿╪╖╪⌐
   invoiceId         String              @unique
   invoice           OfficeInvoice       @relation(fields: [invoiceId], references: [id])
   
-  // بيانات الشحن
-  shipmentCompany   String              // شركة الشحن
-  shipmentBill      String              // رقم بوليصة الشحن
+  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪┤╪¡┘å
+  shipmentCompany   String              // ╪┤╪▒┘â╪⌐ ╪º┘ä╪┤╪¡┘å
+  shipmentBill      String              // ╪▒┘é┘à ╪¿┘ê┘ä┘è╪╡╪⌐ ╪º┘ä╪┤╪¡┘å
   
-  // بيانات العميل
+  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪╣┘à┘è┘ä
   customerName      String
   customerPhone     String?
   customerAddress   String?
   
-  // حالة الشحن
+  // ╪¡╪º┘ä╪⌐ ╪º┘ä╪┤╪¡┘å
   status            String              @default("PENDING")
-  // PENDING (قيد الإنتظار), SHIPPED (تم الشحن), IN_TRANSIT (في الطريق), 
-  // DELIVERED (تم التسليم), RETURNED (تم الإرجاع)
+  // PENDING (┘é┘è╪» ╪º┘ä╪Ñ┘å╪¬╪╕╪º╪▒), SHIPPED (╪¬┘à ╪º┘ä╪┤╪¡┘å), IN_TRANSIT (┘ü┘è ╪º┘ä╪╖╪▒┘è┘é), 
+  // DELIVERED (╪¬┘à ╪º┘ä╪¬╪│┘ä┘è┘à), RETURNED (╪¬┘à ╪º┘ä╪Ñ╪▒╪¼╪º╪╣)
   
-  // تواريخ
-  shippedAt         DateTime?           // تاريخ الشحن
-  estimatedDelivery DateTime?           // التاريخ المتوقع للتسليم
-  deliveredAt       DateTime?           // تاريخ التسليم الفعلي
+  // ╪¬┘ê╪º╪▒┘è╪«
+  shippedAt         DateTime?           // ╪¬╪º╪▒┘è╪« ╪º┘ä╪┤╪¡┘å
+  estimatedDelivery DateTime?           // ╪º┘ä╪¬╪º╪▒┘è╪« ╪º┘ä┘à╪¬┘ê┘é╪╣ ┘ä┘ä╪¬╪│┘ä┘è┘à
+  deliveredAt       DateTime?           // ╪¬╪º╪▒┘è╪« ╪º┘ä╪¬╪│┘ä┘è┘à ╪º┘ä┘ü╪╣┘ä┘è
   
-  // الدفع
-  paymentCollected  Boolean             @default(false) // هل تم تحصيل المبلغ من شركة الشحن؟
-  paymentCollectedAt DateTime?          // تاريخ التحصيل
-  collectedAmount   Float?              // المبلغ المحصل
+  // ╪º┘ä╪»┘ü╪╣
+  paymentCollected  Boolean             @default(false) // ┘ç┘ä ╪¬┘à ╪¬╪¡╪╡┘è┘ä ╪º┘ä┘à╪¿┘ä╪║ ┘à┘å ╪┤╪▒┘â╪⌐ ╪º┘ä╪┤╪¡┘å╪ƒ
+  paymentCollectedAt DateTime?          // ╪¬╪º╪▒┘è╪« ╪º┘ä╪¬╪¡╪╡┘è┘ä
+  collectedAmount   Float?              // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪¡╪╡┘ä
   
-  // ملاحظات
+  // ┘à┘ä╪º╪¡╪╕╪º╪¬
   notes             String?
-  trackingNotes     String?             // ملاحظات التتبع
+  trackingNotes     String?             // ┘à┘ä╪º╪¡╪╕╪º╪¬ ╪º┘ä╪¬╪¬╪¿╪╣
   
-  // من قام بالتحديث
+  // ┘à┘å ┘é╪º┘à ╪¿╪º┘ä╪¬╪¡╪»┘è╪½
   updatedBy         String?
   
   createdAt         DateTime            @default(now())
@@ -1285,47 +1296,47 @@ model Shipment {
 }
 
 // =====================
-// Inventory Audit (جرد المخزون)
+// Inventory Audit (╪¼╪▒╪» ╪º┘ä┘à╪«╪▓┘ê┘å)
 // =====================
 
 model InventoryAudit {
   id                String              @id @default(uuid())
   auditNumber       String              @unique // AUD-YYYYMMDD-XXXXX
   
-  // الفرع اللي بيتعمله جرد
+  // ╪º┘ä┘ü╪▒╪╣ ╪º┘ä┘ä┘è ╪¿┘è╪¬╪╣┘à┘ä┘ç ╪¼╪▒╪»
   branchId          String
   branch            Branch              @relation(fields: [branchId], references: [id])
   
-  // حالة الجرد
+  // ╪¡╪º┘ä╪⌐ ╪º┘ä╪¼╪▒╪»
   status            String              @default("IN_PROGRESS")
-  // IN_PROGRESS (جاري الجرد), COMPLETED (اكتمل), SETTLED (تمت التسوية)
+  // IN_PROGRESS (╪¼╪º╪▒┘è ╪º┘ä╪¼╪▒╪»), COMPLETED (╪º┘â╪¬┘à┘ä), SETTLED (╪¬┘à╪¬ ╪º┘ä╪¬╪│┘ê┘è╪⌐)
   
-  // ملخص الجرد
-  totalItems        Int                 @default(0) // عدد الأصناف المجردة
-  itemsWithShortage Int                 @default(0) // عدد الأصناف اللي فيها عجز
-  itemsWithSurplus  Int                 @default(0) // عدد الأصناف اللي فيها زيادة
+  // ┘à┘ä╪«╪╡ ╪º┘ä╪¼╪▒╪»
+  totalItems        Int                 @default(0) // ╪╣╪»╪» ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘à╪¼╪▒╪»╪⌐
+  itemsWithShortage Int                 @default(0) // ╪╣╪»╪» ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘ä┘è ┘ü┘è┘ç╪º ╪╣╪¼╪▓
+  itemsWithSurplus  Int                 @default(0) // ╪╣╪»╪» ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘ä┘è ┘ü┘è┘ç╪º ╪▓┘è╪º╪»╪⌐
   
-  totalShortageQty  Int                 @default(0) // إجمالي كمية العجز
-  totalSurplusQty   Int                 @default(0) // إجمالي كمية الزيادة
-  totalShortageValue Float              @default(0) // قيمة العجز (بسعر البيع)
-  totalSurplusValue Float               @default(0) // قيمة الزيادة (بسعر البيع)
+  totalShortageQty  Int                 @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘â┘à┘è╪⌐ ╪º┘ä╪╣╪¼╪▓
+  totalSurplusQty   Int                 @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘â┘à┘è╪⌐ ╪º┘ä╪▓┘è╪º╪»╪⌐
+  totalShortageValue Float              @default(0) // ┘é┘è┘à╪⌐ ╪º┘ä╪╣╪¼╪▓ (╪¿╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
+  totalSurplusValue Float               @default(0) // ┘é┘è┘à╪⌐ ╪º┘ä╪▓┘è╪º╪»╪⌐ (╪¿╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
   
-  // من قام بالجرد والتسوية
+  // ┘à┘å ┘é╪º┘à ╪¿╪º┘ä╪¼╪▒╪» ┘ê╪º┘ä╪¬╪│┘ê┘è╪⌐
   createdBy         String
   createdByUser     User                @relation("AuditCreator", fields: [createdBy], references: [id])
   
   settledBy         String?
   settledByUser     User?               @relation("AuditSettler", fields: [settledBy], references: [id])
-  settledAt         DateTime?           // تاريخ التسوية
+  settledAt         DateTime?           // ╪¬╪º╪▒┘è╪« ╪º┘ä╪¬╪│┘ê┘è╪⌐
   
-  // ملاحظات
+  // ┘à┘ä╪º╪¡╪╕╪º╪¬
   notes             String?
   
-  // التواريخ
+  // ╪º┘ä╪¬┘ê╪º╪▒┘è╪«
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   
-  // العلاقات
+  // ╪º┘ä╪╣┘ä╪º┘é╪º╪¬
   items             InventoryAuditItem[]
   
   @@index([branchId])
@@ -1338,29 +1349,29 @@ model InventoryAudit {
 model InventoryAuditItem {
   id                String              @id @default(uuid())
   
-  // الجرد المرتبط
+  // ╪º┘ä╪¼╪▒╪» ╪º┘ä┘à╪▒╪¬╪¿╪╖
   auditId           String
   audit             InventoryAudit      @relation(fields: [auditId], references: [id], onDelete: Cascade)
   
-  // المنتج
+  // ╪º┘ä┘à┘å╪¬╪¼
   productId         String
   product           Product             @relation(fields: [productId], references: [id])
   
-  // الكميات
-  expectedQty       Int                 // الكمية المتوقعة (من النظام)
-  returnedQty       Int                 @default(0) // كمية المرتجعات
-  actualQty         Int?                // الكمية الفعلية (اللي لقيتها في الجرد)
+  // ╪º┘ä┘â┘à┘è╪º╪¬
+  expectedQty       Int                 // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘à╪¬┘ê┘é╪╣╪⌐ (┘à┘å ╪º┘ä┘å╪╕╪º┘à)
+  returnedQty       Int                 @default(0) // ┘â┘à┘è╪⌐ ╪º┘ä┘à╪▒╪¬╪¼╪╣╪º╪¬
+  actualQty         Int?                // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘ü╪╣┘ä┘è╪⌐ (╪º┘ä┘ä┘è ┘ä┘é┘è╪¬┘ç╪º ┘ü┘è ╪º┘ä╪¼╪▒╪»)
   
-  // الفرق
-  differenceQty     Int?                // الفرق = actualQty - (expectedQty + returnedQty)
-  differenceType    String?             // SHORTAGE (عجز), SURPLUS (زيادة), MATCHED (مطابق)
-  differenceValue   Float?              // قيمة الفرق (بسعر البيع)
+  // ╪º┘ä┘ü╪▒┘é
+  differenceQty     Int?                // ╪º┘ä┘ü╪▒┘é = actualQty - (expectedQty + returnedQty)
+  differenceType    String?             // SHORTAGE (╪╣╪¼╪▓), SURPLUS (╪▓┘è╪º╪»╪⌐), MATCHED (┘à╪╖╪º╪¿┘é)
+  differenceValue   Float?              // ┘é┘è┘à╪⌐ ╪º┘ä┘ü╪▒┘é (╪¿╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
   
-  // السعر وقت الجرد
-  unitCostPrice     Float               // سعر التكلفة للقطعة (للخسارة الفعلية)
-  unitSalePrice     Float               // سعر البيع للقطعة
+  // ╪º┘ä╪│╪╣╪▒ ┘ê┘é╪¬ ╪º┘ä╪¼╪▒╪»
+  unitCostPrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐ ┘ä┘ä┘é╪╖╪╣╪⌐ (┘ä┘ä╪«╪│╪º╪▒╪⌐ ╪º┘ä┘ü╪╣┘ä┘è╪⌐)
+  unitSalePrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣ ┘ä┘ä┘é╪╖╪╣╪⌐
   
-  // ملاحظات
+  // ┘à┘ä╪º╪¡╪╕╪º╪¬
   notes             String?
   
   createdAt         DateTime            @default(now())
@@ -1369,4 +1380,24 @@ model InventoryAuditItem {
   @@index([auditId])
   @@index([productId])
   @@map("inventory_audit_items")
+}
+
+// =====================
+// Wholesale Sales Employees (موظفين مبيعات الجملة بالمكتب)
+// =====================
+
+model WholesaleEmployee {
+  id              String            @id @default(uuid())
+  name            String
+  phone           String?
+  email           String?
+  notes           String?
+  isActive        Boolean           @default(true)
+  
+  officeInvoices  OfficeInvoice[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@map("wholesale_employees")
 }

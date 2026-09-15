@@ -87,28 +87,77 @@ exports.getExpenseById = async (req, res) => {
 // Create expense
 exports.createExpense = async (req, res) => {
   try {
-    const { branchId, category, description, amount, expenseDate, receiptNumber, notes } = req.body;
+    const { branchId, category, description, amount, expenseDate, receiptNumber, notes, vaultType } = req.body;
     const createdBy = req.user.id;
-    
-    const expense = await prisma.expense.create({
-      data: {
-        branchId,
-        category,
-        description,
-        amount,
-        expenseDate: expenseDate ? new Date(expenseDate) : new Date(),
-        receiptNumber,
-        notes,
-        createdBy
-      },
-      include: {
-        branch: true
-      }
+    const amountFloat = parseFloat(amount);
+    const selectedVaultType = vaultType || 'CASH';
+
+    // Determine which vault balance field to use
+    let balanceField = 'vaultBalance';
+    if (selectedVaultType === 'CARD') balanceField = 'cardVaultBalance';
+    if (selectedVaultType === 'WALLET') balanceField = 'walletBalance';
+
+    // Find the branch
+    const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+    if (!branch) {
+      return res.status(404).json({ success: false, message: 'الفرع غير موجود' });
+    }
+
+    // Check sufficient balance
+    const currentBalance = branch[balanceField] || 0;
+    if (currentBalance < amountFloat) {
+      const vaultNameMap = { CASH: 'النقدي', CARD: 'الفيزا', WALLET: 'المحفظة' };
+      return res.status(400).json({
+        success: false,
+        message: `رصيد خزنة ${vaultNameMap[selectedVaultType] || ''} غير كافي. الرصيد المتاح: ${currentBalance.toFixed(2)} ج.م`
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the expense
+      const expense = await tx.expense.create({
+        data: {
+          branchId,
+          category,
+          description,
+          amount: amountFloat,
+          expenseDate: expenseDate ? new Date(expenseDate) : new Date(),
+          receiptNumber,
+          notes,
+          createdBy
+        },
+        include: { branch: true }
+      });
+
+      // Deduct from branch vault
+      const balanceBefore = currentBalance;
+      const balanceAfter = balanceBefore - amountFloat;
+
+      await tx.branch.update({
+        where: { id: branchId },
+        data: { [balanceField]: balanceAfter }
+      });
+
+      // Record vault transaction
+      await tx.vaultTransaction.create({
+        data: {
+          branchId,
+          type: 'CASH_WITHDRAWAL',
+          amount: amountFloat,
+          description: `مصروف: ${description || category} (${selectedVaultType})`,
+          notes: notes || `مصروف - ${category}`,
+          createdBy,
+          balanceBefore,
+          balanceAfter
+        }
+      });
+
+      return expense;
     });
-    
+
     res.status(201).json({
       success: true,
-      data: expense
+      data: result
     });
   } catch (error) {
     console.error('Error creating expense:', error);

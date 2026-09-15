@@ -374,7 +374,6 @@ export default function Invoices() {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="text-right p-3 text-sm">المنتج</th>
-                    <th className="text-center p-3 text-sm">المقاس</th>
                     <th className="text-center p-3 text-sm">اللون</th>
                     <th className="text-center p-3 text-sm">السيريال</th>
                     <th className="text-center p-3 text-sm">الكمية</th>
@@ -388,15 +387,6 @@ export default function Invoices() {
                     <tr key={index} className="border-b">
                       <td className="p-3 text-sm">
                         {item.product?.name}
-                      </td>
-                      <td className="p-3 text-sm text-center">
-                        {item.size ? (
-                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                            📏 {item.size}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-xs">-</span>
-                        )}
                       </td>
                       <td className="p-3 text-sm text-center">
                         {item.product?.color ? (

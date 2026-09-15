@@ -218,6 +218,7 @@ export default function OfficeInvoices() {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">رقم الفاتورة</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">النوع</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">العميل</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">البائع</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الإجمالي</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">المدفوع</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">المتبقي</th>
@@ -243,6 +244,9 @@ export default function OfficeInvoices() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {invoice.customerName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-amber-700">
+                        {invoice.sellerName || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                         {invoice.total.toFixed(2)} ج

@@ -243,6 +243,7 @@ exports.createTransfer = async (req, res) => {
       
       const costPrice = product?.costPrice || 0;
       const sellingPrice = product?.sellingPrice || 0;
+      const retailPrice = product?.retailPrice || product?.sellingPrice || 0;
       
       totalCost += costPrice * item.quantity;
       totalSellingPrice += sellingPrice * item.quantity;
@@ -250,7 +251,8 @@ exports.createTransfer = async (req, res) => {
       return {
         ...item,
         costPrice,
-        sellingPrice
+        sellingPrice,
+        retailPrice
       };
     }));
     
@@ -272,6 +274,7 @@ exports.createTransfer = async (req, res) => {
             quantityRequested: item.quantity,
             costPrice: item.costPrice,
             sellingPrice: item.sellingPrice,
+            retailPrice: item.retailPrice,
             status: 'PENDING',
             notes: item.notes || ''
           }))
@@ -410,6 +413,7 @@ exports.confirmReceipt = async (req, res) => {
       // حساب الإجماليات بناءً على الكمية المستلمة فعلياً
       const costPrice = transferItem.product.costPrice || 0;
       const sellingPrice = transferItem.product.sellingPrice || 0;
+      const retailPrice = transferItem.product.retailPrice || transferItem.product.sellingPrice || 0;
       
       totalCost += costPrice * quantityReceived;
       totalSellingPrice += sellingPrice * quantityReceived;
@@ -466,6 +470,7 @@ exports.confirmReceipt = async (req, res) => {
       // Get product prices
       const costPrice = transferItem.product.costPrice || 0;
       const sellingPrice = transferItem.product.sellingPrice || 0;
+      const retailPrice = transferItem.product.retailPrice || transferItem.product.sellingPrice || 0;
       
       // تحديث TransferItem بالكمية المستلمة والأسعار
       await prisma.transferItem.update({
@@ -475,6 +480,7 @@ exports.confirmReceipt = async (req, res) => {
           status: 'DELIVERED',
           costPrice: costPrice,
           sellingPrice: sellingPrice,
+          retailPrice: retailPrice,
           notes: receivedItem.notes || (difference !== 0 ? `فرق: ${difference > 0 ? '+' : ''}${difference}` : null)
         }
       });

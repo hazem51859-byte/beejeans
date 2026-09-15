@@ -190,7 +190,6 @@ export default function CreateReturn() {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="px-4 py-2 text-right">المنتج</th>
-                    <th className="px-4 py-2 text-center">المقاس</th>
                     <th className="px-4 py-2 text-center">الكمية المباعة</th>
                     <th className="px-4 py-2 text-center">كمية الإرجاع</th>
                     <th className="px-4 py-2 text-center">السعر</th>
@@ -207,9 +206,6 @@ export default function CreateReturn() {
                           <p className="font-bold">{item.product?.name}</p>
                           <p className="text-sm text-gray-500">{item.product?.sku}</p>
                         </div>
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        <span className="px-2 py-1 bg-gray-100 rounded">{item.size || '-'}</span>
                       </td>
                       <td className="px-4 py-2 text-center font-bold">{item.quantity}</td>
                       <td className="px-4 py-2">

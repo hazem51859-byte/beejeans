@@ -285,6 +285,8 @@ exports.getBranchTransfersReport = async (req, res, next) => {
                   select: {
                     id: true,
                     costPrice: true,
+                    sellingPrice: true,
+                    retailPrice: true,
                     name: true
                   }
                 }
@@ -293,12 +295,21 @@ exports.getBranchTransfersReport = async (req, res, next) => {
           }
         });
 
-        // Calculate total transferred value (cost price)
+        // قيمة التوريدات بسعر البيع (الجملة) - وهو السعر الذي يتحاسب به الفرع مع المخزن الرئيسي
         const totalTransferred = transfersReceived.reduce((sum, transfer) => {
           const transferValue = transfer.items.reduce((itemSum, item) => {
-            // استخدم costPrice من المنتج
-            const price = parseFloat(item.product?.costPrice || 0);
-            // استخدم الكمية المستلمة أو المطلوبة
+            // استخدم sellingPrice المخزن في TransferItem أولاً، وإلا من المنتج
+            const price = parseFloat(item.sellingPrice > 0 ? item.sellingPrice : (item.product?.sellingPrice || 0));
+            const quantity = parseInt(item.quantityReceived || item.quantityRequested || 0);
+            return itemSum + (price * quantity);
+          }, 0);
+          return sum + transferValue;
+        }, 0);
+
+        // أيضاً احسب قيمة التوريدات بسعر التكلفة (للمعلومات الداخلية)
+        const totalTransferredAtCost = transfersReceived.reduce((sum, transfer) => {
+          const transferValue = transfer.items.reduce((itemSum, item) => {
+            const price = parseFloat(item.costPrice > 0 ? item.costPrice : (item.product?.costPrice || 0));
             const quantity = parseInt(item.quantityReceived || item.quantityRequested || 0);
             return itemSum + (price * quantity);
           }, 0);
@@ -310,51 +321,58 @@ exports.getBranchTransfersReport = async (req, res, next) => {
           where: {
             branchId: branch.id,
             status: 'COMPLETED',
-            createdAt: {
-              gte: start,
-              lte: end
-            }
+            createdAt: { gte: start, lte: end }
           },
           include: {
             items: {
               include: {
-                product: true
+                product: {
+                  select: {
+                    costPrice: true,
+                    retailPrice: true
+                  }
+                }
               }
             }
           }
         });
 
-        // Calculate revenue and profit
         const salesCount = sales.length;
-        
-        // Revenue = المبلغ المدفوع فقط (مش الإجمالي)
         const revenue = sales.reduce((sum, sale) => sum + (sale.amountPaid || 0), 0);
         const totalSalesValue = sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
-        
-        // Calculate cost and profit
+
+        // تكلفة المبيعات = سعر التكلفة (للحساب الداخلي)
         const costOfSales = sales.reduce((sum, sale) => {
           return sum + (sale.items?.reduce((itemSum, item) => {
-            const costPrice = parseFloat(item.product?.costPrice || 0);
-            const quantity = parseInt(item.quantity || 0);
-            return itemSum + (costPrice * quantity);
+            const costPrice = parseFloat(item.unitCostPrice > 0 ? item.unitCostPrice : (item.product?.costPrice || 0));
+            return itemSum + (costPrice * parseInt(item.quantity || 0));
           }, 0) || 0);
         }, 0);
-        
-        const profit = revenue - costOfSales;
+
+        // ربح الفرع = سعر القطاعي - سعر التكلفة
+        const retailRevenue = sales.reduce((sum, sale) => {
+          return sum + (sale.items?.reduce((itemSum, item) => {
+            const retailPrice = parseFloat(
+              item.unitRetailPrice > 0 ? item.unitRetailPrice
+              : (item.product?.retailPrice > 0 ? item.product.retailPrice : (item.unitPrice || 0))
+            );
+            return itemSum + (retailPrice * parseInt(item.quantity || 0));
+          }, 0) || 0);
+        }, 0);
+
+        const profit = retailRevenue - costOfSales;
 
         return {
-          branch: {
-            id: branch.id,
-            name: branch.name,
-            code: branch.code
-          },
-          totalTransferred, // قيمة البضاعة المحولة
-          salesCount,       // عدد الفواتير
-          revenue,          // الإيرادات (المبلغ المدفوع فقط)
-          totalSalesValue,  // إجمالي المبيعات (للمعلومات)
-          costOfSales,      // تكلفة المبيعات
-          profit,           // المكسب
-          vaultBalance: branch.vaultBalance + (branch.cardVaultBalance || 0) // رصيد الخزنة الحالي
+          branch: { id: branch.id, name: branch.name, code: branch.code },
+          totalTransferred,         // قيمة البضاعة المحولة بسعر البيع (الجملة)
+          totalTransferredAtCost,   // قيمة البضاعة المحولة بسعر التكلفة (للمعلومات)
+          salesCount,
+          revenue,                  // الإيرادات المحصلة فعلاً
+          totalSalesValue,          // إجمالي المبيعات
+          retailRevenue,            // الإيرادات بسعر القطاعي
+          costOfSales,              // تكلفة البضاعة المباعة
+          profit,                   // الربح الحقيقي (قطاعي - تكلفة)
+          vaultBalance: branch.vaultBalance + (branch.cardVaultBalance || 0)
         };
       })
     );
@@ -399,18 +417,25 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
       }
     });
 
-    // إجماليات عامة
+    // فصل الفواتير الافتتاحية عن الفواتير الفعلية
+    const openingInvoices = invoices.filter(inv => inv.notes?.includes('رصيد افتتاحي'));
+    const actualInvoices = invoices.filter(inv => !inv.notes?.includes('رصيد افتتاحي'));
+
+    // إجماليات عامة (كل الفواتير)
     const totalInvoices = invoices.length;
     const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalCost = invoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
-    const totalProfit = invoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+    
+    // التكلفة والربح فقط من الفواتير الفعلية (بدون الافتتاحية)
+    const totalCost = actualInvoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
+    const totalProfit = actualInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+    
     const totalCollected = invoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
     const totalRemaining = invoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0);
 
     // تحليل حسب النوع
-    const regularInvoices = invoices.filter(inv => inv.type === 'REGULAR');
-    const shipmentInvoices = invoices.filter(inv => inv.type === 'SHIPMENT');
-    const clientInvoices = invoices.filter(inv => inv.type === 'CLIENT');
+    const regularInvoices = actualInvoices.filter(inv => inv.type === 'REGULAR');
+    const shipmentInvoices = actualInvoices.filter(inv => inv.type === 'SHIPMENT');
+    const clientInvoices = actualInvoices.filter(inv => inv.type === 'CLIENT');
 
     const byType = {
       regular: {
@@ -440,11 +465,21 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
       data: {
         totalInvoices,
         totalSales,
-        totalCost,
-        totalProfit,
+        totalCost, // من الفواتير الفعلية فقط
+        totalProfit, // من الفواتير الفعلية فقط
         totalCollected,
         totalRemaining,
-        byType
+        openingBalances: {
+          count: openingInvoices.length,
+          total: openingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
+        },
+        byType,
+        // حساب صافي الديون (بعد خصم المحفظة)
+        netDebt: {
+          grossDebt: totalRemaining, // إجمالي الديون
+          customerCredit: 0, // سنحسبها من العملاء
+          netAmount: totalRemaining // الصافي
+        }
       }
     });
   } catch (error) {
@@ -649,7 +684,8 @@ exports.getBranchSalesReport = async (req, res, next) => {
                 id: true,
                 name: true,
                 sku: true,
-                costPrice: true
+                costPrice: true,
+                retailPrice: true
               }
             }
           }
@@ -664,39 +700,44 @@ exports.getBranchSalesReport = async (req, res, next) => {
     branches.forEach(branch => {
       branchSales[branch.id] = {
         branch,
-        totalSales: 0,
-        totalCost: 0,
+        totalSales: 0,   // إيرادات الفرع (بسعر القطاعي)
+        totalCost: 0,    // تكلفة البضاعة المباعة
         totalQuantity: 0,
-        totalProfit: 0,
+        totalProfit: 0,  // الربح = سعر القطاعي - التكلفة
         salesCount: 0,
         products: {}
       };
     });
 
     sales.forEach(sale => {
-      const branchId = sale.branchId;
-      if (!branchSales[branchId]) return;
+      const bid = sale.branchId;
+      if (!branchSales[bid]) return;
 
-      branchSales[branchId].totalSales += sale.total;
-      branchSales[branchId].salesCount += 1;
+      branchSales[bid].totalSales += sale.total;
+      branchSales[bid].salesCount += 1;
       
       sale.items.forEach(item => {
-        const costPrice = parseFloat(item.product?.costPrice || 0);
-        const sellingPrice = parseFloat(item.unitPrice || 0);
-        const quantity = parseInt(item.quantity || 0);
+        const costPrice    = parseFloat(item.unitCostPrice > 0 ? item.unitCostPrice : (item.product?.costPrice || 0));
+        // ربح الفرع = سعر القطاعي - التكلفة
+        // unitRetailPrice هو snapshot وقت البيع، fallback لـ product.retailPrice ثم unitPrice
+        const retailPrice  = parseFloat(
+          item.unitRetailPrice > 0 ? item.unitRetailPrice
+          : (item.product?.retailPrice > 0 ? item.product.retailPrice : (item.unitPrice || 0))
+        );
+        const quantity     = parseInt(item.quantity || 0);
         
-        const itemCost = costPrice * quantity;
-        const itemRevenue = sellingPrice * quantity;
-        const itemProfit = itemRevenue - itemCost;
+        const itemCost     = costPrice   * quantity;
+        const itemRevenue  = retailPrice * quantity;  // الإيراد بسعر القطاعي
+        const itemProfit   = itemRevenue - itemCost;  // الربح الحقيقي للفرع
         
-        branchSales[branchId].totalCost += itemCost;
-        branchSales[branchId].totalProfit += itemProfit;
-        branchSales[branchId].totalQuantity += quantity;
+        branchSales[bid].totalCost    += itemCost;
+        branchSales[bid].totalProfit  += itemProfit;
+        branchSales[bid].totalQuantity += quantity;
 
         // Track product sales
         const productId = item.productId;
-        if (!branchSales[branchId].products[productId]) {
-          branchSales[branchId].products[productId] = {
+        if (!branchSales[bid].products[productId]) {
+          branchSales[bid].products[productId] = {
             product: item.product,
             quantity: 0,
             totalSales: 0,
@@ -705,10 +746,10 @@ exports.getBranchSalesReport = async (req, res, next) => {
           };
         }
 
-        branchSales[branchId].products[productId].quantity += quantity;
-        branchSales[branchId].products[productId].totalSales += itemRevenue;
-        branchSales[branchId].products[productId].totalCost += itemCost;
-        branchSales[branchId].products[productId].profit += itemProfit;
+        branchSales[bid].products[productId].quantity   += quantity;
+        branchSales[bid].products[productId].totalSales += itemRevenue;
+        branchSales[bid].products[productId].totalCost  += itemCost;
+        branchSales[bid].products[productId].profit     += itemProfit;
 
         // Track overall product sales
         if (!productSales[productId]) {
@@ -719,9 +760,9 @@ exports.getBranchSalesReport = async (req, res, next) => {
             branchesCount: new Set()
           };
         }
-        productSales[productId].totalQuantity += item.quantity;
-        productSales[productId].totalSales += item.subtotal;
-        productSales[productId].branchesCount.add(branchId);
+        productSales[productId].totalQuantity += quantity;
+        productSales[productId].totalSales    += itemRevenue;
+        productSales[productId].branchesCount.add(bid);
       });
     });
 
@@ -781,6 +822,132 @@ exports.getBranchSalesReport = async (req, res, next) => {
         today: {
           sales: todaySales._sum.total || 0,
           count: todaySales._count || 0
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get Customers and Suppliers Summary with Wallet Balance
+ * تقرير ملخص العملاء والموردين مع رصيد المحفظة
+ */
+exports.getAccountsReport = async (req, res, next) => {
+  try {
+    // جلب كل العملاء مع حساب الأرصدة
+    const customers = await prisma.customer.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' }
+    });
+
+    const customersWithBalances = await Promise.all(
+      customers.map(async (customer) => {
+        const sales = await prisma.sale.findMany({
+          where: { customerId: customer.id, status: 'COMPLETED' }
+        });
+        
+        const officeInvoices = await prisma.officeInvoice.findMany({
+          where: { 
+            customerId: customer.id,
+            status: { not: 'CANCELLED' }
+          }
+        });
+        
+        const payments = await prisma.customerPayment.findMany({
+          where: { customerId: customer.id }
+        });
+        
+        const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
+        const totalPaidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
+        const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
+        const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
+        
+        const walletBalance = customer.walletBalance || 0;
+        const invoiceBalance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments;
+        // walletBalance سالب = علينا ليه، موجب = هو دفع زيادة (نفس الفكرة)
+        // invoiceBalance موجب = لينا عنده
+        // balance = (فواتير لينا عنده) + (رصيد المحفظة: سالب = علينا، موجب = هو دفع زيادة)
+        const netBalance = invoiceBalance + walletBalance;
+        
+        return {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          totalSales: parseFloat((totalSales + totalOfficeInvoices).toFixed(2)),
+          totalPaid: parseFloat((totalPaidOnSales + totalPayments).toFixed(2)),
+          walletBalance: parseFloat(walletBalance.toFixed(2)),
+          invoiceBalance: parseFloat(invoiceBalance.toFixed(2)),
+          balance: parseFloat(netBalance.toFixed(2))
+        };
+      })
+    );
+
+    // جلب كل الموردين مع حساب الأرصدة
+    const suppliers = await prisma.supplier.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' }
+    });
+
+    const suppliersWithBalances = suppliers.map(supplier => ({
+      id: supplier.id,
+      name: supplier.name,
+      phone: supplier.phone,
+      type: supplier.type,
+      totalPurchases: parseFloat(supplier.totalPurchases.toFixed(2)),
+      totalPaid: parseFloat(supplier.totalPaid.toFixed(2)),
+      walletBalance: parseFloat((supplier.walletBalance || 0).toFixed(2)),
+      balance: parseFloat(supplier.balance.toFixed(2))
+    }));
+
+    // حساب الإجماليات
+    const totalCustomersBalance = customersWithBalances.reduce((sum, c) => sum + c.balance, 0);
+    const totalCustomersWallet = customersWithBalances.reduce((sum, c) => sum + c.walletBalance, 0);
+    const totalSuppliersBalance = suppliersWithBalances.reduce((sum, s) => sum + s.balance, 0);
+    const totalSuppliersWallet = suppliersWithBalances.reduce((sum, s) => sum + s.walletBalance, 0);
+    
+    // حساب إجمالي الديون (لينا عندهم) والالتزامات (علينا لهم)
+    let totalCustomersDebt = 0;
+    let totalCustomersCredit = 0;
+
+    customersWithBalances.forEach(c => {
+      if (c.invoiceBalance > 0) {
+        totalCustomersDebt += c.invoiceBalance;
+      } else if (c.invoiceBalance < 0) {
+        totalCustomersCredit += Math.abs(c.invoiceBalance);
+      }
+      if (c.walletBalance > 0) {
+        totalCustomersCredit += c.walletBalance;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        customers: {
+          list: customersWithBalances,
+          totalBalance: parseFloat(totalCustomersBalance.toFixed(2)),
+          totalWallet: parseFloat(totalCustomersWallet.toFixed(2)),
+          totalDebt: parseFloat(totalCustomersDebt.toFixed(2)), // إجمالي الديون (لينا عند العملاء)
+          totalCredit: parseFloat(totalCustomersCredit.toFixed(2)), // إجمالي الفلوس علينا للعملاء
+          count: customersWithBalances.length
+        },
+        suppliers: {
+          list: suppliersWithBalances,
+          totalBalance: parseFloat(totalSuppliersBalance.toFixed(2)),
+          totalWallet: parseFloat(totalSuppliersWallet.toFixed(2)),
+          count: suppliersWithBalances.length
+        },
+        summary: {
+          // الديون اللي لينا عند العملاء
+          customerDebt: parseFloat(totalCustomersDebt.toFixed(2)),
+          // الفلوس اللي علينا للعملاء (دفعوها زيادة / محفظة)
+          customerCredit: parseFloat(totalCustomersCredit.toFixed(2)),
+          // الديون اللي علينا للموردين
+          supplierDebt: parseFloat(totalSuppliersBalance.toFixed(2)),
+          // صافي المركز المالي (ديون لينا - ديون علينا - التزامات للعملاء)
+          netPosition: parseFloat((totalCustomersDebt - totalSuppliersBalance - totalCustomersCredit).toFixed(2))
         }
       }
     });

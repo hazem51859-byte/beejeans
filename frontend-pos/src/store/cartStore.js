@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useAuthStore } from './authStore';
 
 export const useCartStore = create((set, get) => ({
   items: [],
@@ -9,8 +10,15 @@ export const useCartStore = create((set, get) => ({
     const uniqueKey = product.serialNumber || product.id;
     const existingItem = items.find(item => (item.serialNumber || item.id) === uniqueKey);
     
-    // استخدام سعر البيع من الصنف لو موجود، وإلا استخدام سعر المنتج
-    const sellingPrice = product.category?.defaultSellingPrice || product.sellingPrice;
+    // تحديد السعر: لو الفرع مش المخزن الرئيسي → سعر القطاعي، لو MAIN → سعر الجملة
+    const currentBranch = useAuthStore.getState().user?.branch;
+    const isMainBranch = currentBranch?.code === 'MAIN';
+    const resolvedPrice = isMainBranch
+      ? (product.sellingPrice || product.retailPrice || 0)
+      : (product.retailPrice || product.sellingPrice || 0);
+    
+    // استخدام السعر المحسوب حسب الفرع
+    const sellingPrice = resolvedPrice;
     
     if (existingItem) {
       // For serial-tracked items, don't increase quantity - each serial is unique

@@ -82,8 +82,8 @@ exports.getPartnersAccountingSummary = async (req, res) => {
     });
 
     const totalCOGS = saleItems.reduce((sum, item) => {
-      const costPrice = item.product?.costPrice || 0;
-      return sum + (costPrice * item.quantity);
+      const costPrice = parseFloat(item.unitCostPrice > 0 ? item.unitCostPrice : (item.product?.costPrice || 0));
+      return sum + (costPrice * (item.quantity || 0));
     }, 0);
 
     // 7. حساب الأرباح/الخسائر
@@ -92,12 +92,19 @@ exports.getPartnersAccountingSummary = async (req, res) => {
     const profitMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : 0;
 
     // 8. حساب حصة كل شريك
+    let grandTotalWithdrawn = 0;
     const partnersShares = partners.map(partner => {
       const shareAmount = (netProfit * partner.sharePercentage) / 100;
       const totalWithdrawn = partner.transactions
-        .filter(t => t.type === 'WITHDRAWAL' || t.type === 'PROFIT_DISTRIBUTION')
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter(t => {
+          if (t.type !== 'WITHDRAWAL' && t.type !== 'PROFIT_DISTRIBUTION') return false;
+          if (dateFilter.gte && new Date(t.transactionDate) < dateFilter.gte) return false;
+          if (dateFilter.lte && new Date(t.transactionDate) > dateFilter.lte) return false;
+          return true;
+        })
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
       
+      grandTotalWithdrawn += totalWithdrawn;
       const remainingShare = shareAmount - totalWithdrawn;
 
       return {
@@ -140,7 +147,9 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       profit: {
         gross: parseFloat(grossProfit.toFixed(2)),
         net: parseFloat(netProfit.toFixed(2)),
-        margin: parseFloat(profitMargin)
+        margin: parseFloat(profitMargin),
+        totalWithdrawn: parseFloat(grandTotalWithdrawn.toFixed(2)),
+        remainingInVault: parseFloat((netProfit - grandTotalWithdrawn).toFixed(2))
       },
       
       // توزيع الأرباح على الشركاء
@@ -376,6 +385,249 @@ exports.addPartnerTransaction = async (req, res) => {
       success: false,
       error: 'Failed to add partner transaction'
     });
+  }
+};
+
+// =====================
+// Adjust Partner Capital (زيادة أو تقليل رأس المال)
+// =====================
+exports.adjustCapital = async (req, res) => {
+  try {
+    const { partnerId, amount, type, notes } = req.body;
+    // type: 'INCREASE' or 'DECREASE'
+    // amount: المبلغ المراد زيادته أو تقليله
+
+    const amountFloat = parseFloat(amount);
+    if (!amountFloat || amountFloat <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'يرجى إدخال مبلغ صحيح'
+      });
+    }
+
+    if (type !== 'INCREASE' && type !== 'DECREASE') {
+      return res.status(400).json({
+        success: false,
+        error: 'نوع العملية يجب أن يكون INCREASE أو DECREASE'
+      });
+    }
+
+    // جلب الشريك
+    const partner = await prisma.partner.findUnique({
+      where: { id: partnerId }
+    });
+
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        error: 'الشريك غير موجود'
+      });
+    }
+
+    // حساب رأس المال الجديد للشريك
+    let newCapital = partner.capitalPaid;
+    let transactionType = '';
+    let transactionDescription = '';
+
+    if (type === 'INCREASE') {
+      newCapital += amountFloat;
+      transactionType = 'CAPITAL';
+      transactionDescription = `زيادة رأس المال بمبلغ ${amountFloat.toFixed(2)} ج.م`;
+    } else {
+      // DECREASE
+      if (partner.capitalPaid < amountFloat) {
+        return res.status(400).json({
+          success: false,
+          error: 'لا يمكن سحب مبلغ أكبر من رأس المال الحالي'
+        });
+      }
+      newCapital -= amountFloat;
+      transactionType = 'WITHDRAWAL';
+      transactionDescription = `تقليل رأس المال بمبلغ ${amountFloat.toFixed(2)} ج.م (سحب)`;
+    }
+
+    // جلب جميع الشركاء لإعادة حساب النسب
+    const allPartners = await prisma.partner.findMany({
+      where: { isActive: true }
+    });
+
+    // حساب إجمالي رأس المال الجديد
+    let newTotalCapital = 0;
+    allPartners.forEach(p => {
+      if (p.id === partnerId) {
+        newTotalCapital += newCapital;
+      } else {
+        newTotalCapital += p.capitalPaid;
+      }
+    });
+
+    if (newTotalCapital <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'إجمالي رأس المال لا يمكن أن يكون صفر أو سالب'
+      });
+    }
+
+    // إعادة حساب نسب الشراكة لجميع الشركاء
+    const updates = [];
+    
+    await prisma.$transaction(async (tx) => {
+      // تحديث رأس المال للشريك المحدد
+      await tx.partner.update({
+        where: { id: partnerId },
+        data: { capitalPaid: newCapital }
+      });
+
+      // إضافة معاملة رأس المال
+      await tx.partnerTransaction.create({
+        data: {
+          partnerId,
+          type: transactionType,
+          amount: amountFloat,
+          description: transactionDescription,
+          notes: notes || null
+        }
+      });
+
+      // تحديث نسب الشراكة لجميع الشركاء
+      for (const p of allPartners) {
+        let partnerNewCapital = p.capitalPaid;
+        if (p.id === partnerId) {
+          partnerNewCapital = newCapital;
+        }
+
+        const newSharePercentage = (partnerNewCapital / newTotalCapital) * 100;
+
+        await tx.partner.update({
+          where: { id: p.id },
+          data: { sharePercentage: parseFloat(newSharePercentage.toFixed(4)) }
+        });
+
+        updates.push({
+          partnerId: p.id,
+          partnerName: p.name,
+          oldCapital: p.capitalPaid,
+          newCapital: partnerNewCapital,
+          oldSharePercentage: p.sharePercentage,
+          newSharePercentage: parseFloat(newSharePercentage.toFixed(4))
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      message: type === 'INCREASE' 
+        ? 'تم زيادة رأس المال وإعادة حساب النسب بنجاح' 
+        : 'تم تقليل رأس المال وإعادة حساب النسب بنجاح',
+      data: {
+        newTotalCapital: parseFloat(newTotalCapital.toFixed(2)),
+        updates
+      }
+    });
+
+  } catch (error) {
+    console.error('Error adjusting capital:', error);
+    res.status(500).json({
+      success: false,
+      error: 'فشل في تعديل رأس المال'
+    });
+  }
+};
+
+// =====================
+// Withdraw Profit From Main Vault (سحب الأرباح من الخزنة الرئيسية)
+// =====================
+exports.withdrawProfitFromVault = async (req, res) => {
+  try {
+    const { branchId, vaultType, totalAmount, notes, allocations } = req.body;
+    // vaultType: CASH (نقدي), CARD (فيزا), WALLET (محفظة)
+    const amountFloat = parseFloat(totalAmount);
+    if (!amountFloat || amountFloat <= 0) {
+      return res.status(400).json({ success: false, message: 'مبلغ السحب غير صحيح' });
+    }
+
+    const selectedVaultType = vaultType || 'CASH';
+
+    // Find main branch or target branch
+    const branch = await prisma.branch.findFirst({
+      where: branchId ? { id: branchId } : { code: 'MAIN' }
+    });
+
+    if (!branch) {
+      return res.status(404).json({ success: false, message: 'لم يتم العثور على الفرع/الخزنة' });
+    }
+
+    let balanceField = 'vaultBalance';
+    if (selectedVaultType === 'CARD') balanceField = 'cardVaultBalance';
+    if (selectedVaultType === 'WALLET') balanceField = 'walletBalance';
+
+    const currentBalance = branch[balanceField] || 0;
+    if (currentBalance < amountFloat) {
+      const vaultNameMap = { CASH: 'النقدي', CARD: 'الفيزا', WALLET: 'المحفظة' };
+      return res.status(400).json({
+        success: false,
+        message: `رصيد خزنة ${vaultNameMap[selectedVaultType] || ''} غير كافي. الرصيد المتاح: ${currentBalance.toFixed(2)} ج.م`
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Decrement branch vault balance
+      const balanceBefore = currentBalance;
+      const balanceAfter = balanceBefore - amountFloat;
+
+      await tx.branch.update({
+        where: { id: branch.id },
+        data: {
+          [balanceField]: balanceAfter
+        }
+      });
+
+      // 2. Create VaultTransaction
+      const vaultTransaction = await tx.vaultTransaction.create({
+        data: {
+          branchId: branch.id,
+          type: 'CASH_WITHDRAWAL',
+          amount: amountFloat,
+          description: `سحب أرباح للشركاء (${notes || 'توزيع أرباح'}) - الخزنة: ${selectedVaultType}`,
+          notes: notes || 'سحب أرباح للشركاء',
+          createdBy: req.user?.id || 'SYSTEM',
+          balanceBefore,
+          balanceAfter
+        }
+      });
+
+      // 3. Create PartnerTransaction for each partner in allocations
+      const createdPartnerTransactions = [];
+      if (allocations && allocations.length > 0) {
+        for (const alloc of allocations) {
+          const pAmount = parseFloat(alloc.amount || 0);
+          if (pAmount > 0) {
+            const pTx = await tx.partnerTransaction.create({
+              data: {
+                partnerId: alloc.partnerId,
+                type: 'PROFIT_DISTRIBUTION',
+                amount: pAmount,
+                vaultType: selectedVaultType,
+                description: `سحب أرباح من الخزنة (${notes || 'توزيع أرباح'})`,
+                notes: notes || 'سحب أرباح من الخزنة'
+              }
+            });
+            createdPartnerTransactions.push(pTx);
+          }
+        }
+      }
+
+      return { vaultTransaction, createdPartnerTransactions, balanceAfter };
+    });
+
+    res.json({
+      success: true,
+      message: 'تم سحب الأرباح خصماً من الخزنة وتحديث حصص الشركاء بنجاح',
+      data: result
+    });
+  } catch (error) {
+    console.error('Error withdrawing profit from vault:', error);
+    res.status(500).json({ success: false, message: 'فشل في سحب الأرباح من الخزنة' });
   }
 };
 

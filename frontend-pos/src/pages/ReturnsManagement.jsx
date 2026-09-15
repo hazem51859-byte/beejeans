@@ -325,7 +325,6 @@ export default function ReturnsManagement() {
                     <thead className="bg-gray-100">
                       <tr>
                         <th className="px-4 py-2 text-right">المنتج</th>
-                        <th className="px-4 py-2 text-center">المقاس</th>
                         <th className="px-4 py-2 text-center">الكمية</th>
                         <th className="px-4 py-2 text-center">سعر التكلفة</th>
                         <th className="px-4 py-2 text-center">السبب</th>
@@ -340,7 +339,6 @@ export default function ReturnsManagement() {
                             <p className="font-bold">{item.product?.name}</p>
                             <p className="text-sm text-gray-500">{item.product?.sku}</p>
                           </td>
-                          <td className="px-4 py-2 text-center">{item.size || '-'}</td>
                           <td className="px-4 py-2 text-center font-bold">{item.quantity}</td>
                           <td className="px-4 py-2 text-center">{item.unitCostPrice.toFixed(2)} ج.م</td>
                           <td className="px-4 py-2 text-center text-sm">{item.returnReason}</td>

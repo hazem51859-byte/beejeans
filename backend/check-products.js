@@ -3,24 +3,35 @@ const prisma = new PrismaClient();
 
 async function checkProducts() {
   try {
-    const allProducts = await prisma.product.findMany();
-    const activeProducts = await prisma.product.findMany({
-      where: { status: 'ACTIVE' }
+    const products = await prisma.product.findMany({
+      where: {
+        sku: { in: ['1001', '1010', '1142'] }
+      },
+      include: {
+        category: true,
+        inventory: {
+          include: {
+            branch: true
+          }
+        }
+      }
     });
-    
-    console.log('📦 Total products:', allProducts.length);
-    console.log('✅ Active products:', activeProducts.length);
-    
-    if (allProducts.length > 0) {
-      console.log('\nAll Products:');
-      allProducts.forEach(p => {
-        console.log(`  - ${p.name} (${p.sku}) - Status: ${p.status}`);
+
+    console.log('\n✅ Sample products check:\n');
+    products.forEach(p => {
+      console.log(`📦 ${p.sku} - ${p.name}`);
+      console.log(`   Cost: ${p.costPrice} / Price: ${p.sellingPrice}`);
+      p.inventory.forEach(inv => {
+        console.log(`   📍 ${inv.branch.name}: ${inv.quantity} units`);
       });
-    } else {
-      console.log('\n⚠️  No products found in database!');
-    }
+      console.log('');
+    });
+
+    const total = await prisma.product.count();
+    console.log(`📊 Total products in database: ${total}\n`);
+
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ Error:', error.message);
   } finally {
     await prisma.$disconnect();
   }

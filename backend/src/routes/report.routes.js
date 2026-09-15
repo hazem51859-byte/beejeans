@@ -15,5 +15,6 @@ router.get('/branch-transfers', authorize('ADMIN'), reportController.getBranchTr
 router.get('/office-invoices', authorize('ADMIN'), reportController.getOfficeInvoicesReport);
 router.get('/audits', authorize('ADMIN'), reportController.getAuditsReport);
 router.get('/branch-sales', authorize('ADMIN'), reportController.getBranchSalesReport);
+router.get('/accounts', authorize('ADMIN'), reportController.getAccountsReport);
 
 module.exports = router;

@@ -9,12 +9,36 @@ export default function Suppliers() {
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showReadyPurchaseModal, setShowReadyPurchaseModal] = useState(false);
+  const [showMiscExpenseModal, setShowMiscExpenseModal] = useState(false);
+  const [activeFilterTab, setActiveFilterTab] = useState('ALL');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
   
+  const [readyPurchaseData, setReadyPurchaseData] = useState({
+    supplierId: '',
+    supplierName: '',
+    productId: '',
+    searchCode: '',
+    productName: '',
+    quantity: 1,
+    unitCostPrice: 0,
+    paidAmount: 0,
+    notes: ''
+  });
+  
+  const [miscExpenseData, setMiscExpenseData] = useState({
+    supplierId: '',
+    supplierName: '',
+    description: '',
+    totalAmount: 0,
+    paidAmount: 0,
+    notes: ''
+  });
+  
   const [formData, setFormData] = useState({
     name: '',
-    type: 'FABRIC', // FABRIC, MANUFACTURING, WASHING
+    type: 'FABRIC', // FABRIC, MANUFACTURING, WASHING, READY, MISCELLANEOUS
     phone: '',
     address: '',
     notes: '',
@@ -32,6 +56,43 @@ export default function Suppliers() {
       const response = await api.get('/suppliers');
       return response.data;
     },
+  });
+
+  const { data: productsResponse } = useQuery({
+    queryKey: ['products-for-purchase'],
+    queryFn: async () => {
+      const response = await api.get('/products?all=true');
+      return response.data;
+    },
+  });
+
+  const productsList = Array.isArray(productsResponse?.data) 
+    ? productsResponse.data 
+    : (Array.isArray(productsResponse?.data?.products) ? productsResponse.data.products : []);
+
+  const createReadyPurchaseMutation = useMutation({
+    mutationFn: (purchasePayload) => api.post('/purchases', purchasePayload),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['suppliers']);
+      queryClient.invalidateQueries(['purchases']);
+      queryClient.invalidateQueries(['products']);
+      setShowReadyPurchaseModal(false);
+      setReadyPurchaseData({
+        supplierId: '',
+        supplierName: '',
+        productId: '',
+        searchCode: '',
+        productName: '',
+        quantity: 1,
+        unitCostPrice: 0,
+        paidAmount: 0,
+        notes: ''
+      });
+      toast.success('تم تسجيل فاتورة شراء البضاعة الجاهزة وتحديث سعر التكلفة بالصنف ماستر');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'فشل في تسجيل الفاتورة');
+    }
   });
 
   const { data: purchases } = useQuery({
@@ -144,6 +205,41 @@ export default function Suppliers() {
     },
   });
 
+  const createMiscExpenseMutation = useMutation({
+    mutationFn: ({ supplierId, data }) => api.post(`/suppliers/${supplierId}/miscellaneous-expenses`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['suppliers']);
+      setShowMiscExpenseModal(false);
+      setMiscExpenseData({
+        supplierId: '',
+        supplierName: '',
+        description: '',
+        totalAmount: 0,
+        paidAmount: 0,
+        notes: ''
+      });
+      toast.success('تم تسجيل المصروف المتنوع بنجاح');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في تسجيل المصروف');
+    }
+  });
+
+  const deleteCompletedMiscExpenseMutation = useMutation({
+    mutationFn: (expenseId) => api.delete(`/suppliers/miscellaneous-expenses/${expenseId}`),
+    onSuccess: async () => {
+      toast.success('تم حذف المصروف بنجاح');
+      if (selectedSupplier) {
+        const response = await api.get(`/suppliers/${selectedSupplier.id}`);
+        setSelectedSupplier(response.data.data);
+      }
+      queryClient.invalidateQueries(['suppliers']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'فشل في حذف المصروف');
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -223,6 +319,33 @@ export default function Suppliers() {
             remaining: (order.totalWashingCost || 0) - (order.paidAmount || 0),
             allocation: 0,
           }));
+      } else if ((supplier.type === 'READY' || !supplier.type) && supplierData.purchases) {
+        unpaidInvoices = supplierData.purchases
+          .filter(purchase => (purchase.totalAmount || 0) > (purchase.paidAmount || 0))
+          .map(purchase => ({
+            id: purchase.id,
+            type: 'PURCHASE',
+            invoiceNumber: purchase.invoiceNumber || `PUR-${purchase.id.substring(0, 8)}`,
+            date: purchase.purchaseDate,
+            total: purchase.totalAmount || 0,
+            amountPaid: purchase.paidAmount || 0,
+            remaining: (purchase.totalAmount || 0) - (purchase.paidAmount || 0),
+            allocation: 0,
+          }));
+      } else if (supplier.type === 'MISCELLANEOUS' && supplierData.miscellaneousExpenses) {
+        unpaidInvoices = supplierData.miscellaneousExpenses
+          .filter(expense => (expense.totalAmount || 0) > (expense.paidAmount || 0))
+          .map(expense => ({
+            id: expense.id,
+            type: 'MISCELLANEOUS',
+            invoiceNumber: expense.expenseNumber || `MISC-${expense.id.substring(0, 8)}`,
+            date: expense.expenseDate,
+            total: expense.totalAmount || 0,
+            amountPaid: expense.paidAmount || 0,
+            remaining: (expense.totalAmount || 0) - (expense.paidAmount || 0),
+            allocation: 0,
+            description: expense.description
+          }));
       }
       
       setSelectedSupplier(supplierData);
@@ -271,6 +394,8 @@ export default function Suppliers() {
       supplierId: selectedSupplier.id,
       data: { 
         amount: totalAllocated,
+        paymentMethod: paymentData.vaultType || 'CASH',
+        vaultType: paymentData.vaultType || 'CASH',
         notes: paymentData.notes,
         invoiceAllocations: allocatedInvoices,
       },
@@ -323,6 +448,8 @@ export default function Suppliers() {
       purchasesCount = supplier._count?.manufacturingOrders || 0;
     } else if (supplier.type === 'WASHING') {
       purchasesCount = supplier._count?.washingOrders || 0;
+    } else if (supplier.type === 'MISCELLANEOUS') {
+      purchasesCount = supplier._count?.miscellaneousExpenses || 0;
     } else {
       purchasesCount = supplier._count?.purchases || 0;
     }
@@ -335,12 +462,34 @@ export default function Suppliers() {
     };
   };
 
+  const getTypeBadge = (type) => {
+    switch (type) {
+      case 'FABRIC':
+        return <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-0.5 rounded-full font-medium">مورد قماش</span>;
+      case 'MANUFACTURING':
+        return <span className="bg-purple-100 text-purple-800 text-xs px-2.5 py-0.5 rounded-full font-medium">مورد تصنيع</span>;
+      case 'WASHING':
+        return <span className="bg-cyan-100 text-cyan-800 text-xs px-2.5 py-0.5 rounded-full font-medium">مورد غسيل</span>;
+      case 'READY':
+        return <span className="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-medium">مورد بضاعة جاهزة</span>;
+      case 'MISCELLANEOUS':
+        return <span className="bg-orange-100 text-orange-800 text-xs px-2.5 py-0.5 rounded-full font-medium">مصروفات متنوعة</span>;
+      default:
+        return <span className="bg-gray-100 text-gray-800 text-xs px-2.5 py-0.5 rounded-full font-medium">{type}</span>;
+    }
+  };
+
+  const filteredSuppliers = suppliers?.data?.filter(supplier => {
+    if (activeFilterTab === 'ALL') return true;
+    return supplier.type === activeFilterTab;
+  }) || [];
+
   return (
     <div className="pb-16">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">الموردين</h1>
-          <p className="text-gray-600 mt-1">إدارة الموردين والمشتريات</p>
+          <p className="text-gray-600 mt-1">إدارة الموردين والمشتريات والبضاعة الجاهزة</p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn-primary">
           <Plus size={20} />
@@ -348,8 +497,60 @@ export default function Suppliers() {
         </button>
       </div>
 
+      {/* فلاتر أنواع الموردين */}
+      <div className="flex flex-wrap gap-2 mb-6 border-b pb-3">
+        <button
+          onClick={() => setActiveFilterTab('ALL')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            activeFilterTab === 'ALL' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          الكل ({suppliers?.data?.length || 0})
+        </button>
+        <button
+          onClick={() => setActiveFilterTab('FABRIC')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            activeFilterTab === 'FABRIC' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          موردين قماش ({suppliers?.data?.filter(s => s.type === 'FABRIC').length || 0})
+        </button>
+        <button
+          onClick={() => setActiveFilterTab('MANUFACTURING')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            activeFilterTab === 'MANUFACTURING' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          موردين تصنيع ({suppliers?.data?.filter(s => s.type === 'MANUFACTURING').length || 0})
+        </button>
+        <button
+          onClick={() => setActiveFilterTab('WASHING')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            activeFilterTab === 'WASHING' ? 'bg-cyan-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          موردين غسيل ({suppliers?.data?.filter(s => s.type === 'WASHING').length || 0})
+        </button>
+        <button
+          onClick={() => setActiveFilterTab('READY')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            activeFilterTab === 'READY' ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          موردين بضاعة جاهزة ({suppliers?.data?.filter(s => s.type === 'READY').length || 0})
+        </button>
+        <button
+          onClick={() => setActiveFilterTab('MISCELLANEOUS')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+            activeFilterTab === 'MISCELLANEOUS' ? 'bg-orange-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          مصروفات متنوعة ({suppliers?.data?.filter(s => s.type === 'MISCELLANEOUS').length || 0})
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {suppliers?.data?.map((supplier) => {
+        {filteredSuppliers.map((supplier) => {
           const balance = calculateSupplierBalance(supplier);
           const supplierPurchases = getSupplierPurchases(supplier.id);
           
@@ -361,7 +562,10 @@ export default function Suppliers() {
                     <Truck className="text-purple-600" size={24} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg">{supplier.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-lg">{supplier.name}</h3>
+                      {getTypeBadge(supplier.type)}
+                    </div>
                     <p className="text-sm text-gray-500">{supplier.phone}</p>
                   </div>
                 </div>
@@ -434,7 +638,48 @@ export default function Suppliers() {
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {supplier.type === 'READY' && (
+                  <button
+                    onClick={() => {
+                      setReadyPurchaseData({
+                        supplierId: supplier.id,
+                        supplierName: supplier.name,
+                        productId: '',
+                        searchCode: '',
+                        productName: '',
+                        quantity: 1,
+                        unitCostPrice: 0,
+                        paidAmount: 0,
+                        notes: ''
+                      });
+                      setShowReadyPurchaseModal(true);
+                    }}
+                    className="flex-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 font-bold px-3 py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
+                  >
+                    <Plus size={16} />
+                    <span>شراء بضاعة جاهزة</span>
+                  </button>
+                )}
+                {supplier.type === 'MISCELLANEOUS' && (
+                  <button
+                    onClick={() => {
+                      setMiscExpenseData({
+                        supplierId: supplier.id,
+                        supplierName: supplier.name,
+                        description: '',
+                        totalAmount: 0,
+                        paidAmount: 0,
+                        notes: ''
+                      });
+                      setShowMiscExpenseModal(true);
+                    }}
+                    className="flex-1 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-300 font-bold px-3 py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
+                  >
+                    <Plus size={16} />
+                    <span>إضافة مصروف</span>
+                  </button>
+                )}
                 <button 
                   onClick={() => openPaymentModal(supplier)} 
                   className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm transition-all ${
@@ -477,6 +722,8 @@ export default function Suppliers() {
                   <option value="FABRIC">مورد قماش</option>
                   <option value="MANUFACTURING">مورد تصنيع</option>
                   <option value="WASHING">مورد غسيل</option>
+                  <option value="READY">مورد بضاعة جاهزة</option>
+                  <option value="MISCELLANEOUS">مصروفات متنوعة</option>
                 </select>
               </div>
               <div>
@@ -548,6 +795,18 @@ export default function Suppliers() {
                 <p className="text-2xl font-bold text-red-700">
                   {calculateSupplierBalance(selectedSupplier).remaining.toFixed(2)} ج.م
                 </p>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-1">مصدر الخزنة للخصم والسداد *</label>
+                <select
+                  value={paymentData.vaultType || 'CASH'}
+                  onChange={(e) => setPaymentData({ ...paymentData, vaultType: e.target.value })}
+                  className="input-field font-bold text-gray-800 bg-blue-50 border-blue-300"
+                >
+                  <option value="CASH">💵 خزنة نقدية (كاش الرئيسي)</option>
+                  <option value="CARD">💳 حساب الفيزا (Card Vault)</option>
+                  <option value="WALLET">📱 محفظة إلكترونية (Wallet Vault)</option>
+                </select>
               </div>
 
               {/* الفواتير المستحقة */}
@@ -849,6 +1108,120 @@ export default function Suppliers() {
               </div>
             )}
 
+            {/* Ready Goods Purchases */}
+            {(selectedSupplier.type === 'READY' || selectedSupplier.type === 'PURCHASE') && selectedSupplier.purchases && selectedSupplier.purchases.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3 text-emerald-800">مشتريات البضاعة الجاهزة</h3>
+                <div className="space-y-3">
+                  {selectedSupplier.purchases.map((purchase) => {
+                    const remaining = (purchase.totalAmount || 0) - (purchase.paidAmount || 0);
+                    return (
+                      <div key={purchase.id} className="border rounded-lg overflow-hidden bg-emerald-50">
+                        <div className="bg-emerald-100 p-3 flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-5 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم الفاتورة</p>
+                              <p className="font-bold text-sm">{purchase.invoiceNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{new Date(purchase.purchaseDate).toLocaleDateString('ar-EG')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الإجمالي</p>
+                              <p className="text-sm font-bold">{(purchase.totalAmount || 0).toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المدفوع</p>
+                              <p className="text-sm text-green-700 font-bold">{(purchase.paidAmount || 0).toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المتبقي</p>
+                              <p className={`text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {remaining.toFixed(2)} ج.م
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        {purchase.items && purchase.items.length > 0 && (
+                          <div className="p-3 bg-white border-t space-y-1">
+                            {purchase.items.map((item, idx) => (
+                              <div key={idx} className="text-xs flex justify-between text-gray-700">
+                                <span>• {item.productName || item.product?.name || 'صنف جاهز'} ({item.quantity} قطعة)</span>
+                                <span>سعر القطعة: {item.unitPrice} ج.م | الإجمالي: {(item.quantity * item.unitPrice).toFixed(2)} ج.م</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Miscellaneous Expenses */}
+            {selectedSupplier.type === 'MISCELLANEOUS' && selectedSupplier.miscellaneousExpenses && selectedSupplier.miscellaneousExpenses.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3 text-orange-800">المصروفات المتنوعة</h3>
+                <div className="space-y-3">
+                  {selectedSupplier.miscellaneousExpenses.map((expense) => {
+                    const remaining = expense.totalAmount - expense.paidAmount;
+                    return (
+                      <div key={expense.id} className="border rounded-lg overflow-hidden bg-orange-50">
+                        <div className="bg-orange-100 p-3 flex items-center justify-between">
+                          <div className="flex-1 grid grid-cols-5 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم المصروف</p>
+                              <p className="font-bold text-sm">{expense.expenseNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{new Date(expense.expenseDate).toLocaleDateString('ar-EG')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الإجمالي</p>
+                              <p className="text-sm font-bold">{expense.totalAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المدفوع</p>
+                              <p className="text-sm text-green-700 font-bold">{expense.paidAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">المتبقي</p>
+                              <p className={`text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {remaining.toFixed(2)} ج.م
+                              </p>
+                            </div>
+                          </div>
+                          {remaining <= 0 && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`حذف المصروف ${expense.expenseNumber}؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                                  deleteCompletedMiscExpenseMutation.mutate(expense.id);
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 flex items-center gap-1 mr-2"
+                              title="حذف المصروف المكتمل"
+                            >
+                              <Trash2 size={14} />
+                              حذف
+                            </button>
+                          )}
+                        </div>
+                        <div className="p-3 bg-white border-t">
+                          <p className="text-sm text-gray-700"><span className="font-medium">الوصف:</span> {expense.description}</p>
+                          {expense.notes && (
+                            <p className="text-xs text-gray-600 mt-1"><span className="font-medium">ملاحظات:</span> {expense.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Payments */}
             {selectedSupplier.payments && selectedSupplier.payments.length > 0 && (
               <div>
@@ -875,6 +1248,305 @@ export default function Suppliers() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: شراء بضاعة جاهزة */}
+      {showReadyPurchaseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl my-8">
+            <div className="flex justify-between items-center mb-4 border-b pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">شراء بضاعة جاهزة</h2>
+                <p className="text-xs text-gray-500">المورد: {readyPurchaseData.supplierName}</p>
+              </div>
+              <button 
+                onClick={() => setShowReadyPurchaseModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!readyPurchaseData.productId) {
+                toast.error('يرجى اختيار الصنف أولاً');
+                return;
+              }
+              if (!readyPurchaseData.quantity || readyPurchaseData.quantity <= 0) {
+                toast.error('يرجى إدخال كمية صحيحة');
+                return;
+              }
+              if (!readyPurchaseData.unitCostPrice || readyPurchaseData.unitCostPrice <= 0) {
+                toast.error('يرجى إدخال سعر القطعة');
+                return;
+              }
+
+              const invoiceNumber = `READY-${Date.now().toString().slice(-6)}`;
+              createReadyPurchaseMutation.mutate({
+                invoiceNumber,
+                supplierId: readyPurchaseData.supplierId,
+                paidAmount: parseFloat(readyPurchaseData.paidAmount || 0),
+                notes: readyPurchaseData.notes,
+                items: [
+                  {
+                    productId: readyPurchaseData.productId,
+                    productName: readyPurchaseData.productName,
+                    quantity: parseInt(readyPurchaseData.quantity || 1),
+                    unitPrice: parseFloat(readyPurchaseData.unitCostPrice || 0)
+                  }
+                ]
+              });
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">اختر الصنف المراد شراؤه *</label>
+                <select
+                  value={readyPurchaseData.productId}
+                  onChange={(e) => {
+                    const selectedProd = productsList.find(p => p.id === e.target.value);
+                    if (selectedProd) {
+                      setReadyPurchaseData({
+                        ...readyPurchaseData,
+                        productId: selectedProd.id,
+                        productName: selectedProd.name,
+                        searchCode: selectedProd.sku || selectedProd.barcode || '',
+                        unitCostPrice: selectedProd.costPrice || 0
+                      });
+                    } else {
+                      setReadyPurchaseData({
+                        ...readyPurchaseData,
+                        productId: '',
+                        productName: '',
+                        searchCode: ''
+                      });
+                    }
+                  }}
+                  className="input-field mb-2"
+                  required
+                >
+                  <option value="">-- اختر الصنف من القائمة --</option>
+                  {productsList.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.sku || p.barcode || 'بدون كود'}) - التكلفة الحالية: {p.costPrice || 0} ج.م
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {readyPurchaseData.productId && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm space-y-1">
+                  <div className="font-bold text-emerald-900">{readyPurchaseData.productName}</div>
+                  <div className="text-xs text-gray-600">الكود (SKU/Barcode): {readyPurchaseData.searchCode}</div>
+                  <div className="text-xs text-blue-700 font-medium">⚠️ سيتم تحديث سعر التكلفة النهائي بهذا السعر الجديد في الأصناف ماستر</div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">الكمية المطلوبة (قطع) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={readyPurchaseData.quantity}
+                    onChange={(e) => setReadyPurchaseData({ ...readyPurchaseData, quantity: parseInt(e.target.value) || 0 })}
+                    className="input-field font-bold text-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">سعر شراء القطعة (التكلفة) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={readyPurchaseData.unitCostPrice}
+                    onChange={(e) => setReadyPurchaseData({ ...readyPurchaseData, unitCostPrice: parseFloat(e.target.value) || 0 })}
+                    className="input-field font-bold text-lg text-emerald-700"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                <span className="text-sm font-bold">إجمالي الفاتورة:</span>
+                <span className="text-lg font-bold text-blue-700">
+                  {((readyPurchaseData.quantity || 0) * (readyPurchaseData.unitCostPrice || 0)).toFixed(2)} ج.م
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">المبلغ المدفوع كاش للمورد</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={(readyPurchaseData.quantity || 0) * (readyPurchaseData.unitCostPrice || 0)}
+                  value={readyPurchaseData.paidAmount}
+                  onChange={(e) => setReadyPurchaseData({ ...readyPurchaseData, paidAmount: parseFloat(e.target.value) || 0 })}
+                  className="input-field font-bold text-green-700"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  المتبقي (دين على المحل للمورد): {(((readyPurchaseData.quantity || 0) * (readyPurchaseData.unitCostPrice || 0)) - (readyPurchaseData.paidAmount || 0)).toFixed(2)} ج.م
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">ملاحظات الفاتورة</label>
+                <input
+                  type="text"
+                  value={readyPurchaseData.notes}
+                  onChange={(e) => setReadyPurchaseData({ ...readyPurchaseData, notes: e.target.value })}
+                  className="input-field"
+                  placeholder="مثال: فاتورة شراء بضاعة جاهزة دُفعة أولى"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  disabled={createReadyPurchaseMutation.isPending}
+                  className="flex-1 btn-primary bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {createReadyPurchaseMutation.isPending ? 'جاري الحفظ...' : 'حفظ الفاتورة وتحديث سعر التكلفة'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReadyPurchaseModal(false)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: إضافة مصروف متنوع */}
+      {showMiscExpenseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl my-8">
+            <div className="flex justify-between items-center mb-4 border-b pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">إضافة مصروف متنوع</h2>
+                <p className="text-xs text-gray-500">المورد: {miscExpenseData.supplierName}</p>
+              </div>
+              <button 
+                onClick={() => setShowMiscExpenseModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!miscExpenseData.description || miscExpenseData.description.trim() === '') {
+                toast.error('يرجى إدخال وصف المصروف');
+                return;
+              }
+              if (!miscExpenseData.totalAmount || miscExpenseData.totalAmount <= 0) {
+                toast.error('يرجى إدخال المبلغ الإجمالي');
+                return;
+              }
+
+              createMiscExpenseMutation.mutate({
+                supplierId: miscExpenseData.supplierId,
+                data: {
+                  description: miscExpenseData.description,
+                  totalAmount: parseFloat(miscExpenseData.totalAmount),
+                  paidAmount: parseFloat(miscExpenseData.paidAmount || 0),
+                  notes: miscExpenseData.notes
+                }
+              });
+            }} className="space-y-4">
+
+              <div>
+                <label className="block text-sm font-medium mb-1">وصف المصروف *</label>
+                <input
+                  type="text"
+                  value={miscExpenseData.description}
+                  onChange={(e) => setMiscExpenseData({ ...miscExpenseData, description: e.target.value })}
+                  className="input-field font-bold"
+                  placeholder="مثال: صيانة، نقل، خدمات، مواد تغليف، إلخ"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">إجمالي قيمة المصروف *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={miscExpenseData.totalAmount}
+                  onChange={(e) => setMiscExpenseData({ ...miscExpenseData, totalAmount: parseFloat(e.target.value) || 0 })}
+                  className="input-field font-bold text-lg text-orange-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">المبلغ المدفوع كاش</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={miscExpenseData.totalAmount}
+                  value={miscExpenseData.paidAmount}
+                  onChange={(e) => setMiscExpenseData({ ...miscExpenseData, paidAmount: parseFloat(e.target.value) || 0 })}
+                  className="input-field font-bold text-green-700"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  المتبقي (دين على المحل): {((miscExpenseData.totalAmount || 0) - (miscExpenseData.paidAmount || 0)).toFixed(2)} ج.م
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">ملاحظات</label>
+                <textarea
+                  value={miscExpenseData.notes}
+                  onChange={(e) => setMiscExpenseData({ ...miscExpenseData, notes: e.target.value })}
+                  className="input-field"
+                  rows="3"
+                  placeholder="تفاصيل إضافية عن المصروف"
+                />
+              </div>
+
+              <div className="bg-orange-50 p-3 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-bold">إجمالي المصروف:</span>
+                  <span className="text-lg font-bold text-orange-700">
+                    {(miscExpenseData.totalAmount || 0).toFixed(2)} ج.م
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">المتبقي (آجل):</span>
+                  <span className="text-sm font-bold text-red-700">
+                    {((miscExpenseData.totalAmount || 0) - (miscExpenseData.paidAmount || 0)).toFixed(2)} ج.م
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="submit"
+                  disabled={createMiscExpenseMutation.isPending}
+                  className="flex-1 btn-primary bg-orange-600 hover:bg-orange-700"
+                >
+                  {createMiscExpenseMutation.isPending ? 'جاري الحفظ...' : 'حفظ المصروف'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMiscExpenseModal(false)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

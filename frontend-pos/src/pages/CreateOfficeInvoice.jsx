@@ -27,6 +27,10 @@ export default function CreateOfficeInvoice() {
   const [notes, setNotes] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   
+  // البائع (موظف الجملة)
+  const [sellerId, setSellerId] = useState('');
+  const [wholesaleEmployees, setWholesaleEmployees] = useState([]);
+  
   // الأصناف
   const [items, setItems] = useState([
     { productId: '', productCode: '', quantity: 1, unitSalePrice: 0, availableQuantity: 0 }
@@ -35,6 +39,7 @@ export default function CreateOfficeInvoice() {
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
+    fetchWholesaleEmployees();
   }, []);
 
   // البحث عن office customers بالهاتف مع debounce
@@ -69,6 +74,17 @@ export default function CreateOfficeInvoice() {
     } catch (error) {
       console.error('Error fetching customers:', error);
       setCustomers([]);
+    }
+  };
+
+  const fetchWholesaleEmployees = async () => {
+    try {
+      const response = await api.get('/wholesale-employees');
+      const data = response.data?.data || response.data;
+      setWholesaleEmployees(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching wholesale employees:', error);
+      setWholesaleEmployees([]);
     }
   };
 
@@ -234,6 +250,8 @@ export default function CreateOfficeInvoice() {
 
       const totals = calculateTotals();
 
+      const selectedSeller = wholesaleEmployees.find(e => e.id === sellerId);
+
       const invoiceData = {
         type: invoiceType,
         customerId: invoiceType === 'CLIENT' ? customerId : undefined,
@@ -245,7 +263,9 @@ export default function CreateOfficeInvoice() {
         discountAmount: totals.discount,
         paymentMethod,
         paidAmount: paymentMethod === 'CREDIT' ? 0 : totals.total,
-        notes
+        notes,
+        sellerId: sellerId || undefined,
+        sellerName: selectedSeller ? selectedSeller.name : undefined
       };
 
       const response = await api.post('/office-invoices', invoiceData);
@@ -328,6 +348,25 @@ export default function CreateOfficeInvoice() {
                 <span className="text-lg">👤 عميل</span>
               </label>
             </div>
+          </div>
+
+          {/* اسم البائع (موظف الجملة) */}
+          <div className="bg-amber-50/70 p-4 rounded-lg border border-amber-200">
+            <label className="block text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+              👤 اسم البائع (موظف الجملة)
+            </label>
+            <select
+              value={sellerId}
+              onChange={(e) => setSellerId(e.target.value)}
+              className="w-full p-3 border rounded-lg bg-white font-semibold text-gray-800 focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="">-- اختر البائع (اختياري) --</option>
+              {wholesaleEmployees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} {emp.phone ? `(${emp.phone})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* بيانات العميل */}

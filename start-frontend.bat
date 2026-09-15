@@ -16,7 +16,7 @@ if not exist .env (
 
 echo Starting frontend...
 echo.
-echo App will open on: http://localhost:3000
+echo App will open on: http://localhost:4000
 echo Press Ctrl+C to stop
 echo.
 

@@ -15,7 +15,9 @@ exports.createOfficeInvoice = async (req, res) => {
       discountAmount = 0,
       paymentMethod,
       paidAmount,
-      notes
+      notes,
+      sellerId,
+      sellerName: inputSellerName
     } = req.body;
 
     const createdBy = req.user.id;
@@ -129,8 +131,26 @@ exports.createOfficeInvoice = async (req, res) => {
     const total = subtotal - discountAmount;
     const profit = total - totalCost;
     
+    // التحقق من رصيد المحفظة للعميل
+    let walletDeduction = 0;
+    let walletBalanceBefore = 0;
+    let customer = null;
+    
+    if (customerId) {
+      customer = await prisma.customer.findUnique({
+        where: { id: customerId }
+      });
+      
+      if (customer && customer.walletBalance > 0) {
+        walletBalanceBefore = customer.walletBalance;
+        // خصم من المحفظة (كل المبلغ أو جزء منه حسب الرصيد)
+        walletDeduction = Math.min(customer.walletBalance, total);
+        console.log(`💰 سيتم خصم ${walletDeduction} جنيه من محفظة العميل (رصيد المحفظة: ${walletBalanceBefore})`);
+      }
+    }
+    
     // فواتير الشحن: الفلوس متتحسبش مدفوعة إلا بعد تأكيد الاستلام
-    const actualPaidAmount = type === 'SHIPMENT' ? 0 : paidAmount;
+    const actualPaidAmount = type === 'SHIPMENT' ? 0 : (paidAmount + walletDeduction);
     const remainingAmount = total - actualPaidAmount;
 
     // إنشاء رقم الفاتورة
@@ -160,6 +180,8 @@ exports.createOfficeInvoice = async (req, res) => {
           paidAmount: actualPaidAmount,
           remainingAmount,
           status: type === 'SHIPMENT' ? 'PENDING' : (remainingAmount > 0 ? 'PENDING' : 'COMPLETED'),
+          sellerId: sellerId || null,
+          sellerName: inputSellerName || null,
           notes,
           createdBy,
           items: {
@@ -191,6 +213,33 @@ exports.createOfficeInvoice = async (req, res) => {
             }
           }
         });
+      }
+
+      // 2.5. خصم من محفظة العميل وتسجيل الدفعة
+      if (walletDeduction > 0 && customer) {
+        // تحديث رصيد المحفظة
+        await tx.customer.update({
+          where: { id: customerId },
+          data: {
+            walletBalance: {
+              decrement: walletDeduction
+            }
+          }
+        });
+
+        // تسجيل دفعة من المحفظة
+        await tx.customerPayment.create({
+          data: {
+            customerId,
+            amount: walletDeduction,
+            paymentMethod: 'WALLET',
+            referenceNumber: invoiceNumber,
+            notes: `خصم تلقائي من المحفظة (رصيد سابق: ${walletBalanceBefore.toFixed(2)} جنيه)`,
+            createdBy
+          }
+        });
+
+        console.log(`✅ تم خصم ${walletDeduction} جنيه من محفظة العميل وتسجيلها كدفعة`);
       }
 
       // 3. إذا كان شحن، أنشئ Shipment

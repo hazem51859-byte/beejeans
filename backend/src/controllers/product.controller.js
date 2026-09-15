@@ -35,11 +35,11 @@ exports.getProducts = async (req, res, next) => {
 
     const total = await prisma.product.count({ where });
     
-    // إخفاء سعر الشراء عن الكاشير (فقط الأدمن يشوفه)
+    // إخفاء سعر الشراء وسعر الجملة عن الكاشير (فقط الأدمن والمانجر يشوفوهم)
     const userRole = req.user?.role;
     const sanitizedProducts = products.map(product => {
       if (userRole === 'CASHIER') {
-        const { costPrice, ...productWithoutCost } = product;
+        const { costPrice, sellingPrice, ...productWithoutCost } = product;
         return productWithoutCost;
       }
       return product;
@@ -72,11 +72,11 @@ exports.searchProducts = async (req, res, next) => {
       take: 20
     });
     
-    // إخفاء سعر الشراء عن الكاشير
+    // إخفاء سعر الشراء وسعر الجملة عن الكاشير
     const userRole = req.user?.role;
     const sanitizedProducts = products.map(product => {
       if (userRole === 'CASHIER') {
-        const { costPrice, ...productWithoutCost } = product;
+        const { costPrice, sellingPrice, ...productWithoutCost } = product;
         return productWithoutCost;
       }
       return product;
@@ -99,10 +99,10 @@ exports.getProductById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
     
-    // إخفاء سعر الشراء عن الكاشير
+    // إخفاء سعر الشراء وسعر الجملة عن الكاشير
     const userRole = req.user?.role;
     if (userRole === 'CASHIER') {
-      const { costPrice, ...productWithoutCost } = product;
+      const { costPrice, sellingPrice, ...productWithoutCost } = product;
       return res.json({ success: true, data: productWithoutCost });
     }
 

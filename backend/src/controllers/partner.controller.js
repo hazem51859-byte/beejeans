@@ -56,7 +56,7 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       return sum + purchase.totalAmount;
     }, 0);
 
-    // 5. حساب إجمالي المبيعات
+    // 5. حساب إجمالي المبيعات (من الفروع)
     const sales = await prisma.sale.findMany({
       where: {
         status: 'COMPLETED',
@@ -64,11 +64,31 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       }
     });
 
-    const totalSales = sales.reduce((sum, sale) => {
+    const totalBranchSales = sales.reduce((sum, sale) => {
       return sum + sale.total;
     }, 0);
 
-    // 6. حساب تكلفة البضاعة المباعة (COGS)
+    // 5.1 حساب إجمالي فواتير المكتب
+    const officeInvoices = await prisma.officeInvoice.findMany({
+      where: {
+        status: 'COMPLETED',
+        ...(dateFilter.gte || dateFilter.lte ? { createdAt: dateFilter } : {})
+      }
+    });
+
+    const totalOfficeRevenue = officeInvoices.reduce((sum, inv) => {
+      return sum + (inv.total || 0);
+    }, 0);
+
+    const totalOfficeProfit = officeInvoices.reduce((sum, inv) => {
+      return sum + (inv.profit || 0);
+    }, 0);
+
+    const totalOfficeCost = officeInvoices.reduce((sum, inv) => {
+      return sum + (inv.totalCost || 0);
+    }, 0);
+
+    // 6. حساب تكلفة البضاعة المباعة من الفروع (COGS)
     const saleItems = await prisma.saleItem.findMany({
       where: {
         sale: {
@@ -81,12 +101,14 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       }
     });
 
-    const totalCOGS = saleItems.reduce((sum, item) => {
+    const totalBranchCOGS = saleItems.reduce((sum, item) => {
       const costPrice = parseFloat(item.unitCostPrice > 0 ? item.unitCostPrice : (item.product?.costPrice || 0));
       return sum + (costPrice * (item.quantity || 0));
     }, 0);
 
-    // 7. حساب الأرباح/الخسائر
+    // 7. حساب الأرباح/الخسائر (من الفروع + المكتب)
+    const totalSales = totalBranchSales + totalOfficeRevenue; // إجمالي المبيعات
+    const totalCOGS = totalBranchCOGS + totalOfficeCost; // إجمالي التكلفة
     const grossProfit = totalSales - totalCOGS; // مجمل الربح
     const netProfit = grossProfit - totalExpenses; // صافي الربح
     const profitMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : 0;

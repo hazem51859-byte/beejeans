@@ -46,9 +46,19 @@ export default function Suppliers() {
 
   const [paymentData, setPaymentData] = useState({
     amount: 0,
+    vaultId: '',
     notes: '',
     invoiceAllocations: [], // توزيع المبلغ على الفواتير
   });
+
+  const { data: vaultsResponse } = useQuery({
+    queryKey: ['vaults'],
+    queryFn: async () => {
+      const response = await api.get('/vaults');
+      return response.data;
+    },
+  });
+  const vaults = Array.isArray(vaultsResponse?.data) ? vaultsResponse.data : (Array.isArray(vaultsResponse) ? vaultsResponse : []);
 
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers'],
@@ -351,6 +361,7 @@ export default function Suppliers() {
       setSelectedSupplier(supplierData);
       setPaymentData({
         amount: 0,
+        vaultId: vaults.length > 0 ? vaults[0].id : '',
         notes: '',
         invoiceAllocations: unpaidInvoices,
       });
@@ -390,12 +401,17 @@ export default function Suppliers() {
         amount: parseFloat(inv.allocation),
       }));
     
+    if (!paymentData.vaultId) {
+      toast.error('يرجى اختيار الخزينة التي سيخرج منها المبلغ');
+      return;
+    }
+
     recordPaymentMutation.mutate({
       supplierId: selectedSupplier.id,
       data: { 
         amount: totalAllocated,
-        paymentMethod: paymentData.vaultType || 'CASH',
-        vaultType: paymentData.vaultType || 'CASH',
+        vaultId: paymentData.vaultId,
+        paymentMethod: 'CASH',
         notes: paymentData.notes,
         invoiceAllocations: allocatedInvoices,
       },
@@ -797,16 +813,28 @@ export default function Suppliers() {
                 </p>
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-1">مصدر الخزنة للخصم والسداد *</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">الخزينة الصادر منها المبلغ والسداد *</label>
                 <select
-                  value={paymentData.vaultType || 'CASH'}
-                  onChange={(e) => setPaymentData({ ...paymentData, vaultType: e.target.value })}
+                  value={paymentData.vaultId}
+                  onChange={(e) => setPaymentData({ ...paymentData, vaultId: e.target.value })}
                   className="input-field font-bold text-gray-800 bg-blue-50 border-blue-300"
+                  required
                 >
-                  <option value="CASH">💵 خزنة نقدية (كاش الرئيسي)</option>
-                  <option value="CARD">💳 حساب الفيزا (Card Vault)</option>
-                  <option value="WALLET">📱 محفظة إلكترونية (Wallet Vault)</option>
+                  <option value="">-- اختر الخزينة --</option>
+                  {vaults.map((vault) => {
+                    const icon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
+                    return (
+                      <option key={vault.id} value={vault.id}>
+                        {icon} {vault.name} (الرصيد: {vault.balance?.toFixed(2) || '0.00'} ج.م)
+                      </option>
+                    );
+                  })}
                 </select>
+                {paymentData.vaultId && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    الرصيد الحالي المتوفر بالخزينة: {vaults.find(v => v.id === paymentData.vaultId)?.balance?.toFixed(2) || '0.00'} جنيه
+                  </p>
+                )}
               </div>
 
               {/* الفواتير المستحقة */}

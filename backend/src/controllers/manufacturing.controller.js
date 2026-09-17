@@ -51,6 +51,11 @@ exports.getAllManufacturingOrders = async (req, res) => {
       include: {
         supplier: true,
         fabricType: true,
+        fabrics: {
+          include: {
+            fabricType: true
+          }
+        },
         product: true,
         washingOrders: true
       },
@@ -80,6 +85,11 @@ exports.getManufacturingOrderById = async (req, res) => {
       include: {
         supplier: true,
         fabricType: true,
+        fabrics: {
+          include: {
+            fabricType: true
+          }
+        },
         product: true,
         washingOrders: {
           include: {
@@ -116,76 +126,123 @@ exports.createManufacturingOrder = async (req, res) => {
       orderNumber,
       supplierId,
       fabricTypeId,
+      fabrics,
       productId,
       metersUsed,
       sentDate,
       notes
     } = req.body;
     
-    // Debug log
-    console.log('📝 Create Manufacturing Order Request:', {
-      orderNumber,
-      supplierId,
-      fabricTypeId,
-      productId,
-      metersUsed,
-      sentDate,
-      notes
-    });
-
-    // Check fabric stock availability
-    const fabricStock = await prisma.fabricStock.findUnique({
-      where: { fabricTypeId },
-      include: { fabricType: true }
-    });
-
-    if (!fabricStock) {
-      return res.status(404).json({
-        success: false,
-        message: 'نوع القماش غير موجود'
-      });
+    // Normalize fabrics array
+    let fabricItems = [];
+    if (Array.isArray(fabrics) && fabrics.length > 0) {
+      fabricItems = fabrics
+        .map(f => ({
+          fabricTypeId: f.fabricTypeId,
+          metersUsed: parseFloat(f.metersUsed) || 0
+        }))
+        .filter(f => f.fabricTypeId && f.metersUsed > 0);
+    } else if (fabricTypeId && metersUsed) {
+      fabricItems = [{
+        fabricTypeId,
+        metersUsed: parseFloat(metersUsed) || 0
+      }];
     }
 
-    const metersFloat = parseFloat(metersUsed);
-
-    if (fabricStock.availableMeters < metersFloat) {
+    if (fabricItems.length === 0) {
       return res.status(400).json({
         success: false,
-        message: `القماش المتاح غير كافي. المتوفر: ${fabricStock.availableMeters} متر`
+        message: 'يجب اختيار نوع قماش واحد على الأقل وتحديد عدد الأمتار'
       });
     }
 
-    // Create order and update stock
+    // Check fabric stock availability & calculate costs for each fabric item
+    let totalFabricCost = 0;
+    let totalMetersUsed = 0;
+    const fabricStockUpdates = [];
+    const orderFabricsData = [];
+
+    for (const item of fabricItems) {
+      const fabricStock = await prisma.fabricStock.findUnique({
+        where: { fabricTypeId: item.fabricTypeId },
+        include: { fabricType: true }
+      });
+
+      if (!fabricStock) {
+        return res.status(404).json({
+          success: false,
+          message: 'نوع القماش غير موجود'
+        });
+      }
+
+      if (fabricStock.availableMeters < item.metersUsed) {
+        return res.status(400).json({
+          success: false,
+          message: `القماش (${fabricStock.fabricType.name}) غير كافي. المتوفر: ${fabricStock.availableMeters} متر، المطلوب: ${item.metersUsed} متر`
+        });
+      }
+
+      const costPerMeter = fabricStock.fabricType.pricePerMeter;
+      const itemTotalCost = item.metersUsed * costPerMeter;
+      
+      totalFabricCost += itemTotalCost;
+      totalMetersUsed += item.metersUsed;
+
+      fabricStockUpdates.push({
+        fabricTypeId: item.fabricTypeId,
+        metersUsed: item.metersUsed
+      });
+
+      orderFabricsData.push({
+        fabricTypeId: item.fabricTypeId,
+        metersUsed: item.metersUsed,
+        fabricCostPerMeter: costPerMeter,
+        totalFabricCost: itemTotalCost
+      });
+    }
+
+    // Create order and update stock in transaction
     const order = await prisma.$transaction(async (tx) => {
       // Create manufacturing order
       const newOrder = await tx.manufacturingOrder.create({
         data: {
           orderNumber,
           supplierId,
-          fabricTypeId,
-          productId,
-          metersUsed: metersFloat,
-          fabricCostPerMeter: fabricStock.fabricType.pricePerMeter,
+          fabricTypeId: fabricItems[0]?.fabricTypeId || null,
+          productId: productId || undefined,
+          metersUsed: totalMetersUsed,
+          fabricCostPerMeter: orderFabricsData[0]?.fabricCostPerMeter || null,
+          totalFabricCost: totalFabricCost,
           status: 'SENT',
           sentDate: sentDate ? new Date(sentDate) : new Date(),
           sentBy: req.user.id,
-          notes
+          notes,
+          fabrics: {
+            create: orderFabricsData
+          }
         },
         include: {
           supplier: true,
           fabricType: true,
+          fabrics: {
+            include: {
+              fabricType: true
+            }
+          },
           product: true
         }
       });
 
-      // Update fabric stock (remove from available, add to used)
-      await tx.fabricStock.update({
-        where: { fabricTypeId },
-        data: {
-          availableMeters: { decrement: metersFloat },
-          totalUsed: { increment: metersFloat }
-        }
-      });
+      // Update fabric stock for each fabric item
+      for (const update of fabricStockUpdates) {
+        await tx.fabricStock.update({
+          where: { fabricTypeId: update.fabricTypeId },
+          data: {
+            availableMeters: { decrement: update.metersUsed },
+            totalUsed: { increment: update.metersUsed }
+          }
+        });
+      }
 
       return newOrder;
     });
@@ -228,12 +285,34 @@ exports.completeManufacturingOrder = async (req, res) => {
       // Get the manufacturing order
       const order = await tx.manufacturingOrder.findUnique({
         where: { id },
-        include: { fabricType: true, product: true }
+        include: { 
+          fabricType: true, 
+          fabrics: {
+            include: {
+              fabricType: true
+            }
+          },
+          product: true 
+        }
       });
 
       if (!order) {
         throw new Error('أمر التصنيع غير موجود');
       }
+
+      // Calculate total fabric cost
+      let fabricCostTotal = order.totalFabricCost;
+      if (fabricCostTotal == null || fabricCostTotal === 0) {
+        if (order.fabrics && order.fabrics.length > 0) {
+          fabricCostTotal = order.fabrics.reduce((sum, f) => sum + (f.totalFabricCost || (f.metersUsed * f.fabricCostPerMeter)), 0);
+        } else if (order.metersUsed && order.fabricCostPerMeter) {
+          fabricCostTotal = order.metersUsed * order.fabricCostPerMeter;
+        } else {
+          fabricCostTotal = 0;
+        }
+      }
+
+      const grandTotalCost = totalCost + fabricCostTotal;
 
       // Update manufacturing order
       const updatedOrder = await tx.manufacturingOrder.update({
@@ -242,6 +321,8 @@ exports.completeManufacturingOrder = async (req, res) => {
           piecesReceived: piecesInt,
           manufacturingCostPerPiece: costPerPiece,
           totalManufacturingCost: totalCost,
+          totalFabricCost: fabricCostTotal,
+          grandTotalCost: grandTotalCost,
           paidAmount: paidAmountFloat,
           remainingAmount,
           paymentStatus,
@@ -253,6 +334,11 @@ exports.completeManufacturingOrder = async (req, res) => {
         include: {
           supplier: true,
           fabricType: true,
+          fabrics: {
+            include: {
+              fabricType: true
+            }
+          },
           product: true
         }
       });
@@ -269,7 +355,6 @@ exports.completeManufacturingOrder = async (req, res) => {
 
       // Update product if exists
       if (order.productId && order.product) {
-        const fabricCostTotal = order.metersUsed * order.fabricCostPerMeter;
         const fabricCostPerPiece = fabricCostTotal / piecesInt;
         
         await tx.product.update({
@@ -278,7 +363,6 @@ exports.completeManufacturingOrder = async (req, res) => {
             fabricCost: fabricCostPerPiece,
             manufacturingCost: costPerPiece,
             costPrice: fabricCostPerPiece + costPerPiece, // سيتم إضافة تكلفة الغسيل لاحقاً
-            // ملاحظة: totalPiecesProduced سيتم تحديثه عند استلام الغسيل فقط لتجنب التكرار
             status: 'ACTIVE' // تفعيل المنتج بعد التصنيع
           }
         });
@@ -326,7 +410,12 @@ exports.getAllWashingOrders = async (req, res) => {
         supplier: true,
         manufacturingOrder: {
           include: {
-            fabricType: true
+            fabricType: true,
+            fabrics: {
+              include: {
+                fabricType: true
+              }
+            }
           }
         }
       },
@@ -373,7 +462,12 @@ exports.createWashingOrder = async (req, res) => {
         supplier: true,
         manufacturingOrder: {
           include: {
-            fabricType: true
+            fabricType: true,
+            fabrics: {
+              include: {
+                fabricType: true
+              }
+            }
           }
         }
       }
@@ -427,7 +521,13 @@ exports.completeWashingOrder = async (req, res) => {
         include: {
           manufacturingOrder: {
             include: {
-              product: true
+              product: true,
+              fabricType: true,
+              fabrics: {
+                include: {
+                  fabricType: true
+                }
+              }
             }
           }
         }
@@ -439,23 +539,41 @@ exports.completeWashingOrder = async (req, res) => {
 
       const mfgOrder = washingOrder.manufacturingOrder;
 
-      // Calculate costs
-      const fabricCostTotal = mfgOrder.metersUsed * mfgOrder.fabricCostPerMeter;
-      const mfgCostTotal = mfgOrder.totalManufacturingCost || 0;
+      // Calculate total fabric cost and total meters used
+      let fabricCostTotal = mfgOrder.totalFabricCost;
+      if (fabricCostTotal == null || fabricCostTotal === 0) {
+        if (mfgOrder.fabrics && mfgOrder.fabrics.length > 0) {
+          fabricCostTotal = mfgOrder.fabrics.reduce((sum, f) => sum + (f.totalFabricCost || (f.metersUsed * f.fabricCostPerMeter)), 0);
+        } else if (mfgOrder.metersUsed && mfgOrder.fabricCostPerMeter) {
+          fabricCostTotal = mfgOrder.metersUsed * mfgOrder.fabricCostPerMeter;
+        } else {
+          fabricCostTotal = 0;
+        }
+      }
+
+      let totalMetersUsed = 0;
+      if (mfgOrder.fabrics && mfgOrder.fabrics.length > 0) {
+        totalMetersUsed = mfgOrder.fabrics.reduce((sum, f) => sum + (f.metersUsed || 0), 0);
+      } else {
+        totalMetersUsed = mfgOrder.metersUsed || 0;
+      }
+
+      const mfgCostTotal = mfgOrder.totalManufacturingCost || (mfgOrder.piecesReceived ? mfgOrder.piecesReceived * (mfgOrder.manufacturingCostPerPiece || 0) : 0);
       const washCostTotal = totalCost;
       
       // Final cost price including all stages
       const totalCostAllStages = fabricCostTotal + mfgCostTotal + washCostTotal;
       const finalCostPrice = totalCostAllStages / piecesInt;
       const fabricCostPerPiece = fabricCostTotal / piecesInt;
+      const mfgCostPerPiece = mfgOrder.manufacturingCostPerPiece || (mfgOrder.piecesReceived ? mfgCostTotal / mfgOrder.piecesReceived : (mfgCostTotal / piecesInt));
 
       // Update product with final costs
       const product = await tx.product.update({
         where: { id: productData.id },
         data: {
           fabricCost: fabricCostPerPiece,
-          fabricMetersUsed: { increment: mfgOrder.metersUsed }, // إضافة الأمتار المستخدمة
-          manufacturingCost: mfgOrder.manufacturingCostPerPiece || 0,
+          fabricMetersUsed: { increment: totalMetersUsed }, // إضافة الأمتار المستخدمة
+          manufacturingCost: mfgCostPerPiece,
           washingCost: costPerPiece,
           costPrice: finalCostPrice,
           totalPiecesProduced: { increment: piecesInt },
@@ -486,6 +604,11 @@ exports.completeWashingOrder = async (req, res) => {
           manufacturingOrder: {
             include: {
               fabricType: true,
+              fabrics: {
+                include: {
+                  fabricType: true
+                }
+              },
               product: true
             }
           }

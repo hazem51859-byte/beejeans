@@ -534,7 +534,7 @@ exports.createCustomerSale = async (req, res) => {
 exports.recordCustomerPayment = async (req, res) => {
   try {
     const { id: customerId } = req.params;
-    const { amount, paymentMethod = 'CASH', referenceNumber, notes, invoiceAllocations, officeInvoicesAllocations } = req.body;
+    const { amount, paymentMethod = 'CASH', referenceNumber, notes, invoiceAllocations, officeInvoicesAllocations, vaultId } = req.body;
     const createdBy = req.user.id;
     
     const customer = await prisma.customer.findUnique({
@@ -547,10 +547,10 @@ exports.recordCustomerPayment = async (req, res) => {
       });
     }
     
-    const paymentAmount = parseFloat(amount);
+    const paymentAmount = parseFloat(amount) || 0;
     
     await prisma.$transaction(async (tx) => {
-      // تسجيل الدفعة الرئيسية
+      // 1. تسجيل الدفعة الرئيسية
       const payment = await tx.customerPayment.create({
         data: {
           customerId,
@@ -562,12 +562,10 @@ exports.recordCustomerPayment = async (req, res) => {
         }
       });
       
-      let remainingAmount = paymentAmount;
+      // إجمالي الرصيد المتاح للسداد = رصيد المحفظة السابق + المبلغ المدفوع حالياً
+      let availableFunds = (customer.walletBalance || 0) + paymentAmount;
       
-      // أولاً: نحاول نستخدم رصيد المحفظة الموجود عشان نخصم من الفواتير
-      let walletBalance = customer.walletBalance || 0;
-      
-      // توزيع المبلغ على فواتير التقسيط
+      // 2. توزيع المبلغ على فواتير التقسيط
       if (invoiceAllocations && invoiceAllocations.length > 0) {
         for (const allocation of invoiceAllocations) {
           const sale = await tx.sale.findUnique({
@@ -576,27 +574,25 @@ exports.recordCustomerPayment = async (req, res) => {
           
           if (!sale) continue;
           
-          const allocAmount = parseFloat(allocation.amount);
-          
-          // نشوف لو رصيد المحفظة يكفي للخصم من الفاتورة دي
-          if (walletBalance > 0) {
-            const amountFromWallet = Math.min(walletBalance, allocAmount);
-            walletBalance -= amountFromWallet;
+          const allocAmount = parseFloat(allocation.amount) || 0;
+          if (allocAmount > 0 && availableFunds > 0) {
+            const payForThis = Math.min(availableFunds, allocAmount);
+            availableFunds -= payForThis;
+            
+            const newAmountPaid = sale.amountPaid + payForThis;
             
             // تحديث المبلغ المدفوع في الفاتورة
             await tx.sale.update({
               where: { id: allocation.saleId },
               data: {
-                amountPaid: sale.amountPaid + amountFromWallet
+                amountPaid: newAmountPaid
               }
             });
           }
-          
-          remainingAmount -= allocAmount;
         }
       }
       
-      // توزيع المبلغ على فواتير المكتب
+      // 3. توزيع المبلغ على فواتير المكتب
       if (officeInvoicesAllocations && officeInvoicesAllocations.length > 0) {
         for (const allocation of officeInvoicesAllocations) {
           const officeInvoice = await tx.officeInvoice.findUnique({
@@ -605,17 +601,13 @@ exports.recordCustomerPayment = async (req, res) => {
           
           if (!officeInvoice) continue;
           
-          const allocAmount = parseFloat(allocation.amount);
-          
-          // نشوف لو رصيد المحفظة يكفي للخصم من الفاتورة دي
-          if (walletBalance > 0) {
-            const amountFromWallet = Math.min(walletBalance, allocAmount);
-            walletBalance -= amountFromWallet;
+          const allocAmount = parseFloat(allocation.amount) || 0;
+          if (allocAmount > 0 && availableFunds > 0) {
+            const payForThis = Math.min(availableFunds, allocAmount);
+            availableFunds -= payForThis;
             
-            const newPaidAmount = officeInvoice.paidAmount + amountFromWallet;
-            const newRemainingAmount = officeInvoice.remainingAmount - amountFromWallet;
-            
-            // تحديث الحالة إلى "مكتملة" إذا تم سداد كامل المبلغ
+            const newPaidAmount = officeInvoice.paidAmount + payForThis;
+            const newRemainingAmount = Math.max(0, officeInvoice.total - newPaidAmount);
             const newStatus = newRemainingAmount <= 0.01 ? 'COMPLETED' : officeInvoice.status;
             
             // تحديث المبلغ المدفوع والحالة في فاتورة المكتب
@@ -628,24 +620,58 @@ exports.recordCustomerPayment = async (req, res) => {
               }
             });
           }
-          
-          remainingAmount -= allocAmount;
         }
       }
       
-      // الفلوس الزيادة: نضيفها للمحفظة
-      // remainingAmount لو موجب يبقى فلوس زيادة، لو سالب يبقى مش كفاية (مفروض ميحصلش بس للأمان)
-      if (remainingAmount > 0.01) {
-        walletBalance += remainingAmount;
-      }
-      
-      // تحديث رصيد المحفظة في الداتابيز
+      // 4. تحديث رصيد المحفظة المتبقي في الداتابيز
       await tx.customer.update({
         where: { id: customerId },
         data: {
-          walletBalance: walletBalance
+          walletBalance: Math.max(0, availableFunds)
         }
       });
+
+      // 5. إضافة المبلغ المحصل إلى الخزينة وتسجيل المعاملة
+      if (vaultId && paymentAmount > 0) {
+        const vault = await tx.vault.findUnique({
+          where: { id: vaultId }
+        });
+
+        if (!vault) {
+          throw new Error('الخزينة المحددة غير موجودة');
+        }
+
+        const balanceBefore = vault.balance;
+        const balanceAfter = balanceBefore + paymentAmount;
+
+        // تحديث رصيد الخزينة
+        await tx.vault.update({
+          where: { id: vaultId },
+          data: {
+            balance: {
+              increment: paymentAmount
+            }
+          }
+        });
+
+        const txType = paymentMethod === 'CARD' 
+          ? 'CARD_PAYMENT' 
+          : (paymentMethod === 'WALLET' ? 'WALLET_PAYMENT' : 'CASH_DEPOSIT');
+
+        await tx.vaultTransaction.create({
+          data: {
+            vaultId: vault.id,
+            branchId: req.user?.branchId || null,
+            type: txType,
+            amount: paymentAmount,
+            description: `تحصيل دفعة من العميل: ${customer.name} (${vault.name})`,
+            notes: notes || referenceNumber || `سداد مديونية عميل`,
+            createdBy,
+            balanceBefore,
+            balanceAfter
+          }
+        });
+      }
     });
     
     res.status(201).json({
@@ -656,7 +682,7 @@ exports.recordCustomerPayment = async (req, res) => {
     console.error('Error recording customer payment:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to record customer payment'
+      error: error.message || 'Failed to record customer payment'
     });
   }
 };

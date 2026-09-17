@@ -170,13 +170,18 @@ exports.deleteFabricType = async (req, res) => {
         _count: {
           select: {
             fabricPurchases: true,
-            manufacturingOrders: true
+            manufacturingOrders: true,
+            manufacturingOrderFabrics: true
           }
         }
       }
     });
 
-    if (fabricType._count.fabricPurchases > 0 || fabricType._count.manufacturingOrders > 0) {
+    if (
+      fabricType._count.fabricPurchases > 0 || 
+      fabricType._count.manufacturingOrders > 0 || 
+      (fabricType._count.manufacturingOrderFabrics && fabricType._count.manufacturingOrderFabrics > 0)
+    ) {
       return res.status(400).json({
         success: false,
         message: 'لا يمكن حذف الخامة لوجود عمليات مرتبطة بها'

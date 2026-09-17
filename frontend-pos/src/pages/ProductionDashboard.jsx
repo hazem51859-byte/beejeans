@@ -64,7 +64,12 @@ export default function ProductionDashboard() {
   const totalFabricMeters = fabricData?.reduce((sum, f) => sum + (f.availableMeters || 0), 0) || 0;
   
   const inManufacturing = manufacturingData?.filter(m => m.status === 'SENT').reduce((sum, m) => sum + (m.piecesToProduce || 0), 0) || 0;
-  const inManufacturingMeters = manufacturingData?.filter(m => m.status === 'SENT').reduce((sum, m) => sum + (m.metersUsed || 0), 0) || 0;
+  const inManufacturingMeters = manufacturingData?.filter(m => m.status === 'SENT').reduce((sum, m) => {
+    const orderMeters = m.fabrics && m.fabrics.length > 0
+      ? m.fabrics.reduce((s, f) => s + (f.metersUsed || 0), 0)
+      : (m.metersUsed || 0);
+    return sum + orderMeters;
+  }, 0) || 0;
   
   const inWashing = washingData?.filter(w => w.status === 'SENT').reduce((sum, w) => sum + (w.manufacturingOrder?.piecesReceived || 0), 0) || 0;
   

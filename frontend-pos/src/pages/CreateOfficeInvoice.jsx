@@ -24,6 +24,7 @@ export default function CreateOfficeInvoice() {
   const [shipmentCompany, setShipmentCompany] = useState('');
   const [shipmentBill, setShipmentBill] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // CASH, CARD, CREDIT
+  const [creditPaidAmount, setCreditPaidAmount] = useState(''); // المبلغ المدفوع مقدماً في حالة الآجل
   const [vaultId, setVaultId] = useState(''); // الخزينة المختارة
   const [vaults, setVaults] = useState([]); // قائمة الخزائن
   const [notes, setNotes] = useState('');
@@ -304,14 +305,16 @@ export default function CreateOfficeInvoice() {
         return;
       }
 
-      // التحقق من اختيار الخزينة إذا كان الدفع ليس آجل
-      if (paymentMethod !== 'CREDIT' && !vaultId) {
-        alert('من فضلك اختر الخزينة');
+      const totals = calculateTotals();
+      const parsedCreditPaid = paymentMethod === 'CREDIT' ? (parseFloat(creditPaidAmount) || 0) : totals.total;
+      const finalPaidAmount = Math.min(totals.total, Math.max(0, parsedCreditPaid));
+
+      // التحقق من اختيار الخزينة إذا كان هناك مبلغ مدفوع كاش أو بطاقة
+      if (finalPaidAmount > 0 && !vaultId) {
+        alert('من فضلك اختر الخزينة لاستلام المبلغ المدفوع');
         setLoading(false);
         return;
       }
-
-      const totals = calculateTotals();
 
       const selectedSeller = wholesaleEmployees.find(e => e.id === sellerId);
 
@@ -325,8 +328,8 @@ export default function CreateOfficeInvoice() {
         items: validItems,
         discountAmount: totals.discount,
         paymentMethod,
-        vaultId: paymentMethod !== 'CREDIT' ? vaultId : undefined, // إرسال الخزينة المختارة
-        paidAmount: paymentMethod === 'CREDIT' ? 0 : totals.total,
+        vaultId: finalPaidAmount > 0 ? vaultId : undefined, // إرسال الخزينة المختارة إذا تم دفع أي مبلغ
+        paidAmount: finalPaidAmount,
         notes,
         sellerId: sellerId || undefined,
         sellerName: selectedSeller ? selectedSeller.name : undefined
@@ -746,19 +749,62 @@ export default function CreateOfficeInvoice() {
             <label className="block text-sm font-bold text-gray-700 mb-2">طريقة الدفع</label>
             <select
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
+              onChange={(e) => {
+                setPaymentMethod(e.target.value);
+                if (e.target.value !== 'CREDIT') {
+                  setCreditPaidAmount('');
+                }
+              }}
               className="w-full p-3 border rounded-lg"
             >
-              <option value="CASH">💵 نقدي</option>
-              <option value="CREDIT">📝 آجل</option>
+              <option value="CASH">💵 نقدي (سداد كامل)</option>
+              <option value="CARD">💳 فيزا / بطاقة (سداد كامل)</option>
+              <option value="CREDIT">📝 آجل (أو دفع جزء والباقي آجل)</option>
             </select>
           </div>
 
-          {/* اختيار الخزينة (يظهر فقط لو مش آجل) */}
-          {paymentMethod !== 'CREDIT' && (
+          {/* في حالة اختيار آجل: إمكانية دفع جزء الآن */}
+          {paymentMethod === 'CREDIT' && (
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 space-y-3">
+              <label className="block text-sm font-bold text-amber-900">
+                💰 المبلغ المدفوع مقدماً الآن (إن وُجد)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={total}
+                  step="0.01"
+                  value={creditPaidAmount}
+                  onChange={(e) => setCreditPaidAmount(e.target.value)}
+                  className="w-full p-3 border rounded-lg bg-white font-bold text-lg text-emerald-700 focus:ring-2 focus:ring-amber-500"
+                  placeholder="0.00 (اتركه فارغاً إذا لم يدفع شيئاً)"
+                />
+                <span className="text-gray-600 font-bold">ج.م</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
+                <div className="bg-white p-3 rounded border">
+                  <span className="text-gray-600 block">المدفوع الآن:</span>
+                  <span className="text-lg font-bold text-emerald-700">
+                    {(parseFloat(creditPaidAmount) || 0).toFixed(2)} ج.م
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded border">
+                  <span className="text-gray-600 block">المتبقي دين على العميل:</span>
+                  <span className="text-lg font-bold text-red-700">
+                    {Math.max(0, total - (parseFloat(creditPaidAmount) || 0)).toFixed(2)} ج.م
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* اختيار الخزينة (يظهر في حالة الدفع النقدي/البطاقة، أو الآجل إذا دفع دفعة مقدمة > 0) */}
+          {(paymentMethod !== 'CREDIT' || (paymentMethod === 'CREDIT' && (parseFloat(creditPaidAmount) || 0) > 0)) && (
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
-                الخزينة *
+                {paymentMethod === 'CREDIT' ? 'الخزينة المستلمة للدفعة المقدمة *' : 'الخزينة المستلمة للمبلغ *'}
               </label>
               <select
                 value={vaultId}
@@ -771,14 +817,14 @@ export default function CreateOfficeInvoice() {
                   const icon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
                   return (
                     <option key={vault.id} value={vault.id}>
-                      {icon} {vault.name}
+                      {icon} {vault.name} (الرصيد: {vault.balance?.toFixed(2) || '0.00'} ج.م)
                     </option>
                   );
                 })}
               </select>
               {vaultId && (
                 <p className="text-xs text-gray-600 mt-1">
-                  الرصيد الحالي: {vaults.find(v => v.id === vaultId)?.balance?.toFixed(2) || '0.00'} جنيه
+                  الرصيد الحالي المتوفر بالخزينة: {vaults.find(v => v.id === vaultId)?.balance?.toFixed(2) || '0.00'} جنيه
                 </p>
               )}
             </div>

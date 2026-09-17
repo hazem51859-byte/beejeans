@@ -102,16 +102,40 @@ export default function WashingOrders() {
   const [washingCost, setWashingCost] = useState(0);
   const [piecesCount, setPiecesCount] = useState(0);
 
+  // Helper to calculate total fabric cost from manufacturing order
+  const getMfgFabricCost = (mfg) => {
+    if (!mfg) return 0;
+    if (mfg.totalFabricCost != null) return mfg.totalFabricCost;
+    if (mfg.fabrics && mfg.fabrics.length > 0) {
+      return mfg.fabrics.reduce((s, f) => s + (f.totalFabricCost || (f.metersUsed * f.fabricCostPerMeter)), 0);
+    }
+    return (mfg.metersUsed || 0) * (mfg.fabricCostPerMeter || 0);
+  };
+
+  const getMfgTotalMeters = (mfg) => {
+    if (!mfg) return 0;
+    if (mfg.fabrics && mfg.fabrics.length > 0) {
+      return mfg.fabrics.reduce((s, f) => s + (f.metersUsed || 0), 0);
+    }
+    return mfg.metersUsed || 0;
+  };
+
+  const selectedMfgOrder = selectedOrder?.manufacturingOrder;
+  const totalFabricCostOrder = selectedMfgOrder ? getMfgFabricCost(selectedMfgOrder) : 0;
+  const totalMetersOrder = selectedMfgOrder ? getMfgTotalMeters(selectedMfgOrder) : 0;
+
   // Calculate total washing cost
   const totalWashingCost = washingCost * piecesCount;
   
   // Calculate fabric cost per piece
   const fabricCostPerPiece = piecesCount > 0 && selectedOrder 
-    ? ((selectedOrder.manufacturingOrder?.metersUsed || 0) * (selectedOrder.manufacturingOrder?.fabricCostPerMeter || 0)) / piecesCount 
+    ? (totalFabricCostOrder / piecesCount)
     : 0;
     
-  const mfgCostPerPiece = selectedOrder?.manufacturingOrder?.manufacturingCostPerPiece || 0;
+  const mfgCostPerPiece = selectedMfgOrder?.manufacturingCostPerPiece || 0;
+  const totalMfgCostOrder = selectedMfgOrder?.totalManufacturingCost || ((selectedMfgOrder?.piecesReceived || selectedOrder?.piecesSent || 0) * mfgCostPerPiece);
   const totalCostPerPiece = fabricCostPerPiece + mfgCostPerPiece + washingCost;
+  const grandTotalCostBatch = totalCostPerPiece * piecesCount;
 
   const handleCreateOrder = (e) => {
     e.preventDefault();
@@ -446,26 +470,46 @@ export default function WashingOrders() {
               
               <form onSubmit={handleCompleteOrder} className="space-y-6">
                 {/* Manufacturing Order Details */}
-                <div className="bg-blue-50 p-4 rounded border border-blue-200">
-                  <h3 className="font-bold mb-3 text-blue-900">📋 معلومات أمر التصنيع</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">رقم الأمر:</span>
-                      <p className="font-medium">#{selectedOrder.manufacturingOrder?.orderNumber}</p>
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-blue-900 text-sm">📋 معلومات وتكاليف أمر التصنيع المرتبط</h3>
+                    <span className="font-mono font-bold text-xs bg-blue-100 text-blue-800 px-2.5 py-1 rounded">
+                      #{selectedOrder.manufacturingOrder?.orderNumber}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-blue-100">
+                      <span className="text-gray-500 block text-xs">إجمالي أمتار القماش:</span>
+                      <p className="font-bold text-gray-800">{totalMetersOrder.toFixed(2)} متر</p>
                     </div>
-                    <div>
-                      <span className="text-gray-600">القماش المستخدم:</span>
-                      <p className="font-medium">{selectedOrder.manufacturingOrder?.metersUsed?.toFixed(2)} متر</p>
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-blue-100">
+                      <span className="text-gray-500 block text-xs">إجمالي تكلفة القماش:</span>
+                      <p className="font-bold text-blue-700">{totalFabricCostOrder.toFixed(2)} ج.م</p>
                     </div>
-                    <div>
-                      <span className="text-gray-600">عدد القطع المرسلة:</span>
-                      <p className="font-medium">{selectedOrder.piecesSent} قطعة</p>
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-blue-100">
+                      <span className="text-gray-500 block text-xs">مصنعية القطعة (المصنع):</span>
+                      <p className="font-bold text-green-700">{mfgCostPerPiece.toFixed(2)} ج.م/قطعة</p>
                     </div>
-                    <div>
-                      <span className="text-gray-600">نوع القماش:</span>
-                      <p className="font-medium">{selectedOrder.manufacturingOrder?.fabricType?.name}</p>
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-blue-100">
+                      <span className="text-gray-500 block text-xs">عدد القطع المرسلة:</span>
+                      <p className="font-bold text-gray-800">{selectedOrder.piecesSent} قطعة</p>
                     </div>
                   </div>
+
+                  {/* Fabrics detail if multiple */}
+                  {selectedMfgOrder?.fabrics && selectedMfgOrder.fabrics.length > 0 && (
+                    <div className="pt-2 border-t border-blue-200/60">
+                      <span className="text-xs font-semibold text-blue-900 block mb-1">تفاصيل الخامات:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedMfgOrder.fabrics.map((f, i) => (
+                          <span key={i} className="bg-white px-2 py-1 rounded text-xs border border-blue-200 text-gray-700">
+                            {f.fabricType?.name}: <strong>{f.metersUsed} م</strong> ({f.totalFabricCost?.toFixed(2) || (f.metersUsed * f.fabricCostPerMeter).toFixed(2)} ج)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Washing Details */}
@@ -479,7 +523,7 @@ export default function WashingOrders() {
                       min="1"
                       defaultValue={selectedOrder.piecesSent}
                       onChange={(e) => setPiecesCount(parseInt(e.target.value) || 0)}
-                      className="input-field"
+                      className="input-field font-bold"
                     />
                   </div>
                   
@@ -492,7 +536,7 @@ export default function WashingOrders() {
                       min="0"
                       step="0.01"
                       onChange={(e) => setWashingCost(parseFloat(e.target.value) || 0)}
-                      className="input-field"
+                      className="input-field font-bold"
                       placeholder="0.00"
                     />
                   </div>
@@ -563,35 +607,47 @@ export default function WashingOrders() {
                   {selectedProduct && (
                     <>
                       {/* Production Cost Breakdown */}
-                      <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-lg border-2 border-green-300 mb-4">
-                        <h4 className="font-bold text-green-900 mb-3">💰 دورة الإنتاج الكاملة</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <div className="bg-white p-3 rounded">
-                            <span className="text-gray-600 block mb-1">📦 تكلفة القماش</span>
-                            <p className="font-bold text-blue-700">
-                              {fabricCostPerPiece.toFixed(2)} ج.م/قطعة
+                      <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-xl border-2 border-green-300 mb-4 space-y-3">
+                        <h4 className="font-bold text-green-900 text-sm">💰 دورة الإنتاج الكاملة وتفاصيل التكاليف</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm text-center">
+                            <span className="text-gray-500 block mb-1 text-xs">📦 تكلفة القماش</span>
+                            <p className="font-bold text-blue-700 text-base">
+                              {fabricCostPerPiece.toFixed(2)} ج.م
                             </p>
+                            <span className="text-[11px] text-gray-400 block mt-0.5">
+                              إجمالي: {totalFabricCostOrder.toFixed(2)} ج
+                            </span>
                           </div>
                           
-                          <div className="bg-white p-3 rounded">
-                            <span className="text-gray-600 block mb-1">⚙️ تكلفة التصنيع</span>
-                            <p className="font-bold text-green-700">
-                              {mfgCostPerPiece.toFixed(2)} ج.م/قطعة
+                          <div className="bg-white p-3 rounded-lg border border-green-100 shadow-sm text-center">
+                            <span className="text-gray-500 block mb-1 text-xs">⚙️ تكلفة التصنيع</span>
+                            <p className="font-bold text-green-700 text-base">
+                              {mfgCostPerPiece.toFixed(2)} ج.م
                             </p>
+                            <span className="text-[11px] text-gray-400 block mt-0.5">
+                              إجمالي: {(mfgCostPerPiece * piecesCount).toFixed(2)} ج
+                            </span>
                           </div>
                           
-                          <div className="bg-white p-3 rounded">
-                            <span className="text-gray-600 block mb-1">🧼 تكلفة الغسيل</span>
-                            <p className="font-bold text-purple-700">
-                              {washingCost.toFixed(2)} ج.م/قطعة
+                          <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-sm text-center">
+                            <span className="text-gray-500 block mb-1 text-xs">🧼 تكلفة الغسيل</span>
+                            <p className="font-bold text-purple-700 text-base">
+                              {washingCost.toFixed(2)} ج.م
                             </p>
+                            <span className="text-[11px] text-gray-400 block mt-0.5">
+                              إجمالي: {totalWashingCost.toFixed(2)} ج
+                            </span>
                           </div>
                           
-                          <div className="bg-white p-3 rounded border-2 border-orange-400">
-                            <span className="text-gray-600 block mb-1">💵 سعر التكلفة النهائي</span>
+                          <div className="bg-white p-3 rounded-lg border-2 border-orange-400 shadow-sm text-center">
+                            <span className="text-gray-600 block mb-1 text-xs font-semibold">💵 سعر التكلفة النهائي</span>
                             <p className="font-bold text-orange-700 text-lg">
                               {totalCostPerPiece.toFixed(2)} ج.م
                             </p>
+                            <span className="text-[11px] text-gray-500 block mt-0.5 font-medium">
+                              إجمالي الدفعة: {grandTotalCostBatch.toFixed(2)} ج
+                            </span>
                           </div>
                         </div>
                       </div>

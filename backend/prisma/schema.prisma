@@ -1,5 +1,3 @@
-// Prisma Schema for Bee Jeans POS System - PostgreSQL Version
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,178 +7,126 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =====================
-// User Management
-// =====================
-
 model User {
-  id            String   @id @default(uuid())
-  username      String   @unique
-  email         String   @unique
-  password      String
-  fullName      String
-  phone         String?
-  role          String   @default("CASHIER") // ADMIN, MANAGER, CASHIER
-  isActive      Boolean  @default(true)
-  branchId      String?
-  branch        Branch?  @relation(fields: [branchId], references: [id])
-  
-  shifts        Shift[]
-  sales         Sale[]
-  expenses      Expense[]
-  transfersSent     Transfer[]  @relation("TransferSentBy")
-  transfersReceived Transfer[]  @relation("TransferReceivedBy")
-  activityLogs      ActivityLog[]
-  returnsCreated    Return[]      @relation("ReturnCreator")
-  returnsManagerReviewed Return[] @relation("ReturnManagerReviewer")
-  auditsCreated       InventoryAudit[]    @relation("AuditCreator")
-  auditsSettled       InventoryAudit[]    @relation("AuditSettler")
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id                     String           @id @default(uuid())
+  username               String           @unique
+  email                  String           @unique
+  password               String
+  fullName               String
+  phone                  String?
+  role                   String           @default("CASHIER")
+  isActive               Boolean          @default(true)
+  branchId               String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  activityLogs           ActivityLog[]
+  expenses               Expense[]
+  auditsCreated          InventoryAudit[] @relation("AuditCreator")
+  auditsSettled          InventoryAudit[] @relation("AuditSettler")
+  returnsCreated         Return[]         @relation("ReturnCreator")
+  returnsManagerReviewed Return[]         @relation("ReturnManagerReviewer")
+  sales                  Sale[]
+  shifts                 Shift[]
+  transfersReceived      Transfer[]       @relation("TransferReceivedBy")
+  transfersSent          Transfer[]       @relation("TransferSentBy")
+  branch                 Branch?          @relation(fields: [branchId], references: [id])
+
   @@index([branchId])
   @@index([username])
   @@map("users")
 }
 
-// =====================
-// Branch Management
-// =====================
-
 model Branch {
-  id            String   @id @default(uuid())
-  name          String
-  code          String   @unique
-  url           String   @unique // URL ╪«╪º╪╡ ╪¿╪º┘ä┘ü╪▒╪╣
-  address       String?
-  phone         String?
-  city          String?
-  isActive      Boolean  @default(true)
-  
-  // Branch Vault (╪º┘ä╪«╪▓┘è┘å╪⌐)
-  vaultBalance      Float    @default(0) // ╪▒╪╡┘è╪» ╪º┘ä╪«╪▓┘è┘å╪⌐ ╪º┘ä┘å┘é╪»┘è
-  cardVaultBalance  Float    @default(0) // ╪▒╪╡┘è╪» ╪º┘ä┘ü┘è╪▓╪º ┘ü┘è ╪º┘ä╪«╪▓┘è┘å╪⌐
-  walletBalance     Float    @default(0) // رصيد المحفظة الإلكترونية
-  
-  users         User[]
-  inventory     Inventory[]
-  shifts        Shift[]
-  sales         Sale[]
-  expenses      Expense[]
-  purchases     Purchase[]
-  transfersFrom Transfer[]  @relation("TransferFrom")
-  transfersTo   Transfer[]  @relation("TransferTo")
-  activityLogs  ActivityLog[]
-  productSerials ProductSerial[]
-  vaultTransactions VaultTransaction[]
-  moneyTransfersFrom MoneyTransfer[] @relation("MoneyTransferFrom")
-  moneyTransfersTo   MoneyTransfer[] @relation("MoneyTransferTo")
-  returns           Return[]
-  audits            InventoryAudit[]
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id                 String             @id @default(uuid())
+  name               String
+  code               String             @unique
+  url                String             @unique
+  address            String?
+  phone              String?
+  city               String?
+  isActive           Boolean            @default(true)
+  vaultBalance       Float              @default(0)
+  cardVaultBalance   Float              @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  walletBalance      Float              @default(0)
+  activityLogs       ActivityLog[]
+  expenses           Expense[]
+  inventory          Inventory[]
+  audits             InventoryAudit[]
+  moneyTransfersFrom MoneyTransfer[]    @relation("MoneyTransferFrom")
+  moneyTransfersTo   MoneyTransfer[]    @relation("MoneyTransferTo")
+  productSerials     ProductSerial[]
+  purchases          Purchase[]
+  returns            Return[]
+  sales              Sale[]
+  shifts             Shift[]
+  transfersFrom      Transfer[]         @relation("TransferFrom")
+  transfersTo        Transfer[]         @relation("TransferTo")
+  users              User[]
+  vaultTransactions  VaultTransaction[]
+
   @@index([code])
   @@index([url])
   @@map("branches")
 }
 
-// =====================
-// Product Management
-// =====================
-
 model Category {
-  id            String              @id @default(uuid())
-  name          String
-  description   String?
-  parentId      String?
-  parent        Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children      Category[]          @relation("CategoryHierarchy")
-  
-  // ┘é╪º┘ä╪¿ ╪º┘ä╪¬┘ü╪º╪╡┘è┘ä (JSON string)
-  // ┘à╪½╪º┘ä: {
-  //   "fields": [
-  //     {"name": "╪º┘ä┘à┘é╪º╪│", "type": "select", "options": ["S", "M", "L", "XL"], "required": true},
-  //     {"name": "╪º┘ä┘ä┘ê┘å", "type": "select", "options": ["╪ú╪¿┘è╪╢", "╪ú╪│┘ê╪»", "╪ú╪▓╪▒┘é"], "required": true}
-  //   ],
-  //   "pricing": {
-  //     "costPrice": 150,
-  //     "sellingPrice": 250,
-  //     "taxRate": 14
-  //   }
-  // }
-  attributesTemplate String?
-  
+  id                  String     @id @default(uuid())
+  name                String
+  description         String?
+  parentId            String?
+  attributesTemplate  String?
   defaultCostPrice    Float?
   defaultSellingPrice Float?
   attributes          String?
-  
-  // Serial tracking for category
-  serialStartNumber   Int?      // ╪▒┘é┘à ╪º┘ä╪¿╪»╪º┘è╪⌐ ┘ä┘ä╪│┘è╪▒┘è╪º┘ä╪º╪¬ (┘à╪½┘ä╪º┘ï 1000)
-  lastSerialUsed      Int?      // ╪ó╪«╪▒ ╪▒┘é┘à ╪│┘è╪▒┘è╪º┘ä ╪¬┘à ╪º╪│╪¬╪«╪»╪º┘à┘ç
-  
-  products      Product[]
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  serialStartNumber   Int?
+  lastSerialUsed      Int?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  parent              Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children            Category[] @relation("CategoryHierarchy")
+  products            Product[]
+
   @@map("categories")
 }
 
 model Product {
-  id            String        @id @default(uuid())
-  sku           String        @unique // ┘â┘ê╪» ╪º┘ä┘à┘å╪¬╪¼ ╪º┘ä╪½╪º╪¿╪¬ ┘ä┘ä╪¿╪º╪▒┘â┘ê╪»
-  barcode       String?       @unique // ╪º┘ä╪¿╪º╪▒┘â┘ê╪» (┘å┘ü╪│ ╪º┘ä┘Ç SKU ┘ä┘â┘ä ╪º┘ä┘é╪╖╪╣ ┘à┘å ┘å┘ü╪│ ╪º┘ä┘å┘ê╪╣)
-  name          String
-  description   String?
-  
-  categoryId    String?
-  category      Category?     @relation(fields: [categoryId], references: [id])
-  
-  // ╪º┘ä╪¬┘ü╪º╪╡┘è┘ä ╪º┘ä╪Ñ╪╢╪º┘ü┘è╪⌐ ╪¡╪│╪¿ ╪º┘ä┘é╪º┘ä╪¿ (JSON string)
-  // ┘à╪½╪º┘ä: {"╪º┘ä┘à┘é╪º╪│": "L", "╪º┘ä┘ä┘ê┘å": "╪ú╪¿┘è╪╢", "╪º┘ä┘å┘ê╪╣": "╪¼┘è┘å╪▓"}
-  attributes    String?
-  
-  costPrice     Float         @default(0) // سعر التكلفة - يتحسب تلقائياً (قماش + تصنيع + غسيل)
-  sellingPrice  Float         @default(0) // سعر البيع بالجملة - من المخزن الرئيسي للفروع
-  retailPrice   Float         @default(0) // سعر القطاعي - الفروع تبيع بيه للعملاء
-  
-  // ╪¬┘ü╪º╪╡┘è┘ä ╪º┘ä╪¬┘â┘ä┘ü╪⌐ (┘ä┘ä╪┤┘ü╪º┘ü┘è╪⌐)
-  fabricCost        Float?    @default(0) // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä┘é┘à╪º╪┤ ┘ä┘ä┘é╪╖╪╣╪⌐
-  fabricMetersUsed  Float?    @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪│╪¬╪«╪»┘à╪⌐ ┘ä┘â┘ä ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à┘å╪¬╪¼╪⌐
-  manufacturingCost Float?    @default(0) // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¬╪╡┘å┘è╪╣ ┘ä┘ä┘é╪╖╪╣╪⌐
-  washingCost       Float?    @default(0) // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪║╪│┘è┘ä ┘ä┘ä┘é╪╖╪╣╪⌐
-  
-  // Tracking ┘ä┘ä╪»┘ê╪▒╪⌐ ╪º┘ä╪Ñ┘å╪¬╪º╪¼┘è╪⌐
-  totalPiecesProduced Int     @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à┘å╪¬╪¼╪⌐
-  
-  size          String?
-  color         String?
-  brand         String?
-  
-  taxRate       Float         @default(0)
-  
-  reorderLevel  Int           @default(10)
-  
-  status        String        @default("ACTIVE") // DRAFT, ACTIVE, INACTIVE
-  
-  imageUrl      String?
-  
-  inventory     Inventory[]
-  saleItems     SaleItem[]
-  purchaseItems PurchaseItem[]
-  transferItems TransferItem[]
-  productSerials ProductSerial[]
+  id                  String               @id @default(uuid())
+  sku                 String               @unique
+  barcode             String?              @unique
+  name                String
+  description         String?
+  categoryId          String?
+  attributes          String?
+  costPrice           Float                @default(0)
+  sellingPrice        Float                @default(0)
+  fabricCost          Float?               @default(0)
+  fabricMetersUsed    Float?               @default(0)
+  manufacturingCost   Float?               @default(0)
+  washingCost         Float?               @default(0)
+  totalPiecesProduced Int                  @default(0)
+  size                String?
+  color               String?
+  brand               String?
+  taxRate             Float                @default(0)
+  reorderLevel        Int                  @default(10)
+  status              String               @default("ACTIVE")
+  imageUrl            String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  retailPrice         Float                @default(0)
+  inventory           Inventory[]
+  auditItems          InventoryAuditItem[]
   manufacturingOrders ManufacturingOrder[]
-  returnItems   ReturnItem[]
-  officeInvoiceItems OfficeInvoiceItem[]
-  auditItems    InventoryAuditItem[]
-  
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
+  officeInvoiceItems  OfficeInvoiceItem[]
+  productSerials      ProductSerial[]
+  category            Category?            @relation(fields: [categoryId], references: [id])
+  purchaseItems       PurchaseItem[]
+  returnItems         ReturnItem[]
+  saleItems           SaleItem[]
+  transferItems       TransferItem[]
+
   @@index([sku])
   @@index([barcode])
   @@index([categoryId])
@@ -188,38 +134,26 @@ model Product {
   @@map("products")
 }
 
-// ╪¬╪│╪¼┘è┘ä ╪º┘ä╪│┘è╪▒┘è╪º┘ä╪º╪¬ ┘ä┘ä┘à┘å╪¬╪¼╪º╪¬
 model ProductSerial {
-  id            String    @id @default(uuid())
-  
-  productId     String
-  product       Product   @relation(fields: [productId], references: [id])
-  
-  serialNumber  String // ╪º┘ä╪│┘è╪▒┘è╪º┘ä (┘å┘ü╪│ ╪º┘ä╪▒┘é┘à ┘ä┘â┘ä ┘é╪╖╪╣ ╪º┘ä┘à┘å╪¬╪¼)
-  
-  branchId      String?
-  branch        Branch?   @relation(fields: [branchId], references: [id])
-  
-  registeredBy  String    // User ID ╪º┘ä╪░┘è ╪│╪¼┘ä ╪º┘ä╪│┘è╪▒┘è╪º┘ä
-  registeredAt  DateTime  @default(now())
-  
-  status        String    @default("AVAILABLE") // AVAILABLE, SOLD, RETURNED, IN_TRANSIT
-  
-  soldAt        DateTime?
-  soldInSaleId  String?   // Sale ID ╪Ñ╪░╪º ╪¬┘à ╪¿┘è╪╣┘ç
-  
-  // Tracking
-  purchaseId    String?   // ╪▒╪¿╪╖ ╪¿╪º┘ä╪┤╪▒╪º╪í ╪º┘ä┘ä┘è ╪¼╪º╪í ┘à┘å┘ç
-  purchase      Purchase? @relation(fields: [purchaseId], references: [id])
-  
-  transferId    String?   // ╪▒╪¿╪╖ ╪¿╪º┘ä╪¬┘ê╪▒┘è╪» ╪º┘ä┘ä┘è ╪▒╪º╪¡ ┘ü┘è┘ç
-  transfer      Transfer? @relation(fields: [transferId], references: [id])
-  
-  notes         String?
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  id           String    @id @default(uuid())
+  productId    String
+  serialNumber String
+  branchId     String?
+  registeredBy String
+  registeredAt DateTime  @default(now())
+  status       String    @default("AVAILABLE")
+  soldAt       DateTime?
+  soldInSaleId String?
+  purchaseId   String?
+  transferId   String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  product      Product   @relation(fields: [productId], references: [id])
+  purchase     Purchase? @relation(fields: [purchaseId], references: [id])
+  transfer     Transfer? @relation(fields: [transferId], references: [id])
+
   @@index([productId])
   @@index([serialNumber])
   @@index([branchId])
@@ -229,127 +163,85 @@ model ProductSerial {
   @@map("product_serials")
 }
 
-// =====================
-// Inventory Management
-// =====================
-
 model Inventory {
-  id            String   @id @default(uuid())
-  
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id])
-  
-  branchId      String
-  branch        Branch   @relation(fields: [branchId], references: [id])
-  
-  quantity      Int      @default(0)
-  minQuantity   Int      @default(10)
-  
+  id              String    @id @default(uuid())
+  productId       String
+  branchId        String
+  quantity        Int       @default(0)
+  minQuantity     Int       @default(10)
   lastRestockDate DateTime?
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  branch          Branch    @relation(fields: [branchId], references: [id])
+  product         Product   @relation(fields: [productId], references: [id])
+
   @@unique([productId, branchId])
   @@index([branchId])
   @@index([productId])
   @@map("inventory")
 }
 
-// =====================
-// Shift Management
-// =====================
-
 model Shift {
-  id                String      @id @default(uuid())
+  id                String    @id @default(uuid())
   shiftNumber       String
-  
   userId            String
-  user              User        @relation(fields: [userId], references: [id])
-  
   branchId          String
-  branch            Branch      @relation(fields: [branchId], references: [id])
-  
-  status            String      @default("OPEN") // OPEN, CLOSED
-  
-  openingBalance    Float       // Changed from Decimal to Float
-  closingBalance    Float?      // Changed from Decimal to Float
-  
-  expectedCash      Float?      // Changed from Decimal to Float
-  actualCash        Float?      // Changed from Decimal to Float
-  cashDifference    Float?      // Changed from Decimal to Float
-  
-  totalSales        Float       @default(0) // Changed from Decimal to Float
-  totalTransactions Int         @default(0)
-  
-  openedAt          DateTime    @default(now())
+  status            String    @default("OPEN")
+  openingBalance    Float
+  closingBalance    Float?
+  expectedCash      Float?
+  actualCash        Float?
+  cashDifference    Float?
+  totalSales        Float     @default(0)
+  totalTransactions Int       @default(0)
+  openedAt          DateTime  @default(now())
   closedAt          DateTime?
-  
   notes             String?
-  
   sales             Sale[]
-  
+  branch            Branch    @relation(fields: [branchId], references: [id])
+  user              User      @relation(fields: [userId], references: [id])
+
   @@index([userId])
   @@index([branchId])
   @@index([status])
   @@map("shifts")
 }
 
-// =====================
-// Sales Management
-// =====================
-
 model Sale {
-  id                String        @id @default(uuid())
-  invoiceNumber     String        @unique
-  
-  branchId          String
-  branch            Branch        @relation(fields: [branchId], references: [id])
-  
-  shiftId           String?
-  shift             Shift?         @relation(fields: [shiftId], references: [id])
-  
-  cashierId         String
-  cashier           User          @relation(fields: [cashierId], references: [id])
-  
-  customerId        String?
-  customer          Customer?     @relation(fields: [customerId], references: [id])
-  
-  customerName      String?
-  customerPhone     String?
-  
-  subtotal          Float         // Changed from Decimal to Float
-  taxAmount         Float         @default(0) // Changed from Decimal to Float
-  discountAmount    Float         @default(0) // Changed from Decimal to Float
-  total             Float         // Changed from Decimal to Float
-  
-  paymentMethod     String        // CASH, CARD, CREDIT, MIXED
-  amountPaid        Float         // Changed from Decimal to Float
-  changeAmount      Float         @default(0) // Changed from Decimal to Float
-  
-  // Card payment tracking
-  cardConfirmed         Boolean       @default(false) // ╪¬╪ú┘â┘è╪» ╪»┘ü╪╣ ╪º┘ä┘ü┘è╪▓╪º
-  cardAmount            Float         @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪»┘ü┘ê╪╣ ╪¿╪º┘ä┘ü┘è╪▓╪º
-  cardDestinationBranch String?       // ┘ê╪¼┘ç╪⌐ ╪º┘ä┘ü┘è╪▓╪º: branchId ╪ú┘ê null ┘ä┘ä┘à╪«╪▓┘å ╪º┘ä╪▒╪ª┘è╪│┘è
-  
-  status            String        @default("COMPLETED") // COMPLETED, PENDING, CANCELLED, REFUNDED
-  
-  // ┘ä┘ä╪Ñ╪▒╪¼╪º╪╣╪º╪¬
-  isReturn          Boolean       @default(false)
-  originalSaleId    String?       // ╪▒┘é┘à ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪º┘ä╪ú╪╡┘ä┘è╪⌐ ┘ä┘ê ┘â╪º┘å╪¬ ╪Ñ╪▒╪¼╪º╪╣
-  returnReason      String?       // ╪│╪¿╪¿ ╪º┘ä╪Ñ╪▒╪¼╪º╪╣
-  refundAmount      Float         @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪▒╪¬╪¼╪╣ ┘à┘å ┘ç╪░┘ç ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐
-  
-  notes             String?
-  
-  items             SaleItem[]
-  returns           Return[]
-  
-  syncedAt          DateTime?
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  
+  id                    String     @id @default(uuid())
+  invoiceNumber         String     @unique
+  branchId              String
+  shiftId               String?
+  cashierId             String
+  customerId            String?
+  customerName          String?
+  customerPhone         String?
+  subtotal              Float
+  taxAmount             Float      @default(0)
+  discountAmount        Float      @default(0)
+  total                 Float
+  paymentMethod         String
+  amountPaid            Float
+  changeAmount          Float      @default(0)
+  cardConfirmed         Boolean    @default(false)
+  cardAmount            Float      @default(0)
+  cardDestinationBranch String?
+  status                String     @default("COMPLETED")
+  isReturn              Boolean    @default(false)
+  originalSaleId        String?
+  returnReason          String?
+  refundAmount          Float      @default(0)
+  notes                 String?
+  syncedAt              DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  returns               Return[]
+  items                 SaleItem[]
+  branch                Branch     @relation(fields: [branchId], references: [id])
+  cashier               User       @relation(fields: [cashierId], references: [id])
+  customer              Customer?  @relation(fields: [customerId], references: [id])
+  shift                 Shift?     @relation(fields: [shiftId], references: [id])
+
   @@index([branchId])
   @@index([shiftId])
   @@index([cashierId])
@@ -359,141 +251,103 @@ model Sale {
 }
 
 model SaleItem {
-  id            String   @id @default(uuid())
-  
-  saleId        String
-  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id])
-  
-  serialNumber  String?  // ╪º┘ä╪│┘è╪▒┘è╪º┘ä ╪º┘ä┘à╪│╪¬╪«╪»┘à ┘ü┘è ╪º┘ä╪¿┘è╪╣
-  size          String?  // ╪º┘ä┘à┘é╪º╪│ ╪º┘ä┘à╪«╪¬╪º╪▒
-  color         String?  // ╪º┘ä┘ä┘ê┘å ╪º┘ä┘à╪«╪¬╪º╪▒
-  
+  id              String  @id @default(uuid())
+  saleId          String
+  productId       String
+  serialNumber    String?
+  size            String?
   quantity        Int
-  unitPrice       Float    // سعر البيع الفعلي المستخدم في الفاتورة
-  unitCostPrice   Float    @default(0) // سعر التكلفة لحظة البيع
-  unitRetailPrice Float    @default(0) // سعر القطاعي لحظة البيع (لحساب ربح الفروع)
-  discount        Float    @default(0) // Changed from Decimal to Float
-  taxRate         Float    @default(0) // Changed from Decimal to Float
-  total           Float    // Changed from Decimal to Float
-  
-  status        String   @default("SOLD") // SOLD, RETURNED
-  isReturned    Boolean  @default(false) // ┘ç┘ä ╪¬┘à ╪Ñ╪▒╪¼╪º╪╣ ┘ç╪░╪º ╪º┘ä┘à┘å╪¬╪¼
-  
+  unitPrice       Float
+  discount        Float   @default(0)
+  taxRate         Float   @default(0)
+  total           Float
+  status          String  @default("SOLD")
+  isReturned      Boolean @default(false)
+  color           String?
+  unitCostPrice   Float   @default(0)
+  unitRetailPrice Float   @default(0)
+  product         Product @relation(fields: [productId], references: [id])
+  sale            Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
   @@index([saleId])
   @@index([productId])
   @@index([serialNumber])
   @@map("sale_items")
 }
 
-// =====================
-// Partners Management
-// =====================
-
 model Partner {
-  id                String              @id @default(uuid())
-  name              String
-  email             String?             @unique
-  phone             String?
-  
-  capitalPaid       Float               // ╪▒╪ú╪│ ╪º┘ä┘à╪º┘ä ╪º┘ä┘à╪»┘ü┘ê╪╣
-  sharePercentage   Float               // ┘å╪│╪¿╪⌐ ╪º┘ä╪┤╪▒╪º┘â╪⌐ (%)
-  
-  joinDate          DateTime            @default(now())
-  isActive          Boolean             @default(true)
-  
-  notes             String?
-  
-  transactions      PartnerTransaction[]
-  
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id              String               @id @default(uuid())
+  name            String
+  email           String?              @unique
+  phone           String?
+  capitalPaid     Float
+  sharePercentage Float
+  joinDate        DateTime             @default(now())
+  isActive        Boolean              @default(true)
+  notes           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  transactions    PartnerTransaction[]
+
   @@map("partners")
 }
 
-// Partner Transactions (┘à╪╣╪º┘à┘ä╪º╪¬ ╪º┘ä╪┤╪▒┘â╪º╪í - ╪»┘ü╪╣╪º╪¬╪î ╪│╪¡┘ê╪¿╪º╪¬╪î ╪¬┘ê╪▓┘è╪╣ ╪ú╪▒╪¿╪º╪¡)
 model PartnerTransaction {
-  id                String      @id @default(uuid())
-  
-  partnerId         String
-  partner           Partner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  
-  type              String      // CAPITAL, WITHDRAWAL, PROFIT_DISTRIBUTION, LOSS_DISTRIBUTION
-  amount            Float
-  vaultType         String?     @default("CASH") // CASH, CARD, WALLET
-  description       String?
-  notes             String?
-  
-  transactionDate   DateTime    @default(now())
-  
-  createdAt         DateTime    @default(now())
-  
+  id              String   @id @default(uuid())
+  partnerId       String
+  type            String
+  amount          Float
+  description     String?
+  transactionDate DateTime @default(now())
+  createdAt       DateTime @default(now())
+  notes           String?
+  vaultType       String?  @default("CASH")
+  partner         Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
   @@index([partnerId])
   @@index([transactionDate])
   @@map("partner_transactions")
 }
 
-// =====================
-// Purchases Management (╪º┘ä┘à╪┤╪¬╪▒┘è╪º╪¬ - ╪º┘ä╪¿╪╢╪º╪╣╪⌐)
-// =====================
-
-// Suppliers (╪º┘ä┘à┘ê╪▒╪»┘è┘å)
 model Supplier {
-  id              String      @id @default(uuid())
-  name            String
-  phone           String?
-  email           String?
-  address         String?
-  
-  // ┘å┘ê╪╣ ╪º┘ä┘à┘ê╪▒╪»
-  type            String      // FABRIC (قماش), MANUFACTURING (تصنيع), WASHING (غسيل), READY (بضاعة جاهزة), MISCELLANEOUS (مصروفات متنوعة)
-  
-  // ╪º┘ä╪¡╪│╪º╪¿╪º╪¬
-  totalPurchases  Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘à╪┤╪¬╪▒┘è╪º╪¬
-  totalPaid       Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘à╪»┘ü┘ê╪╣
-  balance         Float       @default(0) // ╪º┘ä╪▒╪╡┘è╪» (╪º┘ä┘à╪¬╪¿┘é┘è/╪º┘ä╪▓╪º╪ª╪»)
-  
-  notes           String?
-  isActive        Boolean     @default(true)
-  
-  purchases       Purchase[]
-  payments        SupplierPayment[]
-  fabricPurchases FabricPurchase[]
-  manufacturingOrders ManufacturingOrder[]
-  washingOrders   WashingOrder[]
+  id                    String                 @id @default(uuid())
+  name                  String
+  phone                 String?
+  email                 String?
+  address               String?
+  type                  String
+  totalPurchases        Float                  @default(0)
+  totalPaid             Float                  @default(0)
+  balance               Float                  @default(0)
+  notes                 String?
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  fabricPurchases       FabricPurchase[]
+  manufacturingOrders   ManufacturingOrder[]
   miscellaneousExpenses MiscellaneousExpense[]
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  
+  purchases             Purchase[]
+  payments              SupplierPayment[]
+  washingOrders         WashingOrder[]
+
   @@index([type])
   @@map("suppliers")
 }
 
-// Supplier Payments (╪»┘ü╪╣╪º╪¬ ╪º┘ä┘à┘ê╪▒╪»┘è┘å)
 model SupplierPayment {
-  id              String      @id @default(uuid())
-  
+  id              String    @id @default(uuid())
   supplierId      String
-  supplier        Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  
-  purchaseId      String?     // ╪▒╪¿╪╖ ╪º┘ä╪»┘ü╪╣╪⌐ ╪¿┘ü╪º╪¬┘ê╪▒╪⌐ ┘à╪¡╪»╪»╪⌐ (╪º╪«╪¬┘è╪º╪▒┘è)
-  purchase        Purchase?   @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
-  
+  purchaseId      String?
   amount          Float
-  paymentMethod   String      // CASH, BANK_TRANSFER, CHECK
-  paymentDate     DateTime    @default(now())
-  
-  referenceNumber String?     // ╪▒┘é┘à ╪º┘ä╪┤┘è┘â/╪º┘ä╪¬╪¡┘ê┘è┘ä
+  paymentMethod   String
+  paymentDate     DateTime  @default(now())
+  referenceNumber String?
   notes           String?
-  
   createdBy       String
-  
-  createdAt       DateTime    @default(now())
-  
+  createdAt       DateTime  @default(now())
+  purchase        Purchase? @relation(fields: [purchaseId], references: [id])
+  supplier        Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
   @@index([supplierId])
   @@index([purchaseId])
   @@index([paymentDate])
@@ -501,38 +355,27 @@ model SupplierPayment {
 }
 
 model Purchase {
-  id                String          @id @default(uuid())
-  invoiceNumber     String          @unique
-  
-  supplierId        String
-  supplier          Supplier        @relation(fields: [supplierId], references: [id])
-  
-  supplierPhone     String?
-  
-  branchId          String?
-  branch            Branch?         @relation(fields: [branchId], references: [id])
-  
-  totalAmount       Float
-  paidAmount        Float           @default(0)
-  remainingAmount   Float           @default(0)
-  
-  paymentStatus     String          @default("PENDING") // PAID, PARTIAL, PENDING
-  
-  purchaseDate      DateTime        @default(now())
-  
-  notes             String?
-  
-  // Serial tracking for products
-  startSerial       String?         // ╪▒┘é┘à ╪º┘ä╪│┘è╪▒┘è╪º┘ä ╪º┘ä╪ú┘ê┘ä
-  endSerial         String?         // ╪▒┘é┘à ╪º┘ä╪│┘è╪▒┘è╪º┘ä ╪º┘ä╪ú╪«┘è╪▒
-  
-  items             PurchaseItem[]
-  productSerials    ProductSerial[]
-  payments          SupplierPayment[] // ╪º┘ä╪»┘ü╪╣╪º╪¬ ╪º┘ä┘à╪▒╪¬╪¿╪╖╪⌐ ╪¿┘ç╪░┘ç ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
+  id              String            @id @default(uuid())
+  invoiceNumber   String            @unique
+  supplierId      String
+  supplierPhone   String?
+  branchId        String?
+  totalAmount     Float
+  paidAmount      Float             @default(0)
+  remainingAmount Float             @default(0)
+  paymentStatus   String            @default("PENDING")
+  purchaseDate    DateTime          @default(now())
+  notes           String?
+  startSerial     String?
+  endSerial       String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  productSerials  ProductSerial[]
+  items           PurchaseItem[]
+  branch          Branch?           @relation(fields: [branchId], references: [id])
+  supplier        Supplier          @relation(fields: [supplierId], references: [id])
+  payments        SupplierPayment[]
+
   @@index([supplierId])
   @@index([branchId])
   @@index([invoiceNumber])
@@ -541,48 +384,38 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id                String      @id @default(uuid())
-  
-  purchaseId        String
-  purchase          Purchase    @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  
-  productId         String?
-  product           Product?    @relation(fields: [productId], references: [id])
-  
-  productName       String
-  quantity          Int
-  unitPrice         Float
-  total             Float
-  
-  createdAt         DateTime    @default(now())
-  
+  id          String   @id @default(uuid())
+  purchaseId  String
+  productId   String?
+  productName String
+  quantity    Int
+  unitPrice   Float
+  total       Float
+  createdAt   DateTime @default(now())
+  product     Product? @relation(fields: [productId], references: [id])
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
   @@index([purchaseId])
   @@index([productId])
   @@map("purchase_items")
 }
 
-// المصروفات المتنوعة من الموردين (Miscellaneous Expenses from Suppliers)
 model MiscellaneousExpense {
-  id              String      @id @default(uuid())
-  expenseNumber   String      @unique // رقم المصروف
-  
+  id              String   @id @default(uuid())
+  expenseNumber   String   @unique
   supplierId      String
-  supplier        Supplier    @relation(fields: [supplierId], references: [id])
-  
-  description     String      // وصف المصروف (مثل: صيانة, نقل, خدمات, إلخ)
-  totalAmount     Float       // إجمالي قيمة المصروف
-  
-  paidAmount      Float       @default(0)
-  remainingAmount Float       @default(0)
-  paymentStatus   String      @default("PENDING") // PAID, PARTIAL, PENDING
-  
-  expenseDate     DateTime    @default(now())
+  description     String
+  totalAmount     Float
+  paidAmount      Float    @default(0)
+  remainingAmount Float    @default(0)
+  paymentStatus   String   @default("PENDING")
+  expenseDate     DateTime @default(now())
   notes           String?
-  
   createdBy       String
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+
   @@index([supplierId])
   @@index([expenseNumber])
   @@index([expenseDate])
@@ -590,107 +423,72 @@ model MiscellaneousExpense {
   @@map("miscellaneous_expenses")
 }
 
-// =====================
-// Expenses Management (المصروفات)
-// =====================
-
 model Expense {
-  id                String      @id @default(uuid())
-  
-  category          String      // RENT, SALARY, ELECTRICITY, WATER, PURCHASES, OTHER
-  description       String
-  amount            Float
-  
-  expenseDate       DateTime    @default(now())
-  
-  branchId          String?
-  branch            Branch?     @relation(fields: [branchId], references: [id])
-  
-  receiptNumber     String?
-  notes             String?
-  
-  createdBy         String
-  createdByUser     User        @relation(fields: [createdBy], references: [id])
-  
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  
+  id            String   @id @default(uuid())
+  category      String
+  description   String
+  amount        Float
+  expenseDate   DateTime @default(now())
+  branchId      String?
+  receiptNumber String?
+  notes         String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  createdByUser User     @relation(fields: [createdBy], references: [id])
+
   @@index([category])
   @@index([branchId])
   @@index([expenseDate])
   @@map("expenses")
 }
 
-// =====================
-// Sync Management
-// =====================
-
 model SyncLog {
-  id            String     @id @default(uuid())
-  
-  branchId      String
-  entityType    String     // 'sale', 'inventory', 'product', etc.
-  entityId      String
-  operation     String     // 'create', 'update', 'delete'
-  
-  data          String     // Changed from Json to String (will store JSON as string)
-  
-  status        String     @default("PENDING") // PENDING, SYNCED, FAILED
-  errorMessage  String?
-  
-  attempts      Int        @default(0)
-  
-  createdAt     DateTime   @default(now())
-  syncedAt      DateTime?
-  
+  id           String    @id @default(uuid())
+  branchId     String
+  entityType   String
+  entityId     String
+  operation    String
+  data         String
+  status       String    @default("PENDING")
+  errorMessage String?
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+  syncedAt     DateTime?
+
   @@index([branchId])
   @@index([status])
   @@index([createdAt])
   @@map("sync_logs")
 }
 
-// =====================
-// Transfer Management (┘å╪╕╪º┘à ╪º┘ä╪¬┘ê╪▒┘è╪»╪º╪¬ ╪¿┘è┘å ╪º┘ä┘ü╪▒┘ê╪╣)
-// =====================
-
 model Transfer {
   id                String          @id @default(uuid())
   transferNumber    String          @unique
-  
   fromBranchId      String?
-  fromBranch        Branch?         @relation("TransferFrom", fields: [fromBranchId], references: [id])
-  
   toBranchId        String
-  toBranch          Branch          @relation("TransferTo", fields: [toBranchId], references: [id])
-  
-  status            String          @default("PENDING") // PENDING, IN_TRANSIT, DELIVERED, CANCELLED
-  
-  items             TransferItem[]
-  productSerials    ProductSerial[]
-  
+  status            String          @default("PENDING")
   notes             String?
-  
-  // ┘à┘å ╪ú╪▒╪│┘ä (╪╣╪º╪»╪⌐ Admin)
   sentBy            String
-  sentByUser        User            @relation("TransferSentBy", fields: [sentBy], references: [id])
   sentAt            DateTime        @default(now())
-  
-  // ┘à┘å ╪º╪│╪¬┘ä┘à (Cashier ┘ü┘è ╪º┘ä┘ü╪▒╪╣)
   receivedBy        String?
-  receivedByUser    User?           @relation("TransferReceivedBy", fields: [receivedBy], references: [id])
   receivedAt        DateTime?
-  
-  receiverNotes     String?         // ┘à┘ä╪º╪¡╪╕╪º╪¬ ╪º┘ä┘à╪│╪¬┘ä┘à
-  hasDiscrepancy    Boolean         @default(false) // ┘ç┘ä ┘è┘ê╪¼╪» ┘ü╪▒┘ê┘é╪ƒ
-  discrepancyType   String?         // SHORTAGE (┘å┘é╪╡) ╪ú┘ê EXCESS (╪▓┘è╪º╪»╪⌐)
-  discrepancyNotes  String?         // ╪¬┘ü╪º╪╡┘è┘ä ╪º┘ä┘ü╪▒┘ê┘é╪º╪¬
-
-  totalCost         Float?          @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¿╪╢╪º╪╣╪⌐ (┘ä┘ä╪ú╪»┘à┘å)
-  totalSellingPrice Float?          @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣ ┘ä┘ä╪¿╪╢╪º╪╣╪⌐
-  
+  receiverNotes     String?
+  hasDiscrepancy    Boolean         @default(false)
+  discrepancyType   String?
+  discrepancyNotes  String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
-  
+  totalCost         Float?          @default(0)
+  totalSellingPrice Float?          @default(0)
+  productSerials    ProductSerial[]
+  items             TransferItem[]
+  fromBranch        Branch?         @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  receivedByUser    User?           @relation("TransferReceivedBy", fields: [receivedBy], references: [id])
+  sentByUser        User            @relation("TransferSentBy", fields: [sentBy], references: [id])
+  toBranch          Branch          @relation("TransferTo", fields: [toBranchId], references: [id])
+
   @@index([fromBranchId])
   @@index([toBranchId])
   @@index([status])
@@ -699,61 +497,41 @@ model Transfer {
 }
 
 model TransferItem {
-  id                String      @id @default(uuid())
-  
+  id                String   @id @default(uuid())
   transferId        String
-  transfer          Transfer    @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  
-  productId         String      // ╪º┘ä┘à┘å╪¬╪¼ ┘à┘å Product Master
-  product           Product     @relation(fields: [productId], references: [id])
-  
-  // ╪º┘ä┘â┘à┘è╪º╪¬
-  quantityRequested Int         // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘à╪╖┘ä┘ê╪¿╪⌐
-  quantityReceived  Int?        // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘à╪│╪¬┘ä┘à╪⌐ ┘ü╪╣┘ä┘è╪º┘ï
-
-  costPrice         Float?      @default(0) // سعر التكلفة للقطعة
-  sellingPrice      Float?      @default(0) // سعر البيع بالجملة للقطعة (من المخزن الرئيسي للفروع)
-  retailPrice       Float?      @default(0) // سعر القطاعي للقطعة (لحساب قيمة البضاعة في الفروع)
-  
-  // ╪¡╪º┘ä╪⌐ ╪º┘ä╪╣┘å╪╡╪▒
-  status            String      @default("PENDING") // PENDING, DELIVERED, CANCELLED
-  
-  // ┘à┘ä╪º╪¡╪╕╪º╪¬
+  productId         String
+  quantityRequested Int
+  quantityReceived  Int?
+  status            String   @default("PENDING")
   notes             String?
-  
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  costPrice         Float?   @default(0)
+  sellingPrice      Float?   @default(0)
+  retailPrice       Float?   @default(0)
+  product           Product  @relation(fields: [productId], references: [id])
+  transfer          Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
   @@index([transferId])
   @@index([productId])
   @@map("transfer_items")
 }
 
-// =====================
-// Activity Log (╪¬╪¬╪¿╪╣ ┘å╪┤╪º╪╖ ╪º┘ä┘à╪│╪¬╪«╪»┘à┘è┘å)
-// =====================
-
 model ActivityLog {
-  id              String      @id @default(uuid())
-  
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
-  
-  action          String      // LOGIN, LOGOUT, SHIFT_OPEN, SHIFT_CLOSE, SALE, RETURN, TRANSFER_RECEIVE, etc.
-  entity          String?     // sale, product, transfer, etc.
-  entityId        String?
-  
-  description     String      // ┘ê╪╡┘ü ╪º┘ä┘å╪┤╪º╪╖
-  metadata        String?     // JSON string ┘ä┘ä╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪Ñ╪╢╪º┘ü┘è╪⌐
-  
-  ipAddress       String?
-  userAgent       String?
-  
-  branchId        String?
-  branch          Branch?     @relation(fields: [branchId], references: [id])
-  
-  createdAt       DateTime    @default(now())
-  
+  id          String   @id @default(uuid())
+  userId      String
+  action      String
+  entity      String?
+  entityId    String?
+  description String
+  metadata    String?
+  ipAddress   String?
+  userAgent   String?
+  branchId    String?
+  createdAt   DateTime @default(now())
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
   @@index([userId])
   @@index([branchId])
   @@index([action])
@@ -761,108 +539,75 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
-// =====================
-// Customers Management (╪º┘ä╪╣┘à┘ä╪º╪í)
-// =====================
-
 model Customer {
-  id              String            @id @default(uuid())
-  name            String
-  phone           String?           @unique
-  address         String?
-  notes           String?
-  isActive        Boolean           @default(true)
-  walletBalance   Float             @default(0)
-  
-  sales           Sale[]
-  payments        CustomerPayment[]
-  officeInvoices  OfficeInvoice[]
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id             String            @id @default(uuid())
+  name           String
+  phone          String?           @unique
+  address        String?
+  notes          String?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  walletBalance  Float             @default(0)
+  payments       CustomerPayment[]
+  officeInvoices OfficeInvoice[]
+  sales          Sale[]
+
   @@map("customers")
 }
 
 model CustomerPayment {
-  id              String            @id @default(uuid())
-  
+  id              String   @id @default(uuid())
   customerId      String
-  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  
   amount          Float
-  paymentMethod   String            // CASH, BANK_TRANSFER, CHECK
-  paymentDate     DateTime          @default(now())
-  
+  paymentMethod   String
+  paymentDate     DateTime @default(now())
   referenceNumber String?
   notes           String?
-  
   createdBy       String
-  
-  createdAt       DateTime          @default(now())
-  
+  createdAt       DateTime @default(now())
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
   @@index([customerId])
   @@index([paymentDate])
   @@map("customer_payments")
 }
 
-// =====================
-// Vault Management (┘å╪╕╪º┘à ╪º┘ä╪«╪▓┘è┘å╪⌐)
-// =====================
-
-// =====================
-// Vault Management (الخزائن المتعددة)
-// =====================
-
 model Vault {
-  id                String      @id @default(uuid())
-  name              String      @unique // اسم الخزينة
-  type              String      // CASH, VISA, WALLET
-  description       String?     // وصف الخزينة
-  balance           Float       @default(0)
-  isActive          Boolean     @default(true)
-  
-  transactions      VaultTransaction[]
-  
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  
+  id           String             @id @default(uuid())
+  name         String             @unique
+  type         String
+  description  String?
+  balance      Float              @default(0)
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  transactions VaultTransaction[]
+
   @@index([type])
   @@index([isActive])
   @@map("vaults")
 }
 
 model VaultTransaction {
-  id                String      @id @default(uuid())
-  
-  vaultId           String?     // الخزينة الجديدة
-  vault             Vault?      @relation(fields: [vaultId], references: [id])
-  
-  branchId          String?
-  branch            Branch?     @relation(fields: [branchId], references: [id])
-  
-  type              String      // CARD_PAYMENT, CASH_DEPOSIT, CASH_WITHDRAWAL, DRAWER_TRANSFER, OPENING_BALANCE, MONEY_TRANSFER_IN, MONEY_TRANSFER_OUT
-  amount            Float
-  
-  // For card payments
-  saleId            String?     // ╪Ñ╪░╪º ┘â╪º┘å╪¬ ┘à┘å ╪╣┘à┘ä┘è╪⌐ ╪¿┘è╪╣ ╪¿╪º┘ä┘ü┘è╪▓╪º
-  invoiceNumber     String?
-  
-  // For drawer transfers
-  shiftId           String?     // ╪Ñ╪░╪º ┘â╪º┘å╪¬ ╪¬╪¡┘ê┘è┘ä ┘à┘å/╪Ñ┘ä┘ë ╪º┘ä╪»╪▒╪¼
-  
-  // For money transfers
-  moneyTransferId   String?     // ╪Ñ╪░╪º ┘â╪º┘å╪¬ ╪¬╪¡┘ê┘è┘ä ╪ú┘à┘ê╪º┘ä ╪¿┘è┘å ┘ü╪▒┘ê╪╣
-  
-  description       String
-  notes             String?
-  
-  createdBy         String      // User ID
-  createdAt         DateTime    @default(now())
-  
-  balanceBefore     Float       // الرصيد قبل العملية
-  balanceAfter      Float       // الرصيد بعد العملية
-  
+  id              String   @id @default(uuid())
+  branchId        String?
+  type            String
+  amount          Float
+  saleId          String?
+  invoiceNumber   String?
+  shiftId         String?
+  moneyTransferId String?
+  description     String
+  notes           String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  balanceBefore   Float
+  balanceAfter    Float
+  vaultId         String?
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  vault           Vault?   @relation(fields: [vaultId], references: [id])
+
   @@index([vaultId])
   @@index([branchId])
   @@index([type])
@@ -872,33 +617,21 @@ model VaultTransaction {
   @@map("vault_transactions")
 }
 
-// =====================
-// Money Transfers (╪¬╪¡┘ê┘è┘ä╪º╪¬ ╪º┘ä╪ú┘à┘ê╪º┘ä ╪¿┘è┘å ╪º┘ä┘ü╪▒┘ê╪╣ ┘ê╪º┘ä┘à╪╡┘å╪╣)
-// =====================
-
 model MoneyTransfer {
-  id                String      @id @default(uuid())
-  
-  fromBranchId      String
-  fromBranch        Branch      @relation("MoneyTransferFrom", fields: [fromBranchId], references: [id])
-  
-  toBranchId        String
-  toBranch          Branch      @relation("MoneyTransferTo", fields: [toBranchId], references: [id])
-  
-  amount            Float
-  
-  status            String      @default("PENDING") // PENDING, CONFIRMED, CANCELLED
-  
-  // Tracking
-  sentBy            String      // Manager who sent
-  sentAt            DateTime    @default(now())
-  
-  confirmedBy       String?     // Admin/Manager who confirmed
-  confirmedAt       DateTime?
-  
-  notes             String?
-  reason            String?     // ╪│╪¿╪¿ ╪º┘ä╪¬╪¡┘ê┘è┘ä
-  
+  id           String    @id @default(uuid())
+  fromBranchId String
+  toBranchId   String
+  amount       Float
+  status       String    @default("PENDING")
+  sentBy       String
+  sentAt       DateTime  @default(now())
+  confirmedBy  String?
+  confirmedAt  DateTime?
+  notes        String?
+  reason       String?
+  fromBranch   Branch    @relation("MoneyTransferFrom", fields: [fromBranchId], references: [id])
+  toBranch     Branch    @relation("MoneyTransferTo", fields: [toBranchId], references: [id])
+
   @@index([fromBranchId])
   @@index([toBranchId])
   @@index([status])
@@ -906,54 +639,41 @@ model MoneyTransfer {
   @@map("money_transfers")
 }
 
-// =====================
-// Fabric Management (╪Ñ╪»╪º╪▒╪⌐ ╪º┘ä┘é┘à╪º╪┤)
-// =====================
-
-// ╪ú┘å┘ê╪º╪╣ ╪º┘ä╪«╪º┘à╪º╪¬
 model FabricType {
-  id              String              @id @default(uuid())
-  name            String              @unique // ╪º╪│┘à ╪º┘ä╪«╪º┘à╪⌐ (┘à╪½┘ä╪º┘ï: ┘é╪╖┘å╪î ╪¼┘è┘å╪▓╪î ╪¿┘ê┘ä┘è╪│╪¬╪▒)
-  pricePerMeter   Float               // ╪│╪╣╪▒ ╪º┘ä┘à╪¬╪▒
-  description     String?
-  isActive        Boolean             @default(true)
-  
-  fabricPurchases FabricPurchase[]
-  fabricStock     FabricStock[]
-  manufacturingOrders ManufacturingOrder[]
-  
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  
+  id                          String                        @id @default(uuid())
+  name                        String                        @unique
+  pricePerMeter               Float
+  description                 String?
+  isActive                    Boolean                       @default(true)
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
+  fabricPurchases             FabricPurchase[]
+  fabricStock                 FabricStock?
+  manufacturingOrderFabrics   ManufacturingOrderFabric[]
+  manufacturingOrders         ManufacturingOrder[]
+
   @@map("fabric_types")
 }
 
-// ┘à╪┤╪¬╪▒┘è╪º╪¬ ╪º┘ä┘é┘à╪º╪┤ ┘à┘å ╪º┘ä┘à┘ê╪▒╪»┘è┘å
 model FabricPurchase {
-  id              String      @id @default(uuid())
-  invoiceNumber   String      @unique
-  
+  id              String     @id @default(uuid())
+  invoiceNumber   String     @unique
   supplierId      String
-  supplier        Supplier    @relation(fields: [supplierId], references: [id])
-  
   fabricTypeId    String
-  fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id])
-  
-  meters          Float       // ╪╣╪»╪» ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪┤╪¬╪▒╪º╪⌐
-  pricePerMeter   Float       // ╪│╪╣╪▒ ╪º┘ä┘à╪¬╪▒ ┘ê┘é╪¬ ╪º┘ä╪┤╪▒╪º╪í
-  totalCost       Float       // ╪º┘ä╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è╪⌐ (┘à╪¡╪│┘ê╪¿╪⌐ ╪¬┘ä┘é╪º╪ª┘è╪º┘ï)
-  
-  paidAmount      Float       @default(0)
-  remainingAmount Float       @default(0)
-  paymentStatus   String      @default("PENDING") // PAID, PARTIAL, PENDING
-  
-  purchaseDate    DateTime    @default(now())
+  meters          Float
+  pricePerMeter   Float
+  totalCost       Float
+  paidAmount      Float      @default(0)
+  remainingAmount Float      @default(0)
+  paymentStatus   String     @default("PENDING")
+  purchaseDate    DateTime   @default(now())
   notes           String?
-  
   createdBy       String
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  fabricType      FabricType @relation(fields: [fabricTypeId], references: [id])
+  supplier        Supplier   @relation(fields: [supplierId], references: [id])
+
   @@index([supplierId])
   @@index([fabricTypeId])
   @@index([invoiceNumber])
@@ -961,70 +681,50 @@ model FabricPurchase {
   @@map("fabric_purchases")
 }
 
-// ┘à╪«╪▓┘å ╪º┘ä┘é┘à╪º╪┤
 model FabricStock {
-  id              String      @id @default(uuid())
-  
-  fabricTypeId    String
-  fabricType      FabricType  @relation(fields: [fabricTypeId], references: [id], onDelete: Cascade)
-  
-  availableMeters Float       // ╪╣╪»╪» ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪¬╪º╪¡╪⌐
-  reservedMeters  Float       @default(0) // ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪¡╪¼┘ê╪▓╪⌐ ┘ä┘ä╪¬╪╡┘å┘è╪╣
-  
-  // Tracking
-  totalPurchased  Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘à╪º ╪¬┘à ╪┤╪▒╪º╪ñ┘ç
-  totalUsed       Float       @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘à╪º ╪¬┘à ╪º╪│╪¬╪«╪»╪º┘à┘ç
-  
-  lastUpdated     DateTime    @updatedAt
-  createdAt       DateTime    @default(now())
-  
-  @@unique([fabricTypeId])
+  id              String     @id @default(uuid())
+  fabricTypeId    String     @unique
+  availableMeters Float
+  reservedMeters  Float      @default(0)
+  totalPurchased  Float      @default(0)
+  totalUsed       Float      @default(0)
+  lastUpdated     DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+  fabricType      FabricType @relation(fields: [fabricTypeId], references: [id], onDelete: Cascade)
+
   @@map("fabric_stock")
 }
 
-// ╪ú┘ê╪º┘à╪▒ ╪º┘ä╪¬╪╡┘å┘è╪╣ (╪Ñ╪▒╪│╪º┘ä ╪º┘ä┘é┘à╪º╪┤ ┘ä┘ä┘à┘ê╪▒╪» ┘ä┘ä╪¬╪╡┘å┘è╪╣)
 model ManufacturingOrder {
-  id                  String      @id @default(uuid())
-  orderNumber         String      @unique
-  
-  supplierId          String
-  supplier            Supplier    @relation(fields: [supplierId], references: [id])
-  
-  fabricTypeId        String
-  fabricType          FabricType  @relation(fields: [fabricTypeId], references: [id])
-  
-  // ╪º┘ä╪╡┘å┘ü ╪º┘ä┘à╪╖┘ä┘ê╪¿ ╪¬╪╡┘å┘è╪╣┘ç
-  productId           String?
-  product             Product?    @relation(fields: [productId], references: [id])
-  
-  metersUsed          Float       // ╪╣╪»╪» ╪º┘ä╪ú┘à╪¬╪º╪▒ ╪º┘ä┘à╪│╪¬╪«╪»┘à╪⌐
-  fabricCostPerMeter  Float       // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä┘à╪¬╪▒ ┘à┘å ╪º┘ä┘é┘à╪º╪┤
-  
-  status              String      @default("SENT") // SENT, IN_PRODUCTION, COMPLETED
-  
-  // ╪╣┘å╪» ╪º┘ä╪Ñ╪▒╪│╪º┘ä
-  sentDate            DateTime    @default(now())
-  sentBy              String
-  
-  // ╪╣┘å╪» ╪º┘ä╪º╪│╪¬┘ä╪º┘à
-  piecesReceived      Int?        // ╪╣╪»╪» ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪│╪¬┘ä┘à╪⌐
-  manufacturingCostPerPiece Float? // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¬╪╡┘å┘è╪╣ ┘ä┘ä┘é╪╖╪╣╪⌐
-  totalManufacturingCost    Float? // ╪Ñ╪¼┘à╪º┘ä┘è ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪¬╪╡┘å┘è╪╣
-  
-  paidAmount          Float       @default(0)
-  remainingAmount     Float       @default(0)
-  paymentStatus       String      @default("PENDING")
-  
-  receivedDate        DateTime?
-  receivedBy          String?
-  
-  notes               String?
-  
-  washingOrders       WashingOrder[]
-  
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-  
+  id                          String                        @id @default(uuid())
+  orderNumber                 String                        @unique
+  supplierId                  String
+  fabricTypeId                String?
+  productId                   String?
+  metersUsed                  Float?
+  fabricCostPerMeter          Float?
+  status                      String                        @default("SENT")
+  sentDate                    DateTime                      @default(now())
+  sentBy                      String
+  piecesReceived              Int?
+  manufacturingCostPerPiece   Float?
+  totalManufacturingCost      Float?
+  paidAmount                  Float                         @default(0)
+  remainingAmount             Float                         @default(0)
+  paymentStatus               String                        @default("PENDING")
+  receivedDate                DateTime?
+  receivedBy                  String?
+  notes                       String?
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
+  totalFabricCost             Float?
+  grandTotalCost              Float?
+  fabrics                     ManufacturingOrderFabric[]
+  fabricType                  FabricType?                   @relation(fields: [fabricTypeId], references: [id], onDelete: Restrict)
+  product                     Product?                      @relation(fields: [productId], references: [id])
+  supplier                    Supplier                      @relation(fields: [supplierId], references: [id])
+  washingOrders               WashingOrder[]
+
   @@index([supplierId])
   @@index([fabricTypeId])
   @@index([productId])
@@ -1033,45 +733,30 @@ model ManufacturingOrder {
   @@map("manufacturing_orders")
 }
 
-// ╪ú┘ê╪º┘à╪▒ ╪º┘ä╪║╪│┘è┘ä (╪Ñ╪▒╪│╪º┘ä ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪╡┘å╪╣╪⌐ ┘ä┘ä╪║╪│┘è┘ä)
 model WashingOrder {
-  id                      String              @id @default(uuid())
-  orderNumber             String              @unique
-  
-  supplierId              String
-  supplier                Supplier            @relation(fields: [supplierId], references: [id])
-  
-  manufacturingOrderId    String?
-  manufacturingOrder      ManufacturingOrder? @relation(fields: [manufacturingOrderId], references: [id])
-  
-  piecesSent              Int                 // ╪╣╪»╪» ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪▒╪│┘ä╪⌐
-  
-  status                  String              @default("SENT") // SENT, IN_WASHING, COMPLETED
-  
-  // ╪╣┘å╪» ╪º┘ä╪Ñ╪▒╪│╪º┘ä
-  sentDate                DateTime            @default(now())
-  sentBy                  String
-  
-  // ╪╣┘å╪» ╪º┘ä╪º╪│╪¬┘ä╪º┘à
-  piecesReceived          Int?                // ╪╣╪»╪» ╪º┘ä┘é╪╖╪╣ ╪º┘ä┘à╪│╪¬┘ä┘à╪⌐
-  washingCostPerPiece     Float?              // ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪║╪│┘è┘ä ┘ä┘ä┘é╪╖╪╣╪⌐
-  totalWashingCost        Float?              // ╪Ñ╪¼┘à╪º┘ä┘è ╪¬┘â┘ä┘ü╪⌐ ╪º┘ä╪║╪│┘è┘ä
-  
-  paidAmount              Float               @default(0)
-  remainingAmount         Float               @default(0)
-  paymentStatus           String              @default("PENDING")
-  
-  receivedDate            DateTime?
-  receivedBy              String?
-  
-  // ╪▒╪¿╪╖ ╪¿╪º┘ä┘à┘å╪¬╪¼ ╪º┘ä┘å┘ç╪º╪ª┘è
-  productId               String?             // ╪º┘ä┘à┘å╪¬╪¼ ╪º┘ä┘å┘ç╪º╪ª┘è ╪¿╪╣╪» ╪º┘â╪¬┘à╪º┘ä ╪º┘ä╪»┘ê╪▒╪⌐
-  
-  notes                   String?
-  
-  createdAt               DateTime            @default(now())
-  updatedAt               DateTime            @updatedAt
-  
+  id                   String              @id @default(uuid())
+  orderNumber          String              @unique
+  supplierId           String
+  manufacturingOrderId String?
+  piecesSent           Int
+  status               String              @default("SENT")
+  sentDate             DateTime            @default(now())
+  sentBy               String
+  piecesReceived       Int?
+  washingCostPerPiece  Float?
+  totalWashingCost     Float?
+  paidAmount           Float               @default(0)
+  remainingAmount      Float               @default(0)
+  paymentStatus        String              @default("PENDING")
+  receivedDate         DateTime?
+  receivedBy           String?
+  productId            String?
+  notes                String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  manufacturingOrder   ManufacturingOrder? @relation(fields: [manufacturingOrderId], references: [id])
+  supplier             Supplier            @relation(fields: [supplierId], references: [id])
+
   @@index([supplierId])
   @@index([manufacturingOrderId])
   @@index([status])
@@ -1079,62 +764,34 @@ model WashingOrder {
   @@map("washing_orders")
 }
 
-
-// =====================
-// Returns Management (┘å╪╕╪º┘à ╪º┘ä┘à╪▒╪¬╪¼╪╣╪º╪¬)
-// =====================
-
 model Return {
-  id                String        @id @default(uuid())
-  returnNumber      String        @unique // RET-YYYYMMDD-XXXXX
-  
-  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪º┘ä╪ú╪╡┘ä┘è╪⌐
-  saleId            String
-  sale              Sale          @relation(fields: [saleId], references: [id])
-  
-  branchId          String
-  branch            Branch        @relation(fields: [branchId], references: [id])
-  
-  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪╣┘à┘è┘ä
-  customerName      String?
-  customerPhone     String?
-  
-  // ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘à╪▒╪¬╪¼╪╣╪⌐
-  items             ReturnItem[]
-  
-  // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è (╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
-  totalSaleAmount   Float
-  // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è (╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐)
-  totalCostAmount   Float
-  
-  refundMethod      String        // CASH, CARD, EXCHANGE (┘å┘é╪»┘è/┘ü┘è╪▓╪º/╪º╪│╪¬╪¿╪»╪º┘ä)
-  
-  // ╪º┘ä╪│╪¿╪¿
-  returnReason      String        // ╪╣┘è╪¿ ╪¬╪╡┘å┘è╪╣/┘à┘é╪º╪│ ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/┘ä┘ê┘å ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/╪ú╪«╪▒┘ë
-  notes             String?
-  
-  // ╪¡╪º┘ä╪⌐ ╪º┘ä┘à╪▒╪¬╪¼╪╣
-  status            String        @default("PENDING_MANAGER") 
-  // PENDING_MANAGER ΓåÆ SENT_TO_LOCAL/SENT_TO_MAIN ΓåÆ COMPLETED
-  
-  // ┘é╪▒╪º╪▒ ╪º┘ä┘à╪º┘å╪¼╪▒ (┘ê╪¼┘ç╪⌐ ╪º┘ä┘à╪▒╪¬╪¼╪╣)
-  managerDecision   String?       // SEND_TO_LOCAL, SEND_TO_MAIN
-  managerNotes      String?
-  reviewedByManagerId String?
-  reviewedByManager User?         @relation("ReturnManagerReviewer", fields: [reviewedByManagerId], references: [id])
-  managerReviewAt   DateTime?
-  
-  // ╪¬┘à ╪Ñ╪▒╪¼╪º╪╣┘ç ┘ä┘ä┘à╪«╪▓┘ê┘å
-  returnedToInventory Boolean     @default(false)
+  id                    String       @id @default(uuid())
+  returnNumber          String       @unique
+  saleId                String
+  branchId              String
+  customerName          String?
+  customerPhone         String?
+  totalSaleAmount       Float
+  totalCostAmount       Float
+  refundMethod          String
+  returnReason          String
+  notes                 String?
+  status                String       @default("PENDING_MANAGER")
+  managerDecision       String?
+  managerNotes          String?
+  reviewedByManagerId   String?
+  managerReviewAt       DateTime?
+  returnedToInventory   Boolean      @default(false)
   returnedToInventoryAt DateTime?
-  
-  // ┘à┘å ┘é╪º┘à ╪¿╪Ñ┘å╪┤╪º╪í ╪º┘ä┘à╪▒╪¬╪¼╪╣ (╪º┘ä┘â╪º╪┤┘è╪▒)
-  createdById       String
-  createdBy         User          @relation("ReturnCreator", fields: [createdById], references: [id])
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  
+  createdById           String
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  items                 ReturnItem[]
+  branch                Branch       @relation(fields: [branchId], references: [id])
+  createdBy             User         @relation("ReturnCreator", fields: [createdById], references: [id])
+  reviewedByManager     User?        @relation("ReturnManagerReviewer", fields: [reviewedByManagerId], references: [id])
+  sale                  Sale         @relation(fields: [saleId], references: [id])
+
   @@index([saleId])
   @@index([branchId])
   @@index([status])
@@ -1144,97 +801,57 @@ model Return {
 }
 
 model ReturnItem {
-  id                String        @id @default(uuid())
-  
-  returnId          String
-  return            Return        @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  
-  productId         String
-  product           Product       @relation(fields: [productId], references: [id])
-  
-  quantity          Int
-  size              String?
-  
-  // ╪º┘ä╪│╪╣╪▒
-  unitSalePrice     Float         // ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣
-  unitCostPrice     Float         // ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐
-  totalSalePrice    Float         // ╪Ñ╪¼┘à╪º┘ä┘è ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣
-  totalCostPrice    Float         // ╪Ñ╪¼┘à╪º┘ä┘è ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐
-  
-  // ╪│╪¿╪¿ ╪º┘ä╪Ñ╪▒╪¼╪º╪╣ ┘ä┘â┘ä ┘à┘å╪¬╪¼
-  returnReason      String        // ╪╣┘è╪¿ ╪¬╪╡┘å┘è╪╣/┘à┘é╪º╪│ ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/┘ä┘ê┘å ╪║┘è╪▒ ┘à┘å╪º╪│╪¿/╪ú╪«╪▒┘ë
-  
-  // ╪¡╪º┘ä╪⌐ ╪º┘ä┘à┘å╪¬╪¼
-  condition         String        @default("GOOD") // GOOD, DAMAGED, DEFECTIVE
-  conditionNotes    String?
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  
+  id             String   @id @default(uuid())
+  returnId       String
+  productId      String
+  quantity       Int
+  size           String?
+  unitSalePrice  Float
+  unitCostPrice  Float
+  totalSalePrice Float
+  totalCostPrice Float
+  returnReason   String
+  condition      String   @default("GOOD")
+  conditionNotes String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  product        Product  @relation(fields: [productId], references: [id])
+  return         Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
   @@index([returnId])
   @@index([productId])
   @@map("return_items")
 }
 
-// =====================
-// Office Invoices Management (┘ü┘ê╪º╪¬┘è╪▒ ╪º┘ä┘à┘â╪¬╪¿/╪º┘ä┘à╪«╪▓┘å ╪º┘ä╪▒╪ª┘è╪│┘è)
-// =====================
-
 model OfficeInvoice {
-  id                String              @id @default(uuid())
-  invoiceNumber     String              @unique // OF-YYYYMMDD-XXXXX
-  
-  type              String              // REGULAR (╪▓╪¿┘ê┘å ╪╣╪º╪»┘è), SHIPMENT (╪┤╪¡┘å), CLIENT (╪╣┘à┘è┘ä)
-  
-  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪╣┘à┘è┘ä
-  customerId        String?
-  customer          Customer?           @relation(fields: [customerId], references: [id])
-  
-  customerName      String              // اسم العميل/الزبون
-  customerPhone     String?             // رقم الهاتف
-  
-  // بيانات البائع (موظف الجملة)
-  sellerId          String?
-  sellerName        String?             // اسم موظف الجملة البائع
-  seller            WholesaleEmployee?  @relation(fields: [sellerId], references: [id])
-  
-  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪┤╪¡┘å (╪Ñ╪░╪º ┘â╪º┘å Type = SHIPMENT)
-  shipmentCompany   String?             // ╪º╪│┘à ╪┤╪▒┘â╪⌐ ╪º┘ä╪┤╪¡┘å
-  shipmentBill      String?             // ╪▒┘é┘à ╪¿┘ê┘ä┘è╪╡╪⌐ ╪º┘ä╪┤╪¡┘å
-  
-  // ╪º┘ä╪ú╪╡┘å╪º┘ü
-  items             OfficeInvoiceItem[]
-  
-  // ╪º┘ä┘à╪¿╪º┘ä╪║
-  subtotal          Float               // ╪º┘ä┘à╪¼┘à┘ê╪╣ ┘é╪¿┘ä ╪º┘ä╪«╪╡┘à
-  discountAmount    Float               @default(0) // ╪º┘ä╪«╪╡┘à
-  total             Float               // ╪º┘ä╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä┘å┘ç╪º╪ª┘è
-  
-  // ╪º┘ä╪¬┘â┘ä┘ü╪⌐ (┘ä┘ä╪¡╪│╪º╪¿╪º╪¬ ╪º┘ä╪»╪º╪«┘ä┘è╪⌐)
-  totalCost         Float               // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪¬┘â┘ä┘ü╪⌐
-  profit            Float               // ╪º┘ä╪▒╪¿╪¡ (total - totalCost)
-  
-  // ╪º┘ä╪»┘ü╪╣
-  paymentMethod     String              // CASH (┘å┘é╪»┘è), CARD (┘ü┘è╪▓╪º), CREDIT (╪ó╪¼┘ä)
-  paidAmount        Float               @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪»┘ü┘ê╪╣
-  remainingAmount   Float               @default(0) // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪¬╪¿┘é┘è
-  
-  status            String              @default("PENDING") 
-  // PENDING (┘à╪╣┘ä┘é╪⌐), COMPLETED (┘à┘â╪¬┘à┘ä╪⌐), CANCELLED (┘à┘ä╪║╪º╪⌐)
-  // ┘ä┘ä╪┤╪¡┘å: SHIPPED (╪¬┘à ╪º┘ä╪┤╪¡┘å), DELIVERED (╪¬┘à ╪º┘ä╪¬╪│┘ä┘è┘à)
-  
-  // ╪▒╪¿╪╖ ╪¿╪º┘ä╪┤╪¡┘å╪⌐ ╪Ñ╪░╪º ┘â╪º┘å ╪┤╪¡┘å
-  shipment          Shipment?
-  
-  // ┘à┘ä╪º╪¡╪╕╪º╪¬
-  notes             String?
-  
-  // ┘à┘å ┘é╪º┘à ╪¿╪º┘ä╪Ñ┘å╪┤╪º╪í (╪º┘ä╪ú╪»┘à┘å)
-  createdBy         String
-  
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id              String              @id @default(uuid())
+  invoiceNumber   String              @unique
+  type            String
+  customerId      String?
+  customerName    String
+  customerPhone   String?
+  sellerId        String?
+  sellerName      String?
+  shipmentCompany String?
+  shipmentBill    String?
+  subtotal        Float
+  discountAmount  Float               @default(0)
+  total           Float
+  totalCost       Float
+  profit          Float
+  paymentMethod   String
+  paidAmount      Float               @default(0)
+  remainingAmount Float               @default(0)
+  status          String              @default("PENDING")
+  notes           String?
+  createdBy       String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  items           OfficeInvoiceItem[]
+  customer        Customer?           @relation(fields: [customerId], references: [id])
+  seller          WholesaleEmployee?  @relation(fields: [sellerId], references: [id])
+  shipment        Shipment?
+
   @@index([type])
   @@index([customerId])
   @@index([status])
@@ -1244,76 +861,47 @@ model OfficeInvoice {
 }
 
 model OfficeInvoiceItem {
-  id                String              @id @default(uuid())
-  
-  invoiceId         String
-  invoice           OfficeInvoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  
-  productId         String
-  product           Product             @relation(fields: [productId], references: [id])
-  
-  quantity          Int
-  size              String?
-  
-  // ╪º┘ä╪│╪╣╪▒ (╪º┘ä╪ú╪»┘à┘å ┘è╪¡╪»╪»┘ç)
-  unitCostPrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐
-  unitSalePrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣ (┘è╪¡╪»╪»┘ç ╪º┘ä╪ú╪»┘à┘å)
-  totalCost         Float               // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪¬┘â┘ä┘ü╪⌐
-  totalSale         Float               // ╪Ñ╪¼┘à╪º┘ä┘è ╪º┘ä╪¿┘è╪╣
-  
-  createdAt         DateTime            @default(now())
-  
+  id            String        @id @default(uuid())
+  invoiceId     String
+  productId     String
+  quantity      Int
+  size          String?
+  unitCostPrice Float
+  unitSalePrice Float
+  totalCost     Float
+  totalSale     Float
+  createdAt     DateTime      @default(now())
+  invoice       OfficeInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
   @@index([invoiceId])
   @@index([productId])
   @@map("office_invoice_items")
 }
 
-// =====================
-// Shipment Tracking (╪¬╪¬╪¿╪╣ ╪º┘ä╪┤╪¡┘å╪º╪¬)
-// =====================
-
 model Shipment {
-  id                String              @id @default(uuid())
-  shipmentNumber    String              @unique // SH-YYYYMMDD-XXXXX
-  
-  // ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪º┘ä┘à╪▒╪¬╪¿╪╖╪⌐
-  invoiceId         String              @unique
-  invoice           OfficeInvoice       @relation(fields: [invoiceId], references: [id])
-  
-  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪┤╪¡┘å
-  shipmentCompany   String              // ╪┤╪▒┘â╪⌐ ╪º┘ä╪┤╪¡┘å
-  shipmentBill      String              // ╪▒┘é┘à ╪¿┘ê┘ä┘è╪╡╪⌐ ╪º┘ä╪┤╪¡┘å
-  
-  // ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪╣┘à┘è┘ä
-  customerName      String
-  customerPhone     String?
-  customerAddress   String?
-  
-  // ╪¡╪º┘ä╪⌐ ╪º┘ä╪┤╪¡┘å
-  status            String              @default("PENDING")
-  // PENDING (┘é┘è╪» ╪º┘ä╪Ñ┘å╪¬╪╕╪º╪▒), SHIPPED (╪¬┘à ╪º┘ä╪┤╪¡┘å), IN_TRANSIT (┘ü┘è ╪º┘ä╪╖╪▒┘è┘é), 
-  // DELIVERED (╪¬┘à ╪º┘ä╪¬╪│┘ä┘è┘à), RETURNED (╪¬┘à ╪º┘ä╪Ñ╪▒╪¼╪º╪╣)
-  
-  // ╪¬┘ê╪º╪▒┘è╪«
-  shippedAt         DateTime?           // ╪¬╪º╪▒┘è╪« ╪º┘ä╪┤╪¡┘å
-  estimatedDelivery DateTime?           // ╪º┘ä╪¬╪º╪▒┘è╪« ╪º┘ä┘à╪¬┘ê┘é╪╣ ┘ä┘ä╪¬╪│┘ä┘è┘à
-  deliveredAt       DateTime?           // ╪¬╪º╪▒┘è╪« ╪º┘ä╪¬╪│┘ä┘è┘à ╪º┘ä┘ü╪╣┘ä┘è
-  
-  // ╪º┘ä╪»┘ü╪╣
-  paymentCollected  Boolean             @default(false) // ┘ç┘ä ╪¬┘à ╪¬╪¡╪╡┘è┘ä ╪º┘ä┘à╪¿┘ä╪║ ┘à┘å ╪┤╪▒┘â╪⌐ ╪º┘ä╪┤╪¡┘å╪ƒ
-  paymentCollectedAt DateTime?          // ╪¬╪º╪▒┘è╪« ╪º┘ä╪¬╪¡╪╡┘è┘ä
-  collectedAmount   Float?              // ╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪¡╪╡┘ä
-  
-  // ┘à┘ä╪º╪¡╪╕╪º╪¬
-  notes             String?
-  trackingNotes     String?             // ┘à┘ä╪º╪¡╪╕╪º╪¬ ╪º┘ä╪¬╪¬╪¿╪╣
-  
-  // ┘à┘å ┘é╪º┘à ╪¿╪º┘ä╪¬╪¡╪»┘è╪½
-  updatedBy         String?
-  
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id                 String        @id @default(uuid())
+  shipmentNumber     String        @unique
+  invoiceId          String        @unique
+  shipmentCompany    String
+  shipmentBill       String
+  customerName       String
+  customerPhone      String?
+  customerAddress    String?
+  status             String        @default("PENDING")
+  shippedAt          DateTime?
+  estimatedDelivery  DateTime?
+  deliveredAt        DateTime?
+  paymentCollected   Boolean       @default(false)
+  paymentCollectedAt DateTime?
+  collectedAmount    Float?
+  notes              String?
+  trackingNotes      String?
+  updatedBy          String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  invoice            OfficeInvoice @relation(fields: [invoiceId], references: [id])
+
   @@index([status])
   @@index([shipmentNumber])
   @@index([shipmentCompany])
@@ -1321,50 +909,29 @@ model Shipment {
   @@map("shipments")
 }
 
-// =====================
-// Inventory Audit (╪¼╪▒╪» ╪º┘ä┘à╪«╪▓┘ê┘å)
-// =====================
-
 model InventoryAudit {
-  id                String              @id @default(uuid())
-  auditNumber       String              @unique // AUD-YYYYMMDD-XXXXX
-  
-  // ╪º┘ä┘ü╪▒╪╣ ╪º┘ä┘ä┘è ╪¿┘è╪¬╪╣┘à┘ä┘ç ╪¼╪▒╪»
-  branchId          String
-  branch            Branch              @relation(fields: [branchId], references: [id])
-  
-  // ╪¡╪º┘ä╪⌐ ╪º┘ä╪¼╪▒╪»
-  status            String              @default("IN_PROGRESS")
-  // IN_PROGRESS (╪¼╪º╪▒┘è ╪º┘ä╪¼╪▒╪»), COMPLETED (╪º┘â╪¬┘à┘ä), SETTLED (╪¬┘à╪¬ ╪º┘ä╪¬╪│┘ê┘è╪⌐)
-  
-  // ┘à┘ä╪«╪╡ ╪º┘ä╪¼╪▒╪»
-  totalItems        Int                 @default(0) // ╪╣╪»╪» ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘à╪¼╪▒╪»╪⌐
-  itemsWithShortage Int                 @default(0) // ╪╣╪»╪» ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘ä┘è ┘ü┘è┘ç╪º ╪╣╪¼╪▓
-  itemsWithSurplus  Int                 @default(0) // ╪╣╪»╪» ╪º┘ä╪ú╪╡┘å╪º┘ü ╪º┘ä┘ä┘è ┘ü┘è┘ç╪º ╪▓┘è╪º╪»╪⌐
-  
-  totalShortageQty  Int                 @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘â┘à┘è╪⌐ ╪º┘ä╪╣╪¼╪▓
-  totalSurplusQty   Int                 @default(0) // ╪Ñ╪¼┘à╪º┘ä┘è ┘â┘à┘è╪⌐ ╪º┘ä╪▓┘è╪º╪»╪⌐
-  totalShortageValue Float              @default(0) // ┘é┘è┘à╪⌐ ╪º┘ä╪╣╪¼╪▓ (╪¿╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
-  totalSurplusValue Float               @default(0) // ┘é┘è┘à╪⌐ ╪º┘ä╪▓┘è╪º╪»╪⌐ (╪¿╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
-  
-  // ┘à┘å ┘é╪º┘à ╪¿╪º┘ä╪¼╪▒╪» ┘ê╪º┘ä╪¬╪│┘ê┘è╪⌐
-  createdBy         String
-  createdByUser     User                @relation("AuditCreator", fields: [createdBy], references: [id])
-  
-  settledBy         String?
-  settledByUser     User?               @relation("AuditSettler", fields: [settledBy], references: [id])
-  settledAt         DateTime?           // ╪¬╪º╪▒┘è╪« ╪º┘ä╪¬╪│┘ê┘è╪⌐
-  
-  // ┘à┘ä╪º╪¡╪╕╪º╪¬
-  notes             String?
-  
-  // ╪º┘ä╪¬┘ê╪º╪▒┘è╪«
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
-  // ╪º┘ä╪╣┘ä╪º┘é╪º╪¬
-  items             InventoryAuditItem[]
-  
+  id                 String               @id @default(uuid())
+  auditNumber        String               @unique
+  branchId           String
+  status             String               @default("IN_PROGRESS")
+  totalItems         Int                  @default(0)
+  itemsWithShortage  Int                  @default(0)
+  itemsWithSurplus   Int                  @default(0)
+  totalShortageQty   Int                  @default(0)
+  totalSurplusQty    Int                  @default(0)
+  totalShortageValue Float                @default(0)
+  totalSurplusValue  Float                @default(0)
+  createdBy          String
+  settledBy          String?
+  settledAt          DateTime?
+  notes              String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  items              InventoryAuditItem[]
+  branch             Branch               @relation(fields: [branchId], references: [id])
+  createdByUser      User                 @relation("AuditCreator", fields: [createdBy], references: [id])
+  settledByUser      User?                @relation("AuditSettler", fields: [settledBy], references: [id])
+
   @@index([branchId])
   @@index([status])
   @@index([auditNumber])
@@ -1373,57 +940,54 @@ model InventoryAudit {
 }
 
 model InventoryAuditItem {
-  id                String              @id @default(uuid())
-  
-  // ╪º┘ä╪¼╪▒╪» ╪º┘ä┘à╪▒╪¬╪¿╪╖
-  auditId           String
-  audit             InventoryAudit      @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  
-  // ╪º┘ä┘à┘å╪¬╪¼
-  productId         String
-  product           Product             @relation(fields: [productId], references: [id])
-  
-  // ╪º┘ä┘â┘à┘è╪º╪¬
-  expectedQty       Int                 // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘à╪¬┘ê┘é╪╣╪⌐ (┘à┘å ╪º┘ä┘å╪╕╪º┘à)
-  returnedQty       Int                 @default(0) // ┘â┘à┘è╪⌐ ╪º┘ä┘à╪▒╪¬╪¼╪╣╪º╪¬
-  actualQty         Int?                // ╪º┘ä┘â┘à┘è╪⌐ ╪º┘ä┘ü╪╣┘ä┘è╪⌐ (╪º┘ä┘ä┘è ┘ä┘é┘è╪¬┘ç╪º ┘ü┘è ╪º┘ä╪¼╪▒╪»)
-  
-  // ╪º┘ä┘ü╪▒┘é
-  differenceQty     Int?                // ╪º┘ä┘ü╪▒┘é = actualQty - (expectedQty + returnedQty)
-  differenceType    String?             // SHORTAGE (╪╣╪¼╪▓), SURPLUS (╪▓┘è╪º╪»╪⌐), MATCHED (┘à╪╖╪º╪¿┘é)
-  differenceValue   Float?              // ┘é┘è┘à╪⌐ ╪º┘ä┘ü╪▒┘é (╪¿╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣)
-  
-  // ╪º┘ä╪│╪╣╪▒ ┘ê┘é╪¬ ╪º┘ä╪¼╪▒╪»
-  unitCostPrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¬┘â┘ä┘ü╪⌐ ┘ä┘ä┘é╪╖╪╣╪⌐ (┘ä┘ä╪«╪│╪º╪▒╪⌐ ╪º┘ä┘ü╪╣┘ä┘è╪⌐)
-  unitSalePrice     Float               // ╪│╪╣╪▒ ╪º┘ä╪¿┘è╪╣ ┘ä┘ä┘é╪╖╪╣╪⌐
-  
-  // ┘à┘ä╪º╪¡╪╕╪º╪¬
-  notes             String?
-  
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
+  id              String         @id @default(uuid())
+  auditId         String
+  productId       String
+  expectedQty     Int
+  returnedQty     Int            @default(0)
+  actualQty       Int?
+  differenceQty   Int?
+  differenceType  String?
+  differenceValue Float?
+  unitSalePrice   Float
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  unitCostPrice   Float
+  audit           InventoryAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  product         Product        @relation(fields: [productId], references: [id])
+
   @@index([auditId])
   @@index([productId])
   @@map("inventory_audit_items")
 }
 
-// =====================
-// Wholesale Sales Employees (موظفين مبيعات الجملة بالمكتب)
-// =====================
-
 model WholesaleEmployee {
-  id              String            @id @default(uuid())
-  name            String
-  phone           String?
-  email           String?
-  notes           String?
-  isActive        Boolean           @default(true)
-  
-  officeInvoices  OfficeInvoice[]
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id             String          @id @default(uuid())
+  name           String
+  phone          String?
+  email          String?
+  notes          String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  officeInvoices OfficeInvoice[]
+
   @@map("wholesale_employees")
+}
+
+model ManufacturingOrderFabric {
+  id                   String             @id @default(uuid())
+  manufacturingOrderId String
+  fabricTypeId         String
+  metersUsed           Float
+  fabricCostPerMeter   Float
+  totalFabricCost      Float
+  createdAt            DateTime           @default(now())
+  fabricType           FabricType         @relation(fields: [fabricTypeId], references: [id])
+  manufacturingOrder   ManufacturingOrder @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+
+  @@index([fabricTypeId])
+  @@index([manufacturingOrderId])
+  @@map("manufacturing_order_fabrics")
 }

@@ -323,9 +323,9 @@ exports.deleteCompletedWashingOrder = async (req, res) => {
 exports.makePayment = async (req, res) => {
   try {
     const { supplierId } = req.params;
-    const { amount, paymentMethod, vaultType, referenceNumber, notes, invoiceAllocations } = req.body;
+    const { amount, paymentMethod, vaultId, vaultType, referenceNumber, notes, invoiceAllocations } = req.body;
 
-    const amountFloat = parseFloat(amount);
+    const amountFloat = parseFloat(amount) || 0;
 
     const result = await prisma.$transaction(async (tx) => {
       // Create payment
@@ -340,12 +340,12 @@ exports.makePayment = async (req, res) => {
         }
       });
 
-      // ╪Ñ╪░╪º ┘â╪º┘å ┘ü┘è ╪¬┘ê╪▓┘è╪╣ ╪╣┘ä┘ë ╪º┘ä┘ü┘ê╪º╪¬┘è╪▒╪î ┘å╪¡╪»╪½ ┘â┘ä ┘ü╪º╪¬┘ê╪▒╪⌐
+      // إذا كان في توزيع على الفواتير، نحدث كل فاتورة
       if (invoiceAllocations && invoiceAllocations.length > 0) {
         for (const allocation of invoiceAllocations) {
           const allocAmount = parseFloat(allocation.amount);
           
-          // ╪¬╪¡╪»┘è╪½ ╪º┘ä┘ü╪º╪¬┘ê╪▒╪⌐ ╪¡╪│╪¿ ╪º┘ä┘å┘ê╪╣
+          // تحديث الفاتورة حسب النوع
           if (allocation.type === 'FABRIC') {
             const purchase = await tx.fabricPurchase.findUnique({
               where: { id: allocation.id }
@@ -398,42 +398,42 @@ exports.makePayment = async (req, res) => {
                   paymentStatus
                 }
               });
-            } else if (allocation.type === 'PURCHASE' || allocation.type === 'READY') {
-              const purchase = await tx.purchase.findUnique({
-                where: { id: allocation.id }
+            }
+          } else if (allocation.type === 'PURCHASE' || allocation.type === 'READY') {
+            const purchase = await tx.purchase.findUnique({
+              where: { id: allocation.id }
+            });
+            if (purchase) {
+              const totalAmount = purchase.totalAmount || 0;
+              const newPaidAmount = (purchase.paidAmount || 0) + allocAmount;
+              const newRemainingAmount = Math.max(0, totalAmount - newPaidAmount);
+              const status = newRemainingAmount <= 0 ? 'COMPLETED' : 'PENDING';
+              await tx.purchase.update({
+                where: { id: allocation.id },
+                data: {
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  status
+                }
               });
-              if (purchase) {
-                const totalAmount = purchase.totalAmount || 0;
-                const newPaidAmount = (purchase.paidAmount || 0) + allocAmount;
-                const newRemainingAmount = Math.max(0, totalAmount - newPaidAmount);
-                const status = newRemainingAmount <= 0 ? 'COMPLETED' : 'PENDING';
-                await tx.purchase.update({
-                  where: { id: allocation.id },
-                  data: {
-                    paidAmount: newPaidAmount,
-                    remainingAmount: newRemainingAmount,
-                    status
-                  }
-                });
-              }
-            } else if (allocation.type === 'MISCELLANEOUS') {
-              const expense = await tx.miscellaneousExpense.findUnique({
-                where: { id: allocation.id }
+            }
+          } else if (allocation.type === 'MISCELLANEOUS') {
+            const expense = await tx.miscellaneousExpense.findUnique({
+              where: { id: allocation.id }
+            });
+            if (expense) {
+              const totalAmount = expense.totalAmount || 0;
+              const newPaidAmount = (expense.paidAmount || 0) + allocAmount;
+              const newRemainingAmount = Math.max(0, totalAmount - newPaidAmount);
+              const paymentStatus = newRemainingAmount <= 0 ? 'PAID' : newPaidAmount > 0 ? 'PARTIAL' : 'PENDING';
+              await tx.miscellaneousExpense.update({
+                where: { id: allocation.id },
+                data: {
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  paymentStatus
+                }
               });
-              if (expense) {
-                const totalAmount = expense.totalAmount || 0;
-                const newPaidAmount = (expense.paidAmount || 0) + allocAmount;
-                const newRemainingAmount = Math.max(0, totalAmount - newPaidAmount);
-                const paymentStatus = newRemainingAmount <= 0 ? 'PAID' : newPaidAmount > 0 ? 'PARTIAL' : 'PENDING';
-                await tx.miscellaneousExpense.update({
-                  where: { id: allocation.id },
-                  data: {
-                    paidAmount: newPaidAmount,
-                    remainingAmount: newRemainingAmount,
-                    paymentStatus
-                  }
-                });
-              }
             }
           }
         }
@@ -448,39 +448,76 @@ exports.makePayment = async (req, res) => {
         }
       });
 
-      // Deduct from Branch Vault based on vaultType/paymentMethod
-      const selectedVaultType = vaultType || paymentMethod || 'CASH';
-      let balanceField = 'vaultBalance';
-      if (selectedVaultType === 'CARD') balanceField = 'cardVaultBalance';
-      if (selectedVaultType === 'WALLET') balanceField = 'walletBalance';
+      // الخصم من الخزينة المختارة
+      if (vaultId && amountFloat > 0) {
+        const vault = await tx.vault.findUnique({
+          where: { id: vaultId }
+        });
 
-      const branch = await tx.branch.findFirst({
-        where: req.user?.branchId ? { id: req.user.branchId } : { code: 'MAIN' }
-      });
+        if (!vault) {
+          throw new Error('الخزينة المحددة غير موجودة');
+        }
 
-      if (branch) {
-        const balanceBefore = branch[balanceField] || 0;
+        const balanceBefore = vault.balance;
         const balanceAfter = balanceBefore - amountFloat;
 
-        await tx.branch.update({
-          where: { id: branch.id },
+        await tx.vault.update({
+          where: { id: vaultId },
           data: {
-            [balanceField]: balanceAfter
+            balance: {
+              decrement: amountFloat
+            }
           }
         });
 
         await tx.vaultTransaction.create({
           data: {
-            branchId: branch.id,
+            vaultId: vault.id,
+            branchId: req.user?.branchId || null,
             type: 'CASH_WITHDRAWAL',
             amount: amountFloat,
-            description: `سداد مستحقات مورد: ${supplier.name} (${selectedVaultType})`,
-            notes: notes || 'سداد مستحقات مورد',
+            description: `سداد مستحقات مورد: ${supplier.name} (${vault.name})`,
+            notes: notes || referenceNumber || 'سداد مستحقات مورد',
             createdBy: req.user?.id || 'SYSTEM',
             balanceBefore,
             balanceAfter
           }
         });
+      } else if (amountFloat > 0) {
+        // Deduct from Branch Vault based on vaultType/paymentMethod (Legacy Fallback)
+        const selectedVaultType = vaultType || paymentMethod || 'CASH';
+        let balanceField = 'vaultBalance';
+        if (selectedVaultType === 'CARD') balanceField = 'cardVaultBalance';
+        if (selectedVaultType === 'WALLET') balanceField = 'walletBalance';
+
+        const branch = await tx.branch.findFirst({
+          where: req.user?.branchId ? { id: req.user.branchId } : { code: 'MAIN' }
+        });
+
+        if (branch) {
+          const balanceBefore = branch[balanceField] || 0;
+          const balanceAfter = balanceBefore - amountFloat;
+
+          await tx.branch.update({
+            where: { id: branch.id },
+            data: {
+              [balanceField]: balanceAfter
+            }
+          });
+
+          await tx.vaultTransaction.create({
+            data: {
+              branchId: branch.id,
+              type: 'CASH_WITHDRAWAL',
+              amount: amountFloat,
+              description: `سداد مستحقات مورد: ${supplier.name} (${selectedVaultType})`,
+              notes: notes || 'سداد مستحقات مورد',
+              createdBy: req.user?.id || 'SYSTEM',
+              balanceBefore,
+              balanceAfter
+            }
+          });
+        }
       }
 
       return payment;
@@ -488,14 +525,14 @@ exports.makePayment = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: '╪¬┘à ╪¬╪│╪¼┘è┘ä ╪º┘ä╪»┘ü╪╣╪⌐ ╪¿┘å╪¼╪º╪¡',
+      message: 'تم تسجيل الدفعة بنجاح',
       data: result
     });
   } catch (error) {
     console.error('Error making payment:', error);
     res.status(500).json({
       success: false,
-      message: '┘ü╪┤┘ä ┘ü┘è ╪¬╪│╪¼┘è┘ä ╪º┘ä╪»┘ü╪╣╪⌐'
+      message: error.message || 'فشل في تسجيل الدفعة'
     });
   }
 };

@@ -150,9 +150,10 @@ exports.createOfficeInvoice = async (req, res) => {
       }
     }
     
-    // فواتير الشحن: الفلوس متتحسبش مدفوعة إلا بعد تأكيد الاستلام
-    const actualPaidAmount = type === 'SHIPMENT' ? 0 : (paidAmount + walletDeduction);
-    const remainingAmount = total - actualPaidAmount;
+    // حساب المبلغ المدفوع والمتبقي
+    const parsedPaid = parseFloat(paidAmount) || 0;
+    const actualPaidAmount = type === 'SHIPMENT' ? 0 : (parsedPaid + walletDeduction);
+    const remainingAmount = Math.max(0, total - actualPaidAmount);
 
     // إنشاء رقم الفاتورة
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
@@ -180,7 +181,7 @@ exports.createOfficeInvoice = async (req, res) => {
           paymentMethod,
           paidAmount: actualPaidAmount,
           remainingAmount,
-          status: type === 'SHIPMENT' ? 'PENDING' : (remainingAmount > 0 ? 'PENDING' : 'COMPLETED'),
+          status: type === 'SHIPMENT' ? 'PENDING' : (remainingAmount <= 0.01 ? 'COMPLETED' : 'PENDING'),
           sellerId: sellerId || null,
           sellerName: inputSellerName || null,
           notes,
@@ -259,8 +260,8 @@ exports.createOfficeInvoice = async (req, res) => {
         });
       }
 
-      // 4. إضافة للخزينة فقط إذا لم يكن شحن
-      if (type !== 'SHIPMENT' && vaultId && (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'WALLET') && actualPaidAmount > 0) {
+      // 4. إضافة للخزينة فقط إذا لم يكن شحن وتم دفع مبلغ
+      if (type !== 'SHIPMENT' && vaultId && actualPaidAmount > 0) {
         // جلب بيانات الخزينة
         const vault = await tx.vault.findUnique({
           where: { id: vaultId }
@@ -283,15 +284,21 @@ exports.createOfficeInvoice = async (req, res) => {
           }
         });
 
+        const txDescription = paymentMethod === 'CREDIT'
+          ? `فاتورة مكتب آجل ${invoiceNumber} - ${customerName} (دفعة مقدمة)`
+          : `فاتورة مكتب ${invoiceNumber} - ${customerName}`;
+
+        const txType = paymentMethod === 'CARD' ? 'CARD_PAYMENT' : (paymentMethod === 'WALLET' ? 'WALLET_PAYMENT' : 'CASH_DEPOSIT');
+
         // تسجيل المعاملة
         await tx.vaultTransaction.create({
           data: {
             vaultId,
             branchId: mainWarehouse.id,
-            type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : (paymentMethod === 'CARD' ? 'CARD_PAYMENT' : 'WALLET_PAYMENT'),
+            type: txType,
             amount: actualPaidAmount,
-            description: `فاتورة مكتب ${invoiceNumber} - ${customerName}`,
-            notes: `دفعة من ${customerName}`,
+            description: txDescription,
+            notes: notes || `دفعة من ${customerName}`,
             createdBy,
             balanceBefore,
             balanceAfter

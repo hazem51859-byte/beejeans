@@ -1140,16 +1140,21 @@ export default function MonthlyReport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {manufacturingOrders.map(order => (
-                    <tr key={order.id} className="border-b hover:bg-gray-50">
-                      <td className="p-2 text-center font-mono">#{order.orderNumber}</td>
-                      <td className="p-2">{order.supplier?.name}</td>
-                      <td className="p-2 text-center">{order.metersUsed?.toFixed(2)} متر</td>
-                      <td className="p-2 text-center font-medium">{order.piecesReceived} قطعة</td>
-                      <td className="p-2 text-center font-bold text-green-700">{order.totalManufacturingCost?.toFixed(2)} ج.م</td>
-                      <td className="p-2 text-center">{new Date(order.receivedDate).toLocaleDateString('ar-EG')}</td>
-                    </tr>
-                  ))}
+                    {manufacturingOrders.map(order => {
+                      const totalMeters = order.fabrics && order.fabrics.length > 0
+                        ? order.fabrics.reduce((s, f) => s + (f.metersUsed || 0), 0)
+                        : (order.metersUsed || 0);
+                      return (
+                        <tr key={order.id} className="border-b hover:bg-gray-50">
+                          <td className="p-2 text-center font-mono">#{order.orderNumber}</td>
+                          <td className="p-2">{order.supplier?.name}</td>
+                          <td className="p-2 text-center">{totalMeters.toFixed(2)} متر</td>
+                          <td className="p-2 text-center font-medium">{order.piecesReceived} قطعة</td>
+                          <td className="p-2 text-center font-bold text-green-700">{order.totalManufacturingCost?.toFixed(2)} ج.م</td>
+                          <td className="p-2 text-center">{order.receivedDate ? new Date(order.receivedDate).toLocaleDateString('ar-EG') : '-'}</td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

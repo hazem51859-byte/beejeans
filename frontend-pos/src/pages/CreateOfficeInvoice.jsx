@@ -750,8 +750,6 @@ export default function CreateOfficeInvoice() {
               className="w-full p-3 border rounded-lg"
             >
               <option value="CASH">💵 نقدي</option>
-              <option value="CARD">💳 فيزا</option>
-              <option value="WALLET">📱 محفظة إلكترونية</option>
               <option value="CREDIT">📝 آجل</option>
             </select>
           </div>

@@ -278,11 +278,11 @@ export default function Partners() {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('ar-EG', {
-      style: 'currency',
-      currency: 'EGP',
+    return new Intl.NumberFormat('en-US', {
+      style: 'decimal',
       minimumFractionDigits: 2,
-    }).format(amount || 0);
+      maximumFractionDigits: 2,
+    }).format(amount || 0) + ' ج.م';
   };
 
   if (loadingPartners || loadingAccounting) {

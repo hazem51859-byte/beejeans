@@ -1,0 +1,141 @@
+{
+  "exportDate": "2026-09-15T06:26:20.041Z",
+  "fabricTypes": [
+    {
+      "id": "fd4484a8-3b45-4a6c-b161-9c146ba5523b",
+      "name": "بوي فريند مخلوط",
+      "pricePerMeter": 155,
+      "description": null,
+      "isActive": true,
+      "createdAt": "2026-09-15T02:20:08.823Z",
+      "updatedAt": "2026-09-15T06:17:22.405Z"
+    },
+    {
+      "id": "b364b74a-2950-4bd4-86bd-b6608b702e5d",
+      "name": "سلوشي",
+      "pricePerMeter": 184,
+      "description": null,
+      "isActive": true,
+      "createdAt": "2026-09-15T02:20:08.820Z",
+      "updatedAt": "2026-09-15T06:17:22.400Z"
+    },
+    {
+      "id": "33cafd94-1e4f-47a8-b6b8-9e631636a9c3",
+      "name": "سوبر قطن",
+      "pricePerMeter": 150,
+      "description": "مستورد من ملف الخامات",
+      "isActive": true,
+      "createdAt": "2026-09-15T03:04:00.526Z",
+      "updatedAt": "2026-09-15T06:17:22.403Z"
+    },
+    {
+      "id": "14125cd5-92c1-45d5-90e2-798770bd4cc4",
+      "name": "كارين",
+      "pricePerMeter": 147.29,
+      "description": null,
+      "isActive": true,
+      "createdAt": "2026-09-15T02:20:08.824Z",
+      "updatedAt": "2026-09-15T06:17:22.406Z"
+    },
+    {
+      "id": "a4c8d85f-67be-452e-9b86-658a81ac745e",
+      "name": "نيو فيجن كحلي",
+      "pricePerMeter": 166,
+      "description": null,
+      "isActive": true,
+      "createdAt": "2026-09-15T02:20:08.815Z",
+      "updatedAt": "2026-09-15T06:17:22.396Z"
+    },
+    {
+      "id": "456be880-ae59-4f07-874a-f1700d3368dc",
+      "name": "نيو فيجن محجر",
+      "pricePerMeter": 166,
+      "description": null,
+      "isActive": true,
+      "createdAt": "2026-09-15T02:20:08.821Z",
+      "updatedAt": "2026-09-15T06:17:22.402Z"
+    }
+  ],
+  "fabricStock": [
+    {
+      "id": "1f579050-8bd2-4301-a6d0-54542cbf733b",
+      "fabricTypeId": "a4c8d85f-67be-452e-9b86-658a81ac745e",
+      "availableMeters": 2511,
+      "reservedMeters": 0,
+      "totalPurchased": 2511,
+      "totalUsed": 0,
+      "lastUpdated": "2026-09-15T02:20:08.818Z",
+      "createdAt": "2026-09-15T02:20:08.818Z",
+      "fabricType": {
+        "name": "نيو فيجن كحلي"
+      }
+    },
+    {
+      "id": "0b3d0e00-4656-4c7b-985c-b8f902f0802b",
+      "fabricTypeId": "b364b74a-2950-4bd4-86bd-b6608b702e5d",
+      "availableMeters": 822,
+      "reservedMeters": 0,
+      "totalPurchased": 822,
+      "totalUsed": 0,
+      "lastUpdated": "2026-09-15T02:20:08.820Z",
+      "createdAt": "2026-09-15T02:20:08.820Z",
+      "fabricType": {
+        "name": "سلوشي"
+      }
+    },
+    {
+      "id": "db85c2a0-73b3-4501-b88c-d6f2d796275d",
+      "fabricTypeId": "456be880-ae59-4f07-874a-f1700d3368dc",
+      "availableMeters": 401,
+      "reservedMeters": 0,
+      "totalPurchased": 401,
+      "totalUsed": 0,
+      "lastUpdated": "2026-09-15T02:20:08.822Z",
+      "createdAt": "2026-09-15T02:20:08.822Z",
+      "fabricType": {
+        "name": "نيو فيجن محجر"
+      }
+    },
+    {
+      "id": "6a379245-bdb5-4b55-a218-b9db2bac85c4",
+      "fabricTypeId": "fd4484a8-3b45-4a6c-b161-9c146ba5523b",
+      "availableMeters": 26,
+      "reservedMeters": 0,
+      "totalPurchased": 26,
+      "totalUsed": 0,
+      "lastUpdated": "2026-09-15T02:20:08.824Z",
+      "createdAt": "2026-09-15T02:20:08.824Z",
+      "fabricType": {
+        "name": "بوي فريند مخلوط"
+      }
+    },
+    {
+      "id": "b4d90071-3302-4d01-a63d-c7f943a9a7cd",
+      "fabricTypeId": "14125cd5-92c1-45d5-90e2-798770bd4cc4",
+      "availableMeters": 116,
+      "reservedMeters": 0,
+      "totalPurchased": 116,
+      "totalUsed": 0,
+      "lastUpdated": "2026-09-15T02:20:08.825Z",
+      "createdAt": "2026-09-15T02:20:08.825Z",
+      "fabricType": {
+        "name": "كارين"
+      }
+    },
+    {
+      "id": "47757810-81d4-4070-9116-dd6d71eb0d54",
+      "fabricTypeId": "33cafd94-1e4f-47a8-b6b8-9e631636a9c3",
+      "availableMeters": 0,
+      "reservedMeters": 0,
+      "totalPurchased": 0,
+      "totalUsed": 0,
+      "lastUpdated": "2026-09-15T03:04:00.526Z",
+      "createdAt": "2026-09-15T03:04:00.526Z",
+      "fabricType": {
+        "name": "سوبر قطن"
+      }
+    }
+  ],
+  "fabricPurchases": [],
+  "manufacturingOrders": []
+}

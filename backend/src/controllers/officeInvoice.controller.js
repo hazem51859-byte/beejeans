@@ -14,6 +14,7 @@ exports.createOfficeInvoice = async (req, res) => {
       items, // [{ productId, quantity, size, unitSalePrice }]
       discountAmount = 0,
       paymentMethod,
+      vaultId, // الخزينة المختارة
       paidAmount,
       notes,
       sellerId,
@@ -259,32 +260,37 @@ exports.createOfficeInvoice = async (req, res) => {
       }
 
       // 4. إضافة للخزينة فقط إذا لم يكن شحن
-      if (type !== 'SHIPMENT' && (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'WALLET') && actualPaidAmount > 0) {
-        const vaultField = paymentMethod === 'CASH' ? 'vaultBalance' : (paymentMethod === 'CARD' ? 'cardVaultBalance' : 'walletBalance');
-        
-        // جلب الرصيد الحالي
-        const currentWarehouse = await tx.branch.findUnique({
-          where: { id: mainWarehouse.id }
+      if (type !== 'SHIPMENT' && vaultId && (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'WALLET') && actualPaidAmount > 0) {
+        // جلب بيانات الخزينة
+        const vault = await tx.vault.findUnique({
+          where: { id: vaultId }
         });
-        
-        const balanceBefore = currentWarehouse[vaultField] || 0;
+
+        if (!vault) {
+          throw new Error('الخزينة المحددة غير موجودة');
+        }
+
+        const balanceBefore = vault.balance;
         const balanceAfter = balanceBefore + actualPaidAmount;
         
-        await tx.branch.update({
-          where: { id: mainWarehouse.id },
+        // تحديث رصيد الخزينة
+        await tx.vault.update({
+          where: { id: vaultId },
           data: {
-            [vaultField]: {
+            balance: {
               increment: actualPaidAmount
             }
           }
         });
 
+        // تسجيل المعاملة
         await tx.vaultTransaction.create({
           data: {
+            vaultId,
             branchId: mainWarehouse.id,
             type: paymentMethod === 'CASH' ? 'CASH_DEPOSIT' : (paymentMethod === 'CARD' ? 'CARD_PAYMENT' : 'WALLET_PAYMENT'),
             amount: actualPaidAmount,
-            description: `فاتورة مكتب ${invoiceNumber}`,
+            description: `فاتورة مكتب ${invoiceNumber} - ${customerName}`,
             notes: `دفعة من ${customerName}`,
             createdBy,
             balanceBefore,

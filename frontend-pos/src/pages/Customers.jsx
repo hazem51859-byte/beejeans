@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer, Trash2, Search } from 'lucide-react';
@@ -47,10 +47,30 @@ export default function Customers() {
   const [paymentData, setPaymentData] = useState({
     amount: 0,
     paymentMethod: 'CASH',
+    vaultId: '', // الخزينة المختارة
     referenceNumber: '',
     notes: '',
     invoiceAllocations: [], // توزيع المبلغ على الفواتير
   });
+
+  const [vaults, setVaults] = useState([]); // قائمة الخزائن
+
+  // Fetch vaults
+  const { data: vaultsData } = useQuery({
+    queryKey: ['vaults'],
+    queryFn: async () => {
+      const response = await api.get('/vaults');
+      return response.data;
+    },
+  });
+
+  // Update vaults when data changes
+  useEffect(() => {
+    if (vaultsData?.data) {
+      const vaultsList = Array.isArray(vaultsData.data) ? vaultsData.data : [];
+      setVaults(vaultsList.filter(v => v.isActive));
+    }
+  }, [vaultsData]);
 
   const { data: customers } = useQuery({
     queryKey: ['customers'],
@@ -552,6 +572,11 @@ export default function Customers() {
       toast.error('يرجى توزيع المبلغ على الفواتير');
       return;
     }
+
+    if (!paymentData.vaultId) {
+      toast.error('يرجى اختيار الخزينة');
+      return;
+    }
     
     // فلترة وتقسيم الفواتير حسب النوع
     const salesAllocations = paymentData.invoiceAllocations
@@ -573,6 +598,7 @@ export default function Customers() {
       data: {
         amount: totalAllocated,
         paymentMethod: paymentData.paymentMethod,
+        vaultId: paymentData.vaultId, // إضافة الخزينة
         referenceNumber: paymentData.referenceNumber,
         notes: paymentData.notes,
         invoiceAllocations: salesAllocations,
@@ -1251,6 +1277,32 @@ export default function Customers() {
                     placeholder="اختياري"
                   />
                 </div>
+              </div>
+
+              {/* اختيار الخزينة */}
+              <div>
+                <label className="block text-sm font-medium mb-2">الخزينة *</label>
+                <select
+                  value={paymentData.vaultId}
+                  onChange={(e) => setPaymentData({ ...paymentData, vaultId: e.target.value })}
+                  className="input-field bg-yellow-50 border-yellow-300"
+                  required
+                >
+                  <option value="">-- اختر الخزينة --</option>
+                  {vaults.map((vault) => {
+                    const icon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
+                    return (
+                      <option key={vault.id} value={vault.id}>
+                        {icon} {vault.name}
+                      </option>
+                    );
+                  })}
+                </select>
+                {paymentData.vaultId && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    الرصيد الحالي: {vaults.find(v => v.id === paymentData.vaultId)?.balance?.toFixed(2) || '0.00'} جنيه
+                  </p>
+                )}
               </div>
               
               <div>

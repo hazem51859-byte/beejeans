@@ -810,8 +810,33 @@ model CustomerPayment {
 // Vault Management (┘å╪╕╪º┘à ╪º┘ä╪«╪▓┘è┘å╪⌐)
 // =====================
 
+// =====================
+// Vault Management (الخزائن المتعددة)
+// =====================
+
+model Vault {
+  id                String      @id @default(uuid())
+  name              String      @unique // اسم الخزينة
+  type              String      // CASH, VISA, WALLET
+  description       String?     // وصف الخزينة
+  balance           Float       @default(0)
+  isActive          Boolean     @default(true)
+  
+  transactions      VaultTransaction[]
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([type])
+  @@index([isActive])
+  @@map("vaults")
+}
+
 model VaultTransaction {
   id                String      @id @default(uuid())
+  
+  vaultId           String?     // الخزينة الجديدة
+  vault             Vault?      @relation(fields: [vaultId], references: [id])
   
   branchId          String?
   branch            Branch?     @relation(fields: [branchId], references: [id])
@@ -835,9 +860,10 @@ model VaultTransaction {
   createdBy         String      // User ID
   createdAt         DateTime    @default(now())
   
-  balanceBefore     Float       // ╪º┘ä╪▒╪╡┘è╪» ┘é╪¿┘ä ╪º┘ä╪╣┘à┘ä┘è╪⌐
-  balanceAfter      Float       // ╪º┘ä╪▒╪╡┘è╪» ╪¿╪╣╪» ╪º┘ä╪╣┘à┘ä┘è╪⌐
+  balanceBefore     Float       // الرصيد قبل العملية
+  balanceAfter      Float       // الرصيد بعد العملية
   
+  @@index([vaultId])
   @@index([branchId])
   @@index([type])
   @@index([createdAt])

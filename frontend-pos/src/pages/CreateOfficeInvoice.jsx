@@ -24,6 +24,8 @@ export default function CreateOfficeInvoice() {
   const [shipmentCompany, setShipmentCompany] = useState('');
   const [shipmentBill, setShipmentBill] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // CASH, CARD, CREDIT
+  const [vaultId, setVaultId] = useState(''); // الخزينة المختارة
+  const [vaults, setVaults] = useState([]); // قائمة الخزائن
   const [notes, setNotes] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   
@@ -40,6 +42,7 @@ export default function CreateOfficeInvoice() {
     fetchProducts();
     fetchCustomers();
     fetchWholesaleEmployees();
+    fetchVaults();
   }, []);
 
   // البحث عن office customers بالهاتف مع debounce
@@ -92,6 +95,23 @@ export default function CreateOfficeInvoice() {
     } catch (error) {
       console.error('Error fetching wholesale employees:', error);
       setWholesaleEmployees([]);
+    }
+  };
+
+  const fetchVaults = async () => {
+    try {
+      const response = await api.get('/vaults');
+      const data = response.data?.data || response.data;
+      const vaultsList = Array.isArray(data) ? data : [];
+      setVaults(vaultsList.filter(v => v.isActive));
+      
+      // اختيار أول خزينة بشكل افتراضي
+      if (vaultsList.length > 0 && !vaultId) {
+        setVaultId(vaultsList[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching vaults:', error);
+      setVaults([]);
     }
   };
 
@@ -284,6 +304,13 @@ export default function CreateOfficeInvoice() {
         return;
       }
 
+      // التحقق من اختيار الخزينة إذا كان الدفع ليس آجل
+      if (paymentMethod !== 'CREDIT' && !vaultId) {
+        alert('من فضلك اختر الخزينة');
+        setLoading(false);
+        return;
+      }
+
       const totals = calculateTotals();
 
       const selectedSeller = wholesaleEmployees.find(e => e.id === sellerId);
@@ -298,6 +325,7 @@ export default function CreateOfficeInvoice() {
         items: validItems,
         discountAmount: totals.discount,
         paymentMethod,
+        vaultId: paymentMethod !== 'CREDIT' ? vaultId : undefined, // إرسال الخزينة المختارة
         paidAmount: paymentMethod === 'CREDIT' ? 0 : totals.total,
         notes,
         sellerId: sellerId || undefined,
@@ -727,6 +755,36 @@ export default function CreateOfficeInvoice() {
               <option value="CREDIT">📝 آجل</option>
             </select>
           </div>
+
+          {/* اختيار الخزينة (يظهر فقط لو مش آجل) */}
+          {paymentMethod !== 'CREDIT' && (
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                الخزينة *
+              </label>
+              <select
+                value={vaultId}
+                onChange={(e) => setVaultId(e.target.value)}
+                className="w-full p-3 border rounded-lg bg-yellow-50 border-yellow-300"
+                required
+              >
+                <option value="">-- اختر الخزينة --</option>
+                {vaults.map((vault) => {
+                  const icon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
+                  return (
+                    <option key={vault.id} value={vault.id}>
+                      {icon} {vault.name}
+                    </option>
+                  );
+                })}
+              </select>
+              {vaultId && (
+                <p className="text-xs text-gray-600 mt-1">
+                  الرصيد الحالي: {vaults.find(v => v.id === vaultId)?.balance?.toFixed(2) || '0.00'} جنيه
+                </p>
+              )}
+            </div>
+          )}
 
           {/* ملاحظات */}
           <div>

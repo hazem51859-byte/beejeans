@@ -35,6 +35,7 @@ const officeCustomerRoutes = require('./routes/officeCustomer.routes');
 const shipmentRoutes = require('./routes/shipment.routes');
 const auditRoutes = require('./routes/audit.routes');
 const wholesaleEmployeeRoutes = require('./routes/wholesaleEmployee.routes');
+const vaultSystemRoutes = require('./routes/vault-system.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { rateLimiter } = require('./middleware/rateLimiter');
 const initMainBranch = require('./utils/initMainBranch');
@@ -110,6 +111,7 @@ app.use(`${API_PREFIX}/office-customers`, officeCustomerRoutes);
 app.use(`${API_PREFIX}/shipments`, shipmentRoutes);
 app.use(`${API_PREFIX}/audits`, auditRoutes);
 app.use(`${API_PREFIX}/wholesale-employees`, wholesaleEmployeeRoutes);
+app.use(`${API_PREFIX}/vaults`, vaultSystemRoutes); // نظام الخزائن الجديد
 
 // 404 handler
 app.use('*', (req, res) => {

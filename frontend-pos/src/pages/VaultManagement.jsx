@@ -36,27 +36,21 @@ export default function VaultManagement() {
     notes: ''
   });
 
-  // Queries - Main Factory Vault Only
+  // Queries - Vaults System
   const { data: vaultsData, isLoading } = useQuery({
-    queryKey: ['vaults'],
-    queryFn: () => api.get('/vault').then(r => r.data)
+    queryKey: ['vaults-system'],
+    queryFn: () => api.get('/vaults').then(r => r.data)
   });
 
   const { data: transactionsData } = useQuery({
-    queryKey: ['vault-transactions', transactionType, vaultsData],
+    queryKey: ['vault-transactions', transactionType],
     queryFn: () => {
-      // Get main factory ID from vaults data
-      const mainFactory = vaultsData?.data?.branches?.find(b => b.code === 'MAIN');
-      if (!mainFactory) return { data: [] };
-      
       const params = new URLSearchParams({
-        branchId: mainFactory.id, // Main factory UUID
         ...(transactionType !== 'all' && { type: transactionType }),
-        limit: '100'
+        limit: '200'
       });
-      return api.get(`/vault/transactions?${params}`).then(r => r.data);
-    },
-    enabled: !!vaultsData?.data?.branches
+      return api.get(`/vaults/transactions?${params}`).then(r => r.data);
+    }
   });
 
   const { data: pendingTransfersData } = useQuery({
@@ -120,22 +114,17 @@ export default function VaultManagement() {
     }
   });
 
-  const vaults = vaultsData?.data || {};
+  const vaultsList = vaultsData?.data || [];
   const transactions = transactionsData?.data || [];
   const pendingTransfers = pendingTransfersData?.data || [];
   const activeDrawers = drawersData?.data || [];
   const cashiers = cashiersData?.data || [];
 
-  // Get main factory vault by code
-  const mainFactoryVault = vaults.branches?.find(b => b.code === 'MAIN') || {};
-  const mainFactoryBalance = mainFactoryVault.vaultBalance || 0;
-  const mainFactoryCardBalance = mainFactoryVault.cardVaultBalance || 0;
-  const mainFactoryWalletBalance = mainFactoryVault.walletBalance || 0;
-
-  // Get branches list for transfer dropdown (exclude main factory)
-  const transferableBranches = vaults.branches?.filter(b => 
-    b.code !== 'MAIN' // Can't transfer to main factory
-  ) || [];
+  // Calculate totals
+  const totalCash = vaultsList.filter(v => v.type === 'CASH').reduce((sum, v) => sum + v.balance, 0);
+  const totalVisa = vaultsList.filter(v => v.type === 'VISA').reduce((sum, v) => sum + v.balance, 0);
+  const totalWallet = vaultsList.filter(v => v.type === 'WALLET').reduce((sum, v) => sum + v.balance, 0);
+  const totalAll = totalCash + totalVisa + totalWallet;
 
   const handleTransferSubmit = (e) => {
     e.preventDefault();
@@ -246,15 +235,15 @@ export default function VaultManagement() {
         <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">
-              خزينة المصنع (نقدي)
+              إجمالي النقدي
             </h3>
             <Wallet size={24} className="opacity-75" />
           </div>
           <p className="text-3xl font-bold">
-            {mainFactoryBalance.toLocaleString('ar-EG')} جنيه
+            {totalCash.toLocaleString('ar-EG')} جنيه
           </p>
           <p className="text-xs opacity-75 mt-2">
-            المصنع الرئيسي
+            {vaultsList.filter(v => v.type === 'CASH').length} خزينة
           </p>
         </div>
 
@@ -266,10 +255,10 @@ export default function VaultManagement() {
             <CreditCard size={24} className="opacity-75" />
           </div>
           <p className="text-3xl font-bold">
-            {mainFactoryCardBalance.toLocaleString('ar-EG')} جنيه
+            {totalVisa.toLocaleString('ar-EG')} جنيه
           </p>
           <p className="text-xs opacity-75 mt-2">
-            معاملات الفيزا
+            {vaultsList.filter(v => v.type === 'VISA').length} حساب
           </p>
         </div>
 
@@ -283,22 +272,46 @@ export default function VaultManagement() {
             </svg>
           </div>
           <p className="text-3xl font-bold">
-            {(mainFactoryWalletBalance || 0).toLocaleString('ar-EG')} جنيه
+            {totalWallet.toLocaleString('ar-EG')} جنيه
           </p>
           <p className="text-xs opacity-75 mt-2">
-            المحفظة الإلكترونية
+            {vaultsList.filter(v => v.type === 'WALLET').length} محفظة
           </p>
         </div>
 
         <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium opacity-90">تحويلات معلقة</h3>
-            <Clock size={24} className="opacity-75" />
+            <h3 className="text-sm font-medium opacity-90">الإجمالي الكلي</h3>
+            <DollarSign size={24} className="opacity-75" />
           </div>
-          <p className="text-3xl font-bold">{pendingTransfers.length}</p>
+          <p className="text-3xl font-bold">{totalAll.toLocaleString('ar-EG')} جنيه</p>
           <p className="text-xs opacity-75 mt-2">
-            في انتظار التأكيد
+            جميع الخزائن
           </p>
+        </div>
+      </div>
+
+      {/* Vaults List */}
+      <div className="card">
+        <h3 className="text-lg font-bold mb-4">الخزائن</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {vaultsList.map((vault) => {
+            const icon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
+            return (
+              <div key={vault.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-sm">{icon} {vault.name}</h4>
+                  <span className={`text-xs px-2 py-1 rounded ${
+                    vault.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {vault.isActive ? 'نشط' : 'غير نشط'}
+                  </span>
+                </div>
+                <p className="text-2xl font-bold text-primary-600">{vault.balance.toFixed(2)} ج.م</p>
+                <p className="text-xs text-gray-500 mt-1">{vault.description || 'لا يوجد وصف'}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 

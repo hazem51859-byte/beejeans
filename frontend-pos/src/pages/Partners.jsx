@@ -32,11 +32,22 @@ export default function Partners() {
   });
 
   const [withdrawData, setWithdrawData] = useState({
-    vaultType: 'CASH',
+    vaultId: '', // الخزينة المختارة
     totalAmount: '',
     notes: '',
     allocations: []
   });
+
+  // Fetch vaults
+  const { data: vaultsData } = useQuery({
+    queryKey: ['vaults'],
+    queryFn: async () => {
+      const response = await api.get('/vaults');
+      return response.data;
+    },
+  });
+
+  const vaults = vaultsData?.data || [];
 
   const [adjustCapitalData, setAdjustCapitalData] = useState({
     type: 'INCREASE',
@@ -109,8 +120,8 @@ export default function Partners() {
       queryClient.invalidateQueries(['vault']);
       queryClient.invalidateQueries(['monthly-report']);
       setShowWithdrawModal(false);
-      setWithdrawData({ vaultType: 'CASH', totalAmount: '', notes: '', allocations: [] });
-      toast.success('تم سحب الأرباح خصماً من الخزنة بنجاح');
+      setWithdrawData({ vaultId: '', totalAmount: '', notes: '', allocations: [] });
+      toast.success('تم سحب الأرباح من الخزينة بنجاح');
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'فشل في سحب الأرباح من الخزنة');
@@ -180,7 +191,7 @@ export default function Partners() {
       amount: 0
     }));
     setWithdrawData({
-      vaultType: 'CASH',
+      vaultId: '',
       totalAmount: '',
       notes: '',
       allocations: initialAllocations
@@ -214,6 +225,12 @@ export default function Partners() {
 
   const handleWithdrawSubmit = (e) => {
     e.preventDefault();
+    
+    if (!withdrawData.vaultId) {
+      toast.error('يرجى اختيار الخزينة');
+      return;
+    }
+    
     const total = parseFloat(withdrawData.totalAmount);
     if (!total || total <= 0) {
       toast.error('يرجى كتابة مبلغ سحب صحيح');
@@ -226,7 +243,7 @@ export default function Partners() {
     }
 
     withdrawMutation.mutate({
-      vaultType: withdrawData.vaultType,
+      vaultId: withdrawData.vaultId,
       totalAmount: total,
       notes: withdrawData.notes,
       allocations: validAllocations
@@ -507,15 +524,22 @@ export default function Partners() {
 
             <form onSubmit={handleWithdrawSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-bold mb-1 text-gray-700">اختر مصدر الخزنة للسحب *</label>
+                <label className="block text-sm font-bold mb-1 text-gray-700">اختر الخزينة للسحب منها *</label>
                 <select
-                  value={withdrawData.vaultType}
-                  onChange={(e) => setWithdrawData({ ...withdrawData, vaultType: e.target.value })}
+                  value={withdrawData.vaultId}
+                  onChange={(e) => setWithdrawData({ ...withdrawData, vaultId: e.target.value })}
                   className="input-field font-bold text-gray-800 bg-amber-50 border-amber-300"
+                  required
                 >
-                  <option value="CASH">💵 خزنة نقدية (الكاش الرئيسي)</option>
-                  <option value="CARD">💳 حساب الفيزا (Card Vault)</option>
-                  <option value="WALLET">📱 محفظة إلكترونية (Wallet Vault)</option>
+                  <option value="">-- اختر الخزينة --</option>
+                  {vaults.filter(v => v.isActive).map((vault) => {
+                    const icon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
+                    return (
+                      <option key={vault.id} value={vault.id}>
+                        {icon} {vault.name} ({vault.balance.toFixed(2)} ج.م)
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

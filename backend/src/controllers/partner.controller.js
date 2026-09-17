@@ -539,56 +539,53 @@ exports.adjustCapital = async (req, res) => {
 // =====================
 exports.withdrawProfitFromVault = async (req, res) => {
   try {
-    const { branchId, vaultType, totalAmount, notes, allocations } = req.body;
-    // vaultType: CASH (نقدي), CARD (فيزا), WALLET (محفظة)
+    const { vaultId, totalAmount, notes, allocations } = req.body;
+    
     const amountFloat = parseFloat(totalAmount);
     if (!amountFloat || amountFloat <= 0) {
       return res.status(400).json({ success: false, message: 'مبلغ السحب غير صحيح' });
     }
 
-    const selectedVaultType = vaultType || 'CASH';
-
-    // Find main branch or target branch
-    const branch = await prisma.branch.findFirst({
-      where: branchId ? { id: branchId } : { code: 'MAIN' }
-    });
-
-    if (!branch) {
-      return res.status(404).json({ success: false, message: 'لم يتم العثور على الفرع/الخزنة' });
+    if (!vaultId) {
+      return res.status(400).json({ success: false, message: 'يرجى تحديد الخزينة' });
     }
 
-    let balanceField = 'vaultBalance';
-    if (selectedVaultType === 'CARD') balanceField = 'cardVaultBalance';
-    if (selectedVaultType === 'WALLET') balanceField = 'walletBalance';
+    // Get vault
+    const vault = await prisma.vault.findUnique({
+      where: { id: vaultId }
+    });
 
-    const currentBalance = branch[balanceField] || 0;
+    if (!vault) {
+      return res.status(404).json({ success: false, message: 'الخزينة غير موجودة' });
+    }
+
+    const currentBalance = vault.balance || 0;
     if (currentBalance < amountFloat) {
-      const vaultNameMap = { CASH: 'النقدي', CARD: 'الفيزا', WALLET: 'المحفظة' };
       return res.status(400).json({
         success: false,
-        message: `رصيد خزنة ${vaultNameMap[selectedVaultType] || ''} غير كافي. الرصيد المتاح: ${currentBalance.toFixed(2)} ج.م`
+        message: `رصيد ${vault.name} غير كافي. الرصيد المتاح: ${currentBalance.toFixed(2)} ج.م`
       });
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Decrement branch vault balance
+      // 1. Decrement vault balance
       const balanceBefore = currentBalance;
       const balanceAfter = balanceBefore - amountFloat;
 
-      await tx.branch.update({
-        where: { id: branch.id },
+      await tx.vault.update({
+        where: { id: vaultId },
         data: {
-          [balanceField]: balanceAfter
+          balance: balanceAfter
         }
       });
 
       // 2. Create VaultTransaction
       const vaultTransaction = await tx.vaultTransaction.create({
         data: {
-          branchId: branch.id,
+          vaultId,
           type: 'CASH_WITHDRAWAL',
           amount: amountFloat,
-          description: `سحب أرباح للشركاء (${notes || 'توزيع أرباح'}) - الخزنة: ${selectedVaultType}`,
+          description: `سحب أرباح للشركاء من ${vault.name} (${notes || 'توزيع أرباح'})`,
           notes: notes || 'سحب أرباح للشركاء',
           createdBy: req.user?.id || 'SYSTEM',
           balanceBefore,
@@ -607,9 +604,9 @@ exports.withdrawProfitFromVault = async (req, res) => {
                 partnerId: alloc.partnerId,
                 type: 'PROFIT_DISTRIBUTION',
                 amount: pAmount,
-                vaultType: selectedVaultType,
-                description: `سحب أرباح من الخزنة (${notes || 'توزيع أرباح'})`,
-                notes: notes || 'سحب أرباح من الخزنة'
+                vaultType: vault.type, // CASH, VISA, WALLET
+                description: `سحب أرباح من ${vault.name} (${notes || 'توزيع أرباح'})`,
+                notes: notes || 'سحب أرباح من الخزينة'
               }
             });
             createdPartnerTransactions.push(pTx);

@@ -43,15 +43,20 @@ export default function VaultManagement() {
   });
 
   const { data: transactionsData } = useQuery({
-    queryKey: ['vault-transactions', transactionType],
+    queryKey: ['vault-transactions', transactionType, vaultsData],
     queryFn: () => {
+      // Get main factory ID from vaults data
+      const mainFactory = vaultsData?.data?.branches?.find(b => b.code === 'MAIN');
+      if (!mainFactory) return { data: [] };
+      
       const params = new URLSearchParams({
-        branchId: '1', // Main factory only
+        branchId: mainFactory.id, // Main factory UUID
         ...(transactionType !== 'all' && { type: transactionType }),
         limit: '100'
       });
       return api.get(`/vault/transactions?${params}`).then(r => r.data);
-    }
+    },
+    enabled: !!vaultsData?.data?.branches
   });
 
   const { data: pendingTransfersData } = useQuery({
@@ -121,15 +126,15 @@ export default function VaultManagement() {
   const activeDrawers = drawersData?.data || [];
   const cashiers = cashiersData?.data || [];
 
-  // Get main factory vault (ID = 1)
-  const mainFactoryVault = vaults.branches?.find(b => b.id === '1') || {};
+  // Get main factory vault by code
+  const mainFactoryVault = vaults.branches?.find(b => b.code === 'MAIN') || {};
   const mainFactoryBalance = mainFactoryVault.vaultBalance || 0;
   const mainFactoryCardBalance = mainFactoryVault.cardVaultBalance || 0;
   const mainFactoryWalletBalance = mainFactoryVault.walletBalance || 0;
 
   // Get branches list for transfer dropdown (exclude main factory)
   const transferableBranches = vaults.branches?.filter(b => 
-    b.id !== '1' // Can't transfer to main factory
+    b.code !== 'MAIN' // Can't transfer to main factory
   ) || [];
 
   const handleTransferSubmit = (e) => {

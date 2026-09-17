@@ -25,6 +25,7 @@ model User {
   auditsSettled          InventoryAudit[] @relation("AuditSettler")
   returnsCreated         Return[]         @relation("ReturnCreator")
   returnsManagerReviewed Return[]         @relation("ReturnManagerReviewer")
+  officeReturnsCreated   OfficeReturn[]   @relation("OfficeReturnCreator")
   sales                  Sale[]
   shifts                 Shift[]
   transfersReceived      Transfer[]       @relation("TransferReceivedBy")
@@ -124,6 +125,7 @@ model Product {
   category            Category?            @relation(fields: [categoryId], references: [id])
   purchaseItems       PurchaseItem[]
   returnItems         ReturnItem[]
+  officeReturnItems   OfficeReturnItem[]
   saleItems           SaleItem[]
   transferItems       TransferItem[]
 
@@ -551,6 +553,7 @@ model Customer {
   walletBalance  Float             @default(0)
   payments       CustomerPayment[]
   officeInvoices OfficeInvoice[]
+  officeReturns  OfficeReturn[]
   sales          Sale[]
 
   @@map("customers")
@@ -583,6 +586,7 @@ model Vault {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   transactions VaultTransaction[]
+  officeReturns OfficeReturn[]
 
   @@index([type])
   @@index([isActive])
@@ -842,12 +846,14 @@ model OfficeInvoice {
   paymentMethod   String
   paidAmount      Float               @default(0)
   remainingAmount Float               @default(0)
+  refundAmount    Float               @default(0)
   status          String              @default("PENDING")
   notes           String?
   createdBy       String
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   items           OfficeInvoiceItem[]
+  returns         OfficeReturn[]
   customer        Customer?           @relation(fields: [customerId], references: [id])
   seller          WholesaleEmployee?  @relation(fields: [sellerId], references: [id])
   shipment        Shipment?
@@ -861,22 +867,77 @@ model OfficeInvoice {
 }
 
 model OfficeInvoiceItem {
-  id            String        @id @default(uuid())
-  invoiceId     String
-  productId     String
-  quantity      Int
-  size          String?
-  unitCostPrice Float
-  unitSalePrice Float
-  totalCost     Float
-  totalSale     Float
-  createdAt     DateTime      @default(now())
-  invoice       OfficeInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id])
+  id               String        @id @default(uuid())
+  invoiceId        String
+  productId        String
+  quantity         Int
+  returnedQuantity Int           @default(0)
+  size             String?
+  unitCostPrice    Float
+  unitSalePrice    Float
+  totalCost        Float
+  totalSale        Float
+  createdAt        DateTime      @default(now())
+  invoice          OfficeInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product          Product       @relation(fields: [productId], references: [id])
 
   @@index([invoiceId])
   @@index([productId])
   @@map("office_invoice_items")
+}
+
+model OfficeReturn {
+  id               String             @id @default(uuid())
+  returnNumber     String             @unique
+  invoiceId        String
+  customerId       String?
+  customerName     String
+  customerPhone    String?
+  totalAmount      Float
+  totalCost        Float
+  refundMethod     String             // VAULT_CASH, DEBT_DEDUCTION, WALLET, MIXED
+  deductedFromPaid Float              @default(0)
+  deductedFromDebt Float              @default(0)
+  vaultId          String?
+  returnReason     String?
+  notes            String?
+  status           String             @default("COMPLETED")
+  createdById      String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  items            OfficeReturnItem[]
+  invoice          OfficeInvoice      @relation(fields: [invoiceId], references: [id])
+  vault            Vault?             @relation(fields: [vaultId], references: [id])
+  customer         Customer?          @relation(fields: [customerId], references: [id])
+  createdBy        User               @relation("OfficeReturnCreator", fields: [createdById], references: [id])
+
+  @@index([invoiceId])
+  @@index([customerId])
+  @@index([vaultId])
+  @@index([returnNumber])
+  @@index([createdAt])
+  @@map("office_returns")
+}
+
+model OfficeReturnItem {
+  id             String        @id @default(uuid())
+  returnId       String
+  productId      String
+  invoiceItemId  String?
+  quantity       Int
+  size           String?
+  unitSalePrice  Float
+  unitCostPrice  Float
+  totalSalePrice Float
+  totalCostPrice Float
+  returnReason   String?
+  createdAt      DateTime      @default(now())
+  product        Product       @relation(fields: [productId], references: [id])
+  officeReturn   OfficeReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId])
+  @@index([productId])
+  @@map("office_return_items")
 }
 
 model Shipment {

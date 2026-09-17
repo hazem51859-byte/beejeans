@@ -86,6 +86,7 @@ export default function Layout() {
     // شغل المكتب
     { name: '--- شغل المكتب ---', path: '#office-header', icon: Building2, roles: ['ADMIN'], isHeader: true },
     { name: 'فواتير المكتب', path: '/office-invoices', icon: FileText, roles: ['ADMIN'] },
+    { name: 'مرتجعات المكتب', path: '/office-returns', icon: RotateCcw, roles: ['ADMIN'] },
     { name: 'حالة الشحنات', path: '/shipments', icon: Truck, roles: ['ADMIN'] },
     { name: 'الخزينة', path: '/vault-management', icon: DollarSign, roles: ['ADMIN'] },
     { name: 'مصروفات المكتب', path: '/office-expenses', icon: DollarSign, roles: ['ADMIN'] },

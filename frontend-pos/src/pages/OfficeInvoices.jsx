@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Eye, Printer, DollarSign, Package, User, TrendingUp } from 'lucide-react';
+import { Plus, Eye, Printer, DollarSign, Package, User, TrendingUp, RotateCcw } from 'lucide-react';
 import api from '../services/api';
 
 export default function OfficeInvoices() {
@@ -267,6 +267,13 @@ export default function OfficeInvoices() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
+                          <button
+                            onClick={() => navigate(`/office-returns/create?invoiceId=${invoice.id}`)}
+                            className="text-red-600 hover:text-red-900"
+                            title="تسجيل مرتجع"
+                          >
+                            <RotateCcw size={18} />
+                          </button>
                           <button
                             onClick={() => navigate(`/office-invoices/${invoice.id}/print`)}
                             className="text-blue-600 hover:text-blue-900"

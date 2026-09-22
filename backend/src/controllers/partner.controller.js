@@ -71,22 +71,35 @@ exports.getPartnersAccountingSummary = async (req, res) => {
     // 5.1 حساب إجمالي فواتير المكتب
     const officeInvoices = await prisma.officeInvoice.findMany({
       where: {
+        status: { not: 'CANCELLED' },
+        ...(dateFilter.gte || dateFilter.lte ? { createdAt: dateFilter } : {})
+      }
+    });
+
+    // 5.2 جلب مرتجعات المكتب لطرحها من الأرباح
+    const officeReturns = await prisma.officeReturn.findMany({
+      where: {
         status: 'COMPLETED',
         ...(dateFilter.gte || dateFilter.lte ? { createdAt: dateFilter } : {})
       }
     });
 
-    const totalOfficeRevenue = officeInvoices.reduce((sum, inv) => {
-      return sum + (inv.total || 0);
-    }, 0);
+    // المرتجعات: طرح قيمتها من إجمالي الإيرادات والتكلفة
+    const totalReturnsAmount = officeReturns.reduce((sum, ret) => sum + (ret.totalAmount || 0), 0);
+    const totalReturnsCost = officeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
 
-    const totalOfficeProfit = officeInvoices.reduce((sum, inv) => {
-      return sum + (inv.profit || 0);
-    }, 0);
+    // فصل الفواتير الافتتاحية عن الحقيقية
+    const actualOfficeInvoices = officeInvoices.filter(inv => !inv.notes?.includes('رصيد افتتاحي'));
 
-    const totalOfficeCost = officeInvoices.reduce((sum, inv) => {
-      return sum + (inv.totalCost || 0);
-    }, 0);
+    const grossOfficeRevenue = officeInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalOfficeRevenue = Math.max(0, grossOfficeRevenue - totalReturnsAmount);
+
+    const grossOfficeCost = actualOfficeInvoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
+    const totalOfficeCost = Math.max(0, grossOfficeCost - totalReturnsCost);
+
+    // صافي ربح المكتب (من الفواتير الفعلية فقط بعد خصم المرتجعات)
+    const grossOfficeProfit = actualOfficeInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+    const totalOfficeProfit = Math.max(0, grossOfficeProfit - (totalReturnsAmount - totalReturnsCost));
 
     // 6. حساب تكلفة البضاعة المباعة من الفروع (COGS)
     const saleItems = await prisma.saleItem.findMany({
@@ -106,9 +119,9 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       return sum + (costPrice * (item.quantity || 0));
     }, 0);
 
-    // 7. حساب الأرباح/الخسائر (من الفروع + المكتب)
-    const totalSales = totalBranchSales + totalOfficeRevenue; // إجمالي المبيعات
-    const totalCOGS = totalBranchCOGS + totalOfficeCost; // إجمالي التكلفة
+    // 7. حساب الأرباح/الخسائر (من الفروع + المكتب) مع خصم المرتجعات
+    const totalSales = totalBranchSales + totalOfficeRevenue; // إجمالي صافي المبيعات بعد المرتجعات
+    const totalCOGS = totalBranchCOGS + totalOfficeCost; // إجمالي التكلفة بعد المرتجعات
     const grossProfit = totalSales - totalCOGS; // مجمل الربح
     const netProfit = grossProfit - totalExpenses; // صافي الربح
     const profitMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : 0;
@@ -162,7 +175,9 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       // المبيعات
       sales: {
         total: parseFloat(totalSales.toFixed(2)),
-        cost: parseFloat(totalCOGS.toFixed(2))
+        cost: parseFloat(totalCOGS.toFixed(2)),
+        grossOfficeRevenue: parseFloat(grossOfficeRevenue.toFixed(2)),
+        totalOfficeReturns: parseFloat(totalReturnsAmount.toFixed(2))
       },
       
       // الأرباح/الخسائر

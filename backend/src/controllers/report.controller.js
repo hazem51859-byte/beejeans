@@ -417,16 +417,40 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
       }
     });
 
+    // Get all office returns in the period
+    const officeReturns = await prisma.officeReturn.findMany({
+      where: {
+        createdAt: {
+          gte: start,
+          lte: end
+        },
+        status: 'COMPLETED'
+      },
+      include: {
+        items: true,
+        invoice: true
+      }
+    });
+
     // فصل الفواتير الافتتاحية عن الفواتير الفعلية
     const openingInvoices = invoices.filter(inv => inv.notes?.includes('رصيد افتتاحي'));
     const actualInvoices = invoices.filter(inv => !inv.notes?.includes('رصيد افتتاحي'));
 
+    // إجماليات المرتجعات
+    const totalReturnsCount = officeReturns.length;
+    const totalReturnsAmount = officeReturns.reduce((sum, ret) => sum + (ret.totalAmount || 0), 0);
+    const returnsDeductedFromPaid = officeReturns.reduce((sum, ret) => sum + (ret.deductedFromPaid || 0), 0);
+    const returnsDeductedFromDebt = officeReturns.reduce((sum, ret) => sum + (ret.deductedFromDebt || 0), 0);
+    const totalReturnsCost = officeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
+
     // إجماليات عامة (كل الفواتير)
     const totalInvoices = invoices.length;
-    const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const grossSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalSales = Math.max(0, grossSales - totalReturnsAmount); // صافي المبيعات بعد المرتجعات
     
     // التكلفة والربح فقط من الفواتير الفعلية (بدون الافتتاحية)
-    const totalCost = actualInvoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
+    const grossCost = actualInvoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
+    const totalCost = Math.max(0, grossCost - totalReturnsCost);
     const totalProfit = actualInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
     
     const totalCollected = invoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
@@ -437,26 +461,31 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
     const shipmentInvoices = actualInvoices.filter(inv => inv.type === 'SHIPMENT');
     const clientInvoices = actualInvoices.filter(inv => inv.type === 'CLIENT');
 
+    const getReturnsForType = (type) => officeReturns.filter(ret => ret.invoice?.type === type);
+
     const byType = {
       regular: {
         count: regularInvoices.length,
-        sales: regularInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
+        sales: Math.max(0, regularInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0) - getReturnsForType('REGULAR').reduce((s, r) => s + r.totalAmount, 0)),
         profit: regularInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0),
-        collected: regularInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0)
+        collected: regularInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0),
+        returns: getReturnsForType('REGULAR').reduce((s, r) => s + r.totalAmount, 0)
       },
       shipment: {
         count: shipmentInvoices.length,
-        sales: shipmentInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
+        sales: Math.max(0, shipmentInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0) - getReturnsForType('SHIPMENT').reduce((s, r) => s + r.totalAmount, 0)),
         profit: shipmentInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0),
         collected: shipmentInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0),
+        returns: getReturnsForType('SHIPMENT').reduce((s, r) => s + r.totalAmount, 0),
         delivered: shipmentInvoices.filter(inv => inv.shipment?.status === 'DELIVERED').length,
         pending: shipmentInvoices.filter(inv => inv.shipment?.status === 'PENDING').length
       },
       client: {
         count: clientInvoices.length,
-        sales: clientInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
+        sales: Math.max(0, clientInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0) - getReturnsForType('CLIENT').reduce((s, r) => s + r.totalAmount, 0)),
         profit: clientInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0),
-        collected: clientInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0)
+        collected: clientInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0),
+        returns: getReturnsForType('CLIENT').reduce((s, r) => s + r.totalAmount, 0)
       }
     };
 
@@ -464,7 +493,12 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
       success: true,
       data: {
         totalInvoices,
-        totalSales,
+        grossSales,
+        totalSales, // صافي المبيعات
+        totalReturns: totalReturnsAmount,
+        totalReturnsCount,
+        returnsDeductedFromPaid,
+        returnsDeductedFromDebt,
         totalCost, // من الفواتير الفعلية فقط
         totalProfit, // من الفواتير الفعلية فقط
         totalCollected,

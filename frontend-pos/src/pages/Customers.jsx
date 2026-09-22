@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer, Trash2, Search } from 'lucide-react';
+import { Plus, Edit2, DollarSign, Eye, X, Receipt, FileText, Printer, Trash2, Search, RotateCcw } from 'lucide-react';
 import api from '../services/api';
 import dayjs from 'dayjs';
 
@@ -225,10 +225,10 @@ export default function Customers() {
       const customerData = response.data.data;
       
       // جلب فواتير التقسيط المستحقة (اللي لسه عليها فلوس)
-      const unpaidSales = customerData.sales?.filter(sale => sale.total > sale.amountPaid) || [];
+      const unpaidSales = customerData.sales?.filter(sale => (sale.total - (sale.refundAmount || 0)) > sale.amountPaid) || [];
       
       // جلب فواتير المكتب المستحقة
-      const unpaidOfficeInvoices = customerData.officeInvoices?.filter(inv => inv.total > inv.paidAmount) || [];
+      const unpaidOfficeInvoices = customerData.officeInvoices?.filter(inv => (inv.remainingAmount || 0) > 0) || [];
       
       // إعداد توزيع افتراضي للفواتير
       const allocations = [
@@ -237,9 +237,11 @@ export default function Customers() {
           invoiceType: 'sale',
           invoiceNumber: sale.invoiceNumber,
           description: 'فاتورة تقسيط',
-          total: sale.total,
+          total: sale.total - (sale.refundAmount || 0),
+          originalTotal: sale.total,
+          refundAmount: sale.refundAmount || 0,
           amountPaid: sale.amountPaid,
-          remaining: sale.total - sale.amountPaid,
+          remaining: Math.max(0, sale.total - (sale.refundAmount || 0) - sale.amountPaid),
           allocation: 0,
         })),
         ...unpaidOfficeInvoices.map(invoice => ({
@@ -251,9 +253,11 @@ export default function Customers() {
             invoice.type === 'SHIPMENT' ? 'شحن' :
             invoice.type === 'CLIENT' ? 'عميل دائم' : invoice.type
           })`,
-          total: invoice.total,
+          total: invoice.total - (invoice.refundAmount || 0),
+          originalTotal: invoice.total,
+          refundAmount: invoice.refundAmount || 0,
           amountPaid: invoice.paidAmount,
-          remaining: invoice.total - invoice.paidAmount,
+          remaining: invoice.remainingAmount,
           allocation: 0,
         }))
       ];
@@ -1200,7 +1204,14 @@ export default function Customers() {
                               </span>
                             </td>
                             <td className="p-2 font-medium">{invoice.invoiceNumber}</td>
-                            <td className="p-2">{invoice.total.toFixed(2)} ج.م</td>
+                            <td className="p-2">
+                              <div>{invoice.total.toFixed(2)} ج.م</div>
+                              {invoice.refundAmount > 0 && (
+                                <span className="text-[10px] text-amber-700 font-semibold block">
+                                  (مرتجع: {invoice.refundAmount.toFixed(2)})
+                                </span>
+                              )}
+                            </td>
                             <td className="p-2">{invoice.amountPaid.toFixed(2)} ج.م</td>
                             <td className="p-2 text-red-700 font-bold">{invoice.remaining.toFixed(2)} ج.م</td>
                             <td className="p-2">
@@ -1406,7 +1417,9 @@ export default function Customers() {
                 </h3>
                 <div className="space-y-3">
                   {selectedCustomer.officeInvoices.map((invoice) => {
-                    const remaining = invoice.total - invoice.paidAmount;
+                    const remaining = invoice.remainingAmount !== undefined 
+                      ? invoice.remainingAmount 
+                      : Math.max(0, invoice.total - (invoice.refundAmount || 0) - invoice.paidAmount);
                     const invoiceTypeLabel = 
                       invoice.type === 'REGULAR' ? 'زبون عادي' :
                       invoice.type === 'SHIPMENT' ? 'شحن' :
@@ -1431,6 +1444,11 @@ export default function Customers() {
                             <div>
                               <p className="text-xs text-gray-600">الإجمالي</p>
                               <p className="text-sm font-bold">{invoice.total.toFixed(2)} ج.م</p>
+                              {invoice.refundAmount > 0 && (
+                                <p className="text-[10px] text-amber-700 font-semibold">
+                                  مرتجع: {invoice.refundAmount.toFixed(2)} ج.م
+                                </p>
+                              )}
                             </div>
                             <div>
                               <p className="text-xs text-gray-600">المدفوع</p>
@@ -1467,6 +1485,74 @@ export default function Customers() {
                             )}
                           </div>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* مرتجعات المكتب */}
+            {selectedCustomer.officeReturns && selectedCustomer.officeReturns.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3 flex items-center gap-2 text-amber-700">
+                  <RotateCcw size={18} />
+                  مرتجعات المكتب ({selectedCustomer.officeReturns.length})
+                </h3>
+                <div className="space-y-3">
+                  {selectedCustomer.officeReturns.map((ret) => {
+                    const isExpanded = expandedSaleId === ret.id;
+                    const methodLabel = 
+                      ret.refundMethod === 'DEBT_DEDUCTION' ? 'خصم من المديونية' :
+                      ret.refundMethod === 'VAULT_CASH' ? 'استرداد نقدي من الخزينة' :
+                      ret.refundMethod === 'WALLET' ? 'إضافة لمحفظة العميل' : 'تسوية مختلطة';
+
+                    return (
+                      <div key={ret.id} className="border border-amber-200 rounded-lg overflow-hidden bg-amber-50">
+                        <div 
+                          className="bg-amber-100 p-3 flex items-center justify-between cursor-pointer hover:bg-amber-200"
+                          onClick={() => setExpandedSaleId(isExpanded ? null : ret.id)}
+                        >
+                          <div className="flex-1 grid grid-cols-5 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم المرتجع</p>
+                              <p className="font-bold text-sm text-amber-900">{ret.returnNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">الفاتورة الأصلية</p>
+                              <p className="text-sm font-medium">{ret.invoice?.invoiceNumber || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{dayjs(ret.createdAt).format('DD/MM/YYYY')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">قيمة المرتجع</p>
+                              <p className="text-sm font-bold text-amber-800">{ret.totalAmount.toFixed(2)} ج.م</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">طريقة التسوية</p>
+                              <p className="text-xs font-bold text-gray-800">{methodLabel}</p>
+                            </div>
+                          </div>
+                          <span className={`text-gray-600 text-xs transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                            ▼
+                          </span>
+                        </div>
+                        {isExpanded && ret.items && ret.items.length > 0 && (
+                          <div className="p-3 bg-white border-t border-amber-200">
+                            <p className="text-xs font-bold text-gray-700 mb-2">الأصناف المرتجعة ({ret.items.length}):</p>
+                            <div className="space-y-1">
+                              {ret.items.map((prod, pIdx) => (
+                                <div key={pIdx} className="flex justify-between items-center text-xs py-1 border-b border-gray-100">
+                                  <span>{prod.product?.name || prod.productName} {prod.size ? `(مقاس ${prod.size})` : ''} × {prod.quantity}</span>
+                                  <span className="font-bold text-amber-700">{(prod.totalSalePrice || (prod.unitSalePrice * prod.quantity)).toFixed(2)} ج.م</span>
+                                </div>
+                              ))}
+                            </div>
+                            {ret.notes && <p className="text-xs text-gray-500 mt-2">ملاحظات: {ret.notes}</p>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1654,12 +1740,16 @@ export default function Customers() {
                 
                 // إضافة فواتير التقسيط
                 selectedCustomer.sales?.forEach(sale => {
+                  const netSaleTotal = sale.total - (sale.refundAmount || 0);
                   transactions.push({
                     type: 'sale',
                     date: sale.createdAt,
                     description: `فاتورة تقسيط ${sale.invoiceNumber}`,
-                    amount: sale.total,
+                    amount: netSaleTotal,
+                    originalAmount: sale.total,
+                    refundAmount: sale.refundAmount || 0,
                     amountPaid: sale.amountPaid,
+                    remaining: Math.max(0, netSaleTotal - sale.amountPaid),
                     saleId: sale.id,
                     items: sale.items || [],
                     sale: sale
@@ -1673,15 +1763,46 @@ export default function Customers() {
                     invoice.type === 'SHIPMENT' ? 'شحن' :
                     invoice.type === 'CLIENT' ? 'عميل دائم' : invoice.type;
                   
+                  const netInvoiceTotal = invoice.total - (invoice.refundAmount || 0);
+                  const remaining = invoice.remainingAmount !== undefined 
+                    ? invoice.remainingAmount 
+                    : Math.max(0, netInvoiceTotal - invoice.paidAmount);
+
                   transactions.push({
                     type: 'office-invoice',
                     date: invoice.createdAt,
                     description: `فاتورة مكتب (${invoiceTypeLabel}) ${invoice.invoiceNumber}`,
-                    amount: invoice.total,
+                    amount: netInvoiceTotal,
+                    originalAmount: invoice.total,
+                    refundAmount: invoice.refundAmount || 0,
                     amountPaid: invoice.paidAmount,
+                    remaining: remaining,
                     saleId: invoice.id,
                     items: invoice.items || [],
                     invoice: invoice
+                  });
+                });
+
+                // إضافة مرتجعات المكتب
+                selectedCustomer.officeReturns?.forEach(ret => {
+                  const methodLabel = 
+                    ret.refundMethod === 'DEBT_DEDUCTION' ? 'خصم من المديونية' :
+                    ret.refundMethod === 'VAULT_CASH' ? 'استرداد نقدي من الخزينة' :
+                    ret.refundMethod === 'WALLET' ? 'إضافة لمحفظة العميل' : 'تسوية مختلطة';
+
+                  transactions.push({
+                    type: 'office-return',
+                    date: ret.createdAt,
+                    description: `مرتجع مكتب ${ret.returnNumber} ${ret.invoice?.invoiceNumber ? `(فاتورة ${ret.invoice.invoiceNumber})` : ''}`,
+                    amount: ret.totalAmount,
+                    deductedFromDebt: ret.deductedFromDebt || 0,
+                    deductedFromPaid: ret.deductedFromPaid || 0,
+                    refundMethod: ret.refundMethod,
+                    methodLabel,
+                    saleId: ret.id,
+                    items: ret.items || [],
+                    notes: ret.notes || ret.returnReason,
+                    returnObj: ret
                   });
                 });
                 
@@ -1690,7 +1811,7 @@ export default function Customers() {
                   transactions.push({
                     type: 'payment',
                     date: payment.paymentDate,
-                    description: 'دفعة',
+                    description: 'دفعة سداد مديونية',
                     amount: payment.amount,
                     notes: payment.notes,
                     paymentMethod: payment.paymentMethod
@@ -1703,28 +1824,33 @@ export default function Customers() {
                   const isExpanded = expandedSaleId === item.saleId;
                   const bgColor = item.type === 'office-invoice' ? 'bg-purple-50 border-purple-500' :
                                   item.type === 'sale' ? 'bg-red-50 border-red-500' : 
+                                  item.type === 'office-return' ? 'bg-amber-50 border-amber-500' :
                                   'bg-green-50 border-green-500';
                   const iconColor = item.type === 'office-invoice' ? 'text-purple-600' :
                                    item.type === 'sale' ? 'text-red-600' : 
+                                   item.type === 'office-return' ? 'text-amber-600' :
                                    'text-green-600';
                   const textColor = item.type === 'office-invoice' ? 'text-purple-700' :
                                    item.type === 'sale' ? 'text-red-700' : 
+                                   item.type === 'office-return' ? 'text-amber-700' :
                                    'text-green-700';
                   
                   return (
                     <div key={`${item.type}-${index}`} className={`rounded-lg border-r-4 overflow-hidden ${bgColor}`}>
                       <div className="p-4 flex justify-between items-start"
-                           onClick={() => (item.type === 'sale' || item.type === 'office-invoice') && setExpandedSaleId(isExpanded ? null : item.saleId)}
-                           style={{ cursor: (item.type === 'sale' || item.type === 'office-invoice') ? 'pointer' : 'default' }}>
+                           onClick={() => (item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') && setExpandedSaleId(isExpanded ? null : item.saleId)}
+                           style={{ cursor: (item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') ? 'pointer' : 'default' }}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             {item.type === 'payment' ? (
                               <DollarSign className={iconColor} size={18} />
+                            ) : item.type === 'office-return' ? (
+                              <RotateCcw className={iconColor} size={18} />
                             ) : (
                               <Receipt className={iconColor} size={18} />
                             )}
                             <span className="font-bold">{item.description}</span>
-                            {(item.type === 'sale' || item.type === 'office-invoice') && item.items && item.items.length > 0 && (
+                            {(item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') && item.items && item.items.length > 0 && (
                               <span className={`text-gray-500 text-xs transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
                                 ▼
                               </span>
@@ -1735,9 +1861,34 @@ export default function Customers() {
                           </p>
                           {(item.type === 'sale' || item.type === 'office-invoice') && (
                             <div className="mt-2 text-xs">
+                              {item.refundAmount > 0 && (
+                                <>
+                                  <span className="text-gray-500 line-through">أصلي: {item.originalAmount.toFixed(2)} ج.م</span>
+                                  <span className="mx-2">•</span>
+                                  <span className="text-amber-700 font-bold">مرتجع: {item.refundAmount.toFixed(2)} ج.م</span>
+                                  <span className="mx-2">•</span>
+                                </>
+                              )}
                               <span className="text-green-700 font-bold">مدفوع: {item.amountPaid.toFixed(2)} ج.م</span>
                               <span className="mx-2">•</span>
-                              <span className="text-red-700 font-bold">متبقي: {(item.amount - item.amountPaid).toFixed(2)} ج.م</span>
+                              <span className="text-red-700 font-bold">متبقي: {item.remaining.toFixed(2)} ج.م</span>
+                            </div>
+                          )}
+                          {item.type === 'office-return' && (
+                            <div className="mt-2 text-xs">
+                              <span className="text-amber-800 font-bold">التسوية: {item.methodLabel}</span>
+                              {item.deductedFromDebt > 0 && (
+                                <>
+                                  <span className="mx-2">•</span>
+                                  <span className="text-red-700 font-bold">خصم من الدين: {item.deductedFromDebt.toFixed(2)} ج.م</span>
+                                </>
+                              )}
+                              {item.deductedFromPaid > 0 && (
+                                <>
+                                  <span className="mx-2">•</span>
+                                  <span className="text-green-700 font-bold">مسترد نقداً: {item.deductedFromPaid.toFixed(2)} ج.م</span>
+                                </>
+                              )}
                             </div>
                           )}
                           {item.notes && <p className="text-xs text-gray-600 mt-1">ملاحظات: {item.notes}</p>}
@@ -1753,12 +1904,16 @@ export default function Customers() {
                         </div>
                         <div className="text-left">
                           <p className={`text-2xl font-bold ${textColor}`}>
-                            {item.amount.toFixed(2)} ج.م
+                            {item.type === 'office-return' ? `-${item.amount.toFixed(2)}` : `${item.amount.toFixed(2)}`} ج.م
                           </p>
                           {item.type === 'payment' ? (
                             <p className="text-xs text-green-600">تم التحصيل ✓</p>
+                          ) : item.type === 'office-return' ? (
+                            <p className="text-xs text-amber-600 font-medium">مرتجع مبيعات ↩</p>
+                          ) : item.remaining <= 0 ? (
+                            <p className="text-xs text-green-600">مسددة بالكامل ✓</p>
                           ) : (
-                            <p className={`text-xs ${item.type === 'office-invoice' ? 'text-purple-600' : 'text-red-600'}`}>تم التحميل ✓</p>
+                            <p className="text-xs text-red-600">آجل / غير مسدد</p>
                           )}
                           {item.type === 'sale' && item.sale && (
                             <button
@@ -1785,29 +1940,36 @@ export default function Customers() {
                         </div>
                       </div>
                       
-                      {(item.type === 'sale' || item.type === 'office-invoice') && isExpanded && item.items && item.items.length > 0 && (
-                        <div className={`px-4 pb-4 bg-white border-t ${item.type === 'office-invoice' ? 'border-purple-200' : 'border-red-200'}`}>
-                          <h4 className="font-bold text-sm mb-2 mt-2">المنتجات:</h4>
+                      {(item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') && isExpanded && item.items && item.items.length > 0 && (
+                        <div className={`px-4 pb-4 bg-white border-t ${
+                          item.type === 'office-invoice' ? 'border-purple-200' : 
+                          item.type === 'office-return' ? 'border-amber-200' : 'border-red-200'
+                        }`}>
+                          <h4 className="font-bold text-sm mb-2 mt-2">
+                            {item.type === 'office-return' ? 'الأصناف المرتجعة:' : 'المنتجات:'}
+                          </h4>
                           <table className="w-full text-xs">
                             <thead className="bg-gray-100">
                               <tr>
                                 <th className="p-2 text-right">#</th>
                                 <th className="p-2 text-right">المنتج</th>
-                                <th className="p-2 text-right">اللون</th>
+                                <th className="p-2 text-right">{item.type === 'office-return' ? 'المقاس' : 'اللون'}</th>
                                 <th className="p-2 text-right">الكمية</th>
                                 <th className="p-2 text-right">السعر</th>
                                 <th className="p-2 text-right">الإجمالي</th>
+                                {item.type === 'office-return' && <th className="p-2 text-right">سبب الإرجاع</th>}
                               </tr>
                             </thead>
                             <tbody>
-                              {item.items.map((saleItem, idx) => (
+                              {item.items.map((prod, idx) => (
                                 <tr key={idx} className="border-t">
                                   <td className="p-2">{idx + 1}</td>
-                                  <td className="p-2 font-medium">{saleItem.product?.name || saleItem.productName || 'غير محدد'}</td>
-                                  <td className="p-2">{saleItem.color || '-'}</td>
-                                  <td className="p-2">{saleItem.quantity}</td>
-                                  <td className="p-2">{saleItem.unitPrice.toFixed(2)} ج.م</td>
-                                  <td className="p-2 font-bold">{saleItem.total.toFixed(2)} ج.م</td>
+                                  <td className="p-2 font-medium">{prod.product?.name || prod.productName}</td>
+                                  <td className="p-2">{prod.size || prod.color || '-'}</td>
+                                  <td className="p-2">{prod.quantity}</td>
+                                  <td className="p-2">{(prod.unitSalePrice || prod.unitPrice || 0).toFixed(2)} ج.م</td>
+                                  <td className="p-2 font-bold">{(prod.totalSalePrice || prod.totalPrice || ((prod.unitSalePrice || 0) * prod.quantity)).toFixed(2)} ج.م</td>
+                                  {item.type === 'office-return' && <td className="p-2 text-gray-600">{prod.returnReason || '-'}</td>}
                                 </tr>
                               ))}
                             </tbody>

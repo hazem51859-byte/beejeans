@@ -256,7 +256,8 @@ exports.createOfficeReturn = async (req, res) => {
 
       // د. تحديث الفاتورة الأصلية
       const newPaid = Math.max(0, invoice.paidAmount - deductedFromPaid);
-      const newRemaining = Math.max(0, invoice.remainingAmount - deductedFromDebt);
+      const remainingDeductionOnThis = Math.min(invoice.remainingAmount, deductedFromDebt);
+      const newRemaining = Math.max(0, invoice.remainingAmount - remainingDeductionOnThis);
       const newRefund = (invoice.refundAmount || 0) + totalReturnSale;
       const newProfit = invoice.profit - (totalReturnSale - totalReturnCost);
 
@@ -276,6 +277,46 @@ exports.createOfficeReturn = async (req, res) => {
           status: allReturned ? 'RETURNED' : (newRemaining <= 0.01 ? 'COMPLETED' : invoice.status)
         }
       });
+
+      // إذا كان هناك متبقي من خصم المديونية لم يستوعبه هذا البند (لأن الفاتورة الحالية متبقيها أقل من الخصم):
+      let remainingDebtToDeduct = deductedFromDebt - remainingDeductionOnThis;
+      if (remainingDebtToDeduct > 0 && invoice.customerId) {
+        // نخصم من باقي فواتير العميل المفتوحة (من الأقدم للأحدث)
+        const otherUnpaidInvoices = await tx.officeInvoice.findMany({
+          where: {
+            customerId: invoice.customerId,
+            id: { not: invoiceId },
+            remainingAmount: { gt: 0 },
+            status: { not: 'CANCELLED' }
+          },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        for (const otherInv of otherUnpaidInvoices) {
+          if (remainingDebtToDeduct <= 0) break;
+          const deductFromThis = Math.min(otherInv.remainingAmount, remainingDebtToDeduct);
+          remainingDebtToDeduct -= deductFromThis;
+          const otherNewRemaining = Math.max(0, otherInv.remainingAmount - deductFromThis);
+          
+          await tx.officeInvoice.update({
+            where: { id: otherInv.id },
+            data: {
+              remainingAmount: otherNewRemaining,
+              status: otherNewRemaining <= 0.01 ? 'COMPLETED' : otherInv.status
+            }
+          });
+        }
+
+        // إذا تبقى مبلغ بعد سداد جميع فواتير العميل، نضيفه كرصيد في محفظة العميل
+        if (remainingDebtToDeduct > 0) {
+          await tx.customer.update({
+            where: { id: invoice.customerId },
+            data: {
+              walletBalance: { increment: remainingDebtToDeduct }
+            }
+          });
+        }
+      }
 
       // هـ. إذا كان هناك خصم من مديونية عميل مسجل، نحدث إحصائياته
       if ((invoice.type === 'REGULAR' || invoice.type === 'SHIPMENT') && invoice.customerPhone) {

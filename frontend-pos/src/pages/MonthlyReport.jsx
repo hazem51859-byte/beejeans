@@ -209,6 +209,11 @@ export default function MonthlyReport() {
   // بيانات فواتير المكتب
   const officeInvoices = officeInvoicesData?.data || {};
   const officeInvoicesTotalSales = officeInvoices.totalSales || 0;
+  const officeInvoicesGrossSales = officeInvoices.grossSales || officeInvoicesTotalSales;
+  const officeInvoicesTotalReturns = officeInvoices.totalReturns || 0;
+  const officeInvoicesReturnsCount = officeInvoices.totalReturnsCount || 0;
+  const officeReturnsDeductedFromPaid = officeInvoices.returnsDeductedFromPaid || 0;
+  const officeReturnsDeductedFromDebt = officeInvoices.returnsDeductedFromDebt || 0;
   const officeInvoicesProfit = officeInvoices.totalProfit || 0;
   const officeInvoicesCollected = officeInvoices.totalCollected || 0;
 
@@ -375,8 +380,8 @@ export default function MonthlyReport() {
     : 0;
 
   // التدفق النقدي (Cash Flow)
-  // الإيرادات النقدية = مبيعات الفروع + مبيعات الجملة (المكتب) المحصلة
-  const cashInflow = totalSales + officeInvoicesCollected - totalReturns;
+  // الإيرادات النقدية = مبيعات الفروع + مبيعات الجملة (المكتب) المحصلة - المرتجعات النقدية
+  const cashInflow = totalSales + officeInvoicesCollected - totalReturns - officeReturnsDeductedFromPaid;
   const cashOutflow = totalExpenses + totalProductionPaid; // المصروفات النقدية (مصروفات + إنتاج فقط)
   const netCashFlow = cashInflow - cashOutflow;
 
@@ -470,6 +475,9 @@ export default function MonthlyReport() {
             <p className="text-2xl font-bold text-purple-700">{officeInvoicesTotalSales.toFixed(2)} ج.م</p>
             <div className="flex justify-between text-xs mt-1">
               <span className="text-green-600">محصل: {officeInvoicesCollected.toFixed(2)}</span>
+              {officeInvoicesTotalReturns > 0 && (
+                <span className="text-amber-700 font-semibold">مرتجع: {officeInvoicesTotalReturns.toFixed(0)}</span>
+              )}
               <span className="text-orange-600">متبقي: {(officeInvoicesTotalSales - officeInvoicesCollected).toFixed(2)}</span>
             </div>
             <p className="text-xs text-gray-600 mt-1">{officeInvoices.totalInvoices || 0} فاتورة • ربح: {officeInvoicesProfit.toFixed(2)} ج.م</p>
@@ -729,9 +737,15 @@ export default function MonthlyReport() {
                       <span className="font-medium">{(officeInvoices.byType?.client?.sales || 0).toFixed(2)} ج.م</span>
                     </div>
                     <div className="flex justify-between border-t border-purple-300 pt-1 mt-1">
-                      <span className="font-bold">إجمالي المبيعات:</span>
+                      <span className="font-bold">إجمالي المبيعات (الصافي):</span>
                       <span className="font-bold">{officeInvoicesTotalSales.toFixed(2)} ج.م</span>
                     </div>
+                    {officeInvoicesTotalReturns > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-amber-700">المرتجع ({officeInvoicesReturnsCount} عملية):</span>
+                        <span className="font-medium text-amber-700">-{officeInvoicesTotalReturns.toFixed(2)} ج.م</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-green-700">المحصل:</span>
                       <span className="font-medium text-green-700">{officeInvoicesCollected.toFixed(2)} ج.م</span>

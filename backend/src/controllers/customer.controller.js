@@ -26,33 +26,22 @@ exports.getAllCustomers = async (req, res) => {
           where: { customerId: customer.id }
         });
         
-        const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
-        const totalPaidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
-        const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
-        const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
-        const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-        
-        // الرصيد الصحيح:
-        // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة + رصيد المحفظة
-        // walletBalance: سالب = علينا ليه، موجب = هو دفع زيادة
-        // balance موجب = لينا عنده، سالب = علينا ليه
+        const netSales = sales.reduce((sum, s) => sum + (s.total - (s.refundAmount || 0)), 0);
+        const salesDebt = sales.reduce((sum, s) => sum + Math.max(0, s.total - (s.refundAmount || 0) - s.amountPaid), 0);
+        const paidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
+
+        const netOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + (inv.total - (inv.refundAmount || 0)), 0);
+        const officeDebt = officeInvoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0);
+        const paidOnOffice = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
+
+        // الرصيد الصحيح: مديونية التقسيط + مديونية فواتير المكتب - رصيد المحفظة (إن وجد)
         const walletBalance = customer.walletBalance || 0;
-        const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments + walletBalance;
-        
-        // Debug logging
-        if (customer.name) {
-          console.log(`\n💰 ${customer.name}:`);
-          console.log(`   فواتير التقسيط: ${totalSales} (مدفوع مباشر: ${totalPaidOnSales})`);
-          console.log(`   فواتير المكتب: ${totalOfficeInvoices} (مدفوع: ${totalPaidOnOfficeInvoices})`);
-          console.log(`   دفعات مسجلة: ${totalPayments}`);
-          console.log(`   رصيد المحفظة: ${walletBalance}`);
-          console.log(`   الرصيد المحسوب: ${balance.toFixed(2)}`);
-        }
+        const balance = salesDebt + officeDebt - walletBalance;
         
         return {
           ...customer,
-          totalSales: totalSales + totalOfficeInvoices,
-          totalPaid: totalPaidOnSales + totalPayments,
+          totalSales: parseFloat((netSales + netOfficeInvoices).toFixed(2)),
+          totalPaid: parseFloat((paidOnSales + paidOnOffice).toFixed(2)),
           walletBalance: parseFloat(walletBalance.toFixed(2)),
           balance: parseFloat(balance.toFixed(2))
         };
@@ -112,35 +101,55 @@ exports.getCustomerById = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     
+    // جلب مرتجعات المكتب الخاصة بالعميل
+    const officeReturns = await prisma.officeReturn.findMany({
+      where: {
+        OR: [
+          { customerId: id },
+          { invoice: { customerId: id } }
+        ]
+      },
+      include: {
+        items: {
+          include: { product: true }
+        },
+        invoice: {
+          select: { id: true, invoiceNumber: true, total: true, paidAmount: true, remainingAmount: true, refundAmount: true }
+        },
+        vault: {
+          select: { id: true, name: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
     const payments = await prisma.customerPayment.findMany({
       where: { customerId: id },
       orderBy: { paymentDate: 'desc' }
     });
     
-    const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
-    const totalPaidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
-    const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-    
-    // إضافة فواتير المكتب للحسابات
-    const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
-    const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
-    
-    // الرصيد الصحيح:
-    // إجمالي الفواتير - ما دُفع مباشرة على فواتير التقسيط (cash) - دفعات الديون المسجلة - رصيد المحفظة
-    // ملاحظة: paidAmount على فاتورة المكتب يأتي من customerPayment لذا نستخدم totalPayments فقط لتجنب الحساب المزدوج
+    const netSales = sales.reduce((sum, s) => sum + (s.total - (s.refundAmount || 0)), 0);
+    const salesDebt = sales.reduce((sum, s) => sum + Math.max(0, s.total - (s.refundAmount || 0) - s.amountPaid), 0);
+    const paidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
+
+    const netOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + (inv.total - (inv.refundAmount || 0)), 0);
+    const officeDebt = officeInvoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0);
+    const paidOnOffice = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
+
     const walletBalance = customer.walletBalance || 0;
-    const balance = totalSales + totalOfficeInvoices - totalPaidOnSales - totalPayments - walletBalance;
+    const balance = salesDebt + officeDebt - walletBalance;
     
     res.json({
       success: true,
       data: {
         ...customer,
-        totalSales: totalSales + totalOfficeInvoices,
-        totalPaid: totalPaidOnSales + totalPayments,
+        totalSales: parseFloat((netSales + netOfficeInvoices).toFixed(2)),
+        totalPaid: parseFloat((paidOnSales + paidOnOffice).toFixed(2)),
         walletBalance: parseFloat(walletBalance.toFixed(2)),
         balance: parseFloat(balance.toFixed(2)),
         sales,
-        officeInvoices, // إضافة فواتير المكتب
+        officeInvoices,
+        officeReturns, // إضافة مرتجعات المكتب
         payments
       }
     });
@@ -607,7 +616,8 @@ exports.recordCustomerPayment = async (req, res) => {
             availableFunds -= payForThis;
             
             const newPaidAmount = officeInvoice.paidAmount + payForThis;
-            const newRemainingAmount = Math.max(0, officeInvoice.total - newPaidAmount);
+            const effectiveTotal = Math.max(0, officeInvoice.total - (officeInvoice.refundAmount || 0));
+            const newRemainingAmount = Math.max(0, effectiveTotal - newPaidAmount);
             const newStatus = newRemainingAmount <= 0.01 ? 'COMPLETED' : officeInvoice.status;
             
             // تحديث المبلغ المدفوع والحالة في فاتورة المكتب
@@ -658,10 +668,23 @@ exports.recordCustomerPayment = async (req, res) => {
           ? 'CARD_PAYMENT' 
           : (paymentMethod === 'WALLET' ? 'WALLET_PAYMENT' : 'CASH_DEPOSIT');
 
+        // التحقق من صحة branchId لتفادي خطأ Foreign Key Constraint
+        let safeBranchId = null;
+        if (req.user?.branchId) {
+          const branchExists = await tx.branch.findUnique({ where: { id: req.user.branchId } });
+          if (branchExists) {
+            safeBranchId = req.user.branchId;
+          }
+        }
+        if (!safeBranchId) {
+          const mainBranch = await tx.branch.findFirst({ where: { code: 'MAIN' } });
+          safeBranchId = mainBranch?.id || null;
+        }
+
         await tx.vaultTransaction.create({
           data: {
             vaultId: vault.id,
-            branchId: req.user?.branchId || null,
+            branchId: safeBranchId,
             type: txType,
             amount: paymentAmount,
             description: `تحصيل دفعة من العميل: ${customer.name} (${vault.name})`,

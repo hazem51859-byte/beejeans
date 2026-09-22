@@ -470,10 +470,23 @@ exports.makePayment = async (req, res) => {
           }
         });
 
+        // التحقق من صحة branchId لتفادي خطأ Foreign Key Constraint
+        let safeBranchId = null;
+        if (req.user?.branchId) {
+          const branchExists = await tx.branch.findUnique({ where: { id: req.user.branchId } });
+          if (branchExists) {
+            safeBranchId = req.user.branchId;
+          }
+        }
+        if (!safeBranchId) {
+          const mainBranch = await tx.branch.findFirst({ where: { code: 'MAIN' } });
+          safeBranchId = mainBranch?.id || null;
+        }
+
         await tx.vaultTransaction.create({
           data: {
             vaultId: vault.id,
-            branchId: req.user?.branchId || null,
+            branchId: safeBranchId,
             type: 'CASH_WITHDRAWAL',
             amount: amountFloat,
             description: `سداد مستحقات مورد: ${supplier.name} (${vault.name})`,

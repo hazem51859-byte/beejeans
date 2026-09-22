@@ -68,16 +68,19 @@ export default function CustomerStatementPrint() {
 
   const sales = customer.sales || [];
   const officeInvoices = customer.officeInvoices || [];
+  const officeReturns = customer.officeReturns || [];
   const payments = customer.payments || [];
 
-  const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
-  const totalOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.total, 0);
+  const netSales = sales.reduce((sum, s) => sum + (s.total - (s.refundAmount || 0)), 0);
+  const netOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + (inv.total - (inv.refundAmount || 0)), 0);
   const totalPaidOnSales = sales.reduce((sum, s) => sum + s.amountPaid, 0);
   const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
   const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-  const grandTotal = totalSales + totalOfficeInvoices;
+  const totalOfficeReturns = officeReturns.reduce((sum, r) => sum + r.totalAmount, 0);
+
+  const grandTotal = netSales + netOfficeInvoices;
   const totalPaid = totalPaidOnSales + totalPaidOnOfficeInvoices + totalPayments;
-  const remainingBalance = grandTotal - totalPaid;
+  const remainingBalance = customer.balance !== undefined ? customer.balance : (grandTotal - totalPaid);
 
   return (
     <>
@@ -265,7 +268,8 @@ export default function CustomerStatementPrint() {
 
           <div className="info-box">
             <h3>ملخص الحساب</h3>
-            <p><strong>إجمالي الفواتير:</strong> {grandTotal.toFixed(2)} ج.م</p>
+            <p><strong>إجمالي المبيعات (الصافي):</strong> {grandTotal.toFixed(2)} ج.م</p>
+            {totalOfficeReturns > 0 && <p><strong>إجمالي المرتجعات:</strong> {totalOfficeReturns.toFixed(2)} ج.م</p>}
             <p><strong>إجمالي المدفوع:</strong> {totalPaid.toFixed(2)} ج.م</p>
             <p><strong>الرصيد المستحق:</strong> {remainingBalance.toFixed(2)} ج.م</p>
           </div>
@@ -280,7 +284,8 @@ export default function CustomerStatementPrint() {
                 <tr>
                   <th>رقم الفاتورة</th>
                   <th>التاريخ</th>
-                  <th>الإجمالي</th>
+                  <th>الإجمالي الأصلي</th>
+                  <th>المرتجع</th>
                   <th>المدفوع</th>
                   <th>المتبقي</th>
                 </tr>
@@ -291,17 +296,60 @@ export default function CustomerStatementPrint() {
                     <td>{inv.invoiceNumber}</td>
                     <td>{dayjs(inv.createdAt).format('DD/MM/YYYY')}</td>
                     <td>{inv.total.toFixed(2)}</td>
+                    <td>{(inv.refundAmount || 0).toFixed(2)}</td>
                     <td>{inv.paidAmount.toFixed(2)}</td>
-                    <td>{inv.remainingAmount.toFixed(2)}</td>
+                    <td>{(inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, inv.total - (inv.refundAmount || 0) - inv.paidAmount)).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
                   <td colSpan="2">الإجمالي</td>
-                  <td>{totalOfficeInvoices.toFixed(2)}</td>
+                  <td>{officeInvoices.reduce((sum, inv) => sum + inv.total, 0).toFixed(2)}</td>
+                  <td>{officeInvoices.reduce((sum, inv) => sum + (inv.refundAmount || 0), 0).toFixed(2)}</td>
                   <td>{totalPaidOnOfficeInvoices.toFixed(2)}</td>
-                  <td>{(totalOfficeInvoices - totalPaidOnOfficeInvoices).toFixed(2)}</td>
+                  <td>{officeInvoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0).toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </>
+        )}
+
+        {/* Office Returns */}
+        {officeReturns.length > 0 && (
+          <>
+            <div className="section-title">مرتجعات فواتير المكتب ({officeReturns.length})</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم المرتجع</th>
+                  <th>التاريخ</th>
+                  <th>الفاتورة الأصلية</th>
+                  <th>طريقة التسوية</th>
+                  <th>قيمة المرتجع</th>
+                </tr>
+              </thead>
+              <tbody>
+                {officeReturns.map((ret) => {
+                  const methodLabel = 
+                    ret.refundMethod === 'DEBT_DEDUCTION' ? 'خصم من المديونية' :
+                    ret.refundMethod === 'VAULT_CASH' ? 'استرداد نقدي' :
+                    ret.refundMethod === 'WALLET' ? 'إضافة للمحفظة' : 'تسوية مختلطة';
+                  return (
+                    <tr key={ret.id}>
+                      <td>{ret.returnNumber}</td>
+                      <td>{dayjs(ret.createdAt).format('DD/MM/YYYY')}</td>
+                      <td>{ret.invoice?.invoiceNumber || '-'}</td>
+                      <td>{methodLabel}</td>
+                      <td>{ret.totalAmount.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="4">إجمالي المرتجعات</td>
+                  <td>{totalOfficeReturns.toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>

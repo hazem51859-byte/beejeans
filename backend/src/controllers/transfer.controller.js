@@ -563,6 +563,40 @@ exports.confirmReceipt = async (req, res) => {
       }
     }
     
+    // ✅ إضافة قيمة التوريد لحساب "محلات Bee" إذا كان من المخزن الرئيسي
+    if (transfer.fromBranch?.code === 'MAIN' && totalSellingPrice > 0) {
+      try {
+        // البحث عن عميل "محلات Bee"
+        const beeCustomer = await prisma.customer.findFirst({
+          where: {
+            name: {
+              contains: 'Bee',
+              mode: 'insensitive'
+            }
+          }
+        });
+        
+        if (beeCustomer) {
+          // إضافة المبلغ على حساب العميل (سالب = دين علينا لهم)
+          await prisma.customer.update({
+            where: { id: beeCustomer.id },
+            data: {
+              walletBalance: {
+                decrement: totalSellingPrice // ننقص عشان نزود الدين علينا
+              }
+            }
+          });
+          
+          console.log(`✅ Added ${totalSellingPrice} ج.م to محلات Bee account for transfer ${transfer.transferNumber}`);
+        } else {
+          console.warn('⚠️ Customer "محلات Bee" not found!');
+        }
+      } catch (beeError) {
+        console.error('Error updating محلات Bee account:', beeError);
+        // لا نوقف العملية، فقط نسجل الخطأ
+      }
+    }
+    
     res.json({
       success: true,
       data: updatedTransfer,

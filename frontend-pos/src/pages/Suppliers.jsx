@@ -611,10 +611,12 @@ export default function Suppliers() {
                   <p className="text-xs text-gray-600 mb-1">المدفوع</p>
                   <p className="text-lg font-bold text-green-700">{balance.paidAmount.toFixed(2)} ج.م</p>
                 </div>
-                <div className={`p-3 rounded-lg ${balance.remaining > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
-                  <p className="text-xs text-gray-600 mb-1">المتبقي (علينا)</p>
-                  <p className={`text-lg font-bold ${balance.remaining > 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                    {balance.remaining.toFixed(2)} ج.م
+                <div className={`p-3 rounded-lg ${balance.remaining > 0 ? 'bg-red-50' : balance.remaining < 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
+                  <p className="text-xs text-gray-600 mb-1">
+                    {balance.remaining > 0 ? 'المتبقي (علينا)' : balance.remaining < 0 ? 'المتبقي (لينا)' : 'متزن'}
+                  </p>
+                  <p className={`text-lg font-bold ${balance.remaining > 0 ? 'text-red-700' : balance.remaining < 0 ? 'text-green-700' : 'text-gray-700'}`}>
+                    {Math.abs(balance.remaining).toFixed(2)} ج.م
                   </p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
@@ -806,10 +808,12 @@ export default function Suppliers() {
           <div className="bg-white rounded-lg p-6 w-full max-w-3xl my-8">
             <h2 className="text-xl font-bold mb-4">دفعة جديدة - {selectedSupplier.name}</h2>
             <form onSubmit={handlePaymentSubmit} className="space-y-4">
-              <div className="bg-red-50 p-4 rounded-lg mb-4">
-                <p className="text-sm text-gray-600">المتبقي علينا</p>
-                <p className="text-2xl font-bold text-red-700">
-                  {calculateSupplierBalance(selectedSupplier).remaining.toFixed(2)} ج.م
+              <div className={`p-4 rounded-lg mb-4 ${calculateSupplierBalance(selectedSupplier).remaining > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <p className="text-sm text-gray-600">
+                  {calculateSupplierBalance(selectedSupplier).remaining > 0 ? 'المتبقي علينا' : 'المتبقي لينا'}
+                </p>
+                <p className={`text-2xl font-bold ${calculateSupplierBalance(selectedSupplier).remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                  {Math.abs(calculateSupplierBalance(selectedSupplier).remaining).toFixed(2)} ج.م
                 </p>
               </div>
               <div className="mb-4">

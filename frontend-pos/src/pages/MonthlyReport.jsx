@@ -978,13 +978,13 @@ export default function MonthlyReport() {
                               key={supplier.id} 
                               className={`flex justify-between items-center p-2 rounded text-xs ${
                                 supplier.balance > 0 
-                                  ? 'bg-green-50 border-l-2 border-green-400' 
-                                  : 'bg-red-50 border-l-2 border-red-400'
+                                  ? 'bg-red-50 border-l-2 border-red-400' 
+                                  : 'bg-green-50 border-l-2 border-green-400'
                               }`}
                             >
                               <span className="text-gray-700 flex-1">{supplier.name}</span>
-                              <span className={`font-bold ${supplier.balance > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                {supplier.balance > 0 ? '✅ لينا ' : '⚠️ علينا '}
+                              <span className={`font-bold ${supplier.balance > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {supplier.balance > 0 ? '⚠️ علينا ' : '✅ لينا '}
                                 {Math.abs(supplier.balance).toFixed(2)} ج.م
                               </span>
                             </div>

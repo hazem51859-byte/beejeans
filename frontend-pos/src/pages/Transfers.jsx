@@ -238,16 +238,37 @@ export default function Transfers() {
       return;
     }
 
-    setFormData({
-      ...formData,
-      items: [...formData.items, {
-        productId: currentItem.productId,
-        quantity: parseInt(currentItem.quantity),
-        costPrice: parseFloat(currentItem.costPrice || 0),
-        sellingPrice: parseFloat(currentItem.sellingPrice || 0)
-      }]
-    });
+    // Check if product already exists in the list
+    const existingItemIndex = formData.items.findIndex(item => item.productId === currentItem.productId);
+    
+    if (existingItemIndex !== -1) {
+      // Update existing item quantity
+      const updatedItems = [...formData.items];
+      const newQuantity = updatedItems[existingItemIndex].quantity + parseInt(currentItem.quantity);
+      
+      if (newQuantity > availableQty) {
+        toast.error(`الكمية الإجمالية ستتجاوز المتاح (${availableQty})`);
+        return;
+      }
+      
+      updatedItems[existingItemIndex].quantity = newQuantity;
+      setFormData({ ...formData, items: updatedItems });
+      toast.success(`تم تحديث كمية ${product?.name} → ${newQuantity}`);
+    } else {
+      // Add new item
+      setFormData({
+        ...formData,
+        items: [...formData.items, {
+          productId: currentItem.productId,
+          quantity: parseInt(currentItem.quantity),
+          costPrice: parseFloat(currentItem.costPrice || 0),
+          sellingPrice: parseFloat(currentItem.sellingPrice || 0)
+        }]
+      });
+      toast.success(`تم إضافة ${product?.name}`);
+    }
 
+    // Reset current item and focus on barcode input
     setCurrentItem({
       barcode: '',
       productId: '',
@@ -255,6 +276,12 @@ export default function Transfers() {
       costPrice: 0,
       sellingPrice: 0
     });
+    
+    // Focus back on barcode input for next item
+    setTimeout(() => {
+      const barcodeInput = document.querySelector('input[type="text"]');
+      if (barcodeInput) barcodeInput.focus();
+    }, 100);
   };
 
 
@@ -668,6 +695,7 @@ export default function Transfers() {
                                 ...formData,
                                 items: formData.items.filter((_, i) => i !== index)
                               });
+                              toast.success('تم حذف الصنف');
                             }}
                             className="text-rose-600 hover:text-rose-800 p-2"
                           >
@@ -676,6 +704,40 @@ export default function Transfers() {
                         </div>
                       );
                     })}
+                    
+                    {/* Transfer Summary */}
+                    <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 mt-3">
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-slate-600 text-xs mb-1">إجمالي الأصناف</p>
+                          <p className="font-black text-slate-900 text-lg">{formData.items.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 text-xs mb-1">إجمالي القطع</p>
+                          <p className="font-black text-slate-900 text-lg">
+                            {formData.items.reduce((sum, item) => sum + parseInt(item.quantity), 0)}
+                          </p>
+                        </div>
+                        {isAdmin && (
+                          <>
+                            <div>
+                              <p className="text-slate-600 text-xs mb-1">إجمالي التكلفة</p>
+                              <p className="font-bold text-blue-700">
+                                {formatMoney(formData.items.reduce((sum, item) => 
+                                  sum + (item.costPrice * item.quantity), 0))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-600 text-xs mb-1">إجمالي البيع</p>
+                              <p className="font-bold text-emerald-700">
+                                {formatMoney(formData.items.reduce((sum, item) => 
+                                  sum + (item.sellingPrice * item.quantity), 0))}
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

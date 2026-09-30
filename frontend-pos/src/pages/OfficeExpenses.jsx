@@ -18,10 +18,19 @@ export default function OfficeExpenses() {
     category: 'RENT',
     description: '',
     amount: 0,
-    vaultType: 'CASH',
+    vaultId: '',  // Changed from vaultType to vaultId
     expenseDate: new Date().toISOString().split('T')[0],
     receiptNumber: '',
     notes: '',
+  });
+
+  // Query to get all vaults
+  const { data: vaultsResponse } = useQuery({
+    queryKey: ['vaults'],
+    queryFn: async () => {
+      const response = await api.get('/vaults');
+      return response.data;
+    },
   });
 
   // جلب المخزن الرئيسي
@@ -101,7 +110,7 @@ export default function OfficeExpenses() {
       category: 'RENT',
       description: '',
       amount: 0,
-      vaultType: 'CASH',
+      vaultId: '',  // Changed from vaultType
       expenseDate: new Date().toISOString().split('T')[0],
       receiptNumber: '',
       notes: '',
@@ -114,6 +123,7 @@ export default function OfficeExpenses() {
       category: expense.category,
       description: expense.description,
       amount: expense.amount,
+      vaultId: expense.vaultId || '',  // Changed from vaultType
       expenseDate: new Date(expense.expenseDate).toISOString().split('T')[0],
       receiptNumber: expense.receiptNumber || '',
       notes: expense.notes || '',
@@ -337,17 +347,55 @@ export default function OfficeExpenses() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">مصدر الخزنة للخصم *</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">اختر الخزنة للخصم *</label>
                 <select
-                  value={formData.vaultType || 'CASH'}
-                  onChange={(e) => setFormData({ ...formData, vaultType: e.target.value })}
+                  value={formData.vaultId}
+                  onChange={(e) => setFormData({ ...formData, vaultId: e.target.value })}
                   className="input-field font-bold text-gray-800 bg-amber-50 border-amber-300"
                   required
                 >
-                  <option value="CASH">💵 خزنة نقدية (كاش الرئيسي)</option>
-                  <option value="CARD">💳 حساب الفيزا (Card Vault)</option>
-                  <option value="WALLET">📱 محفظة إلكترونية (Wallet Vault)</option>
+                  <option value="">-- اختر الخزنة --</option>
+                  {(vaultsResponse?.data || []).map(vault => {
+                    const vaultIcon = vault.type === 'CASH' ? '💵' : vault.type === 'VISA' ? '💳' : '📱';
+                    return (
+                      <option key={vault.id} value={vault.id}>
+                        {vaultIcon} {vault.name} - رصيد: {vault.balance.toFixed(2)} ج.م
+                      </option>
+                    );
+                  })}
                 </select>
+                
+                {/* Vault Balance Info */}
+                {formData.vaultId && (() => {
+                  const selectedVault = (vaultsResponse?.data || []).find(v => v.id === formData.vaultId);
+                  const currentBalance = selectedVault?.balance || 0;
+                  const remainingBalance = currentBalance - parseFloat(formData.amount || 0);
+                  const isInsufficient = remainingBalance < 0;
+                  
+                  return selectedVault ? (
+                    <div className={`mt-3 p-3 rounded-lg border-2 ${isInsufficient ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'}`}>
+                      <div className="flex justify-between items-center text-sm mb-1">
+                        <span className="text-gray-600">الرصيد الحالي:</span>
+                        <span className="font-bold text-gray-900">{currentBalance.toFixed(2)} ج.م</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm mb-1">
+                        <span className="text-gray-600">المصروف:</span>
+                        <span className="font-bold text-red-600">-{parseFloat(formData.amount || 0).toFixed(2)} ج.م</span>
+                      </div>
+                      <div className={`flex justify-between items-center text-sm pt-2 border-t ${isInsufficient ? 'border-red-200' : 'border-blue-200'}`}>
+                        <span className="font-bold text-gray-700">المتبقي بعد المصروف:</span>
+                        <span className={`font-black text-lg ${isInsufficient ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {remainingBalance.toFixed(2)} ج.م
+                        </span>
+                      </div>
+                      {isInsufficient && (
+                        <p className="text-xs text-red-600 font-bold mt-2 flex items-center gap-1">
+                          ⚠️ تحذير: الرصيد غير كافي!
+                        </p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

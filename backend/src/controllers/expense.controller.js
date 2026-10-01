@@ -87,29 +87,33 @@ exports.getExpenseById = async (req, res) => {
 // Create expense
 exports.createExpense = async (req, res) => {
   try {
-    const { branchId, category, description, amount, expenseDate, receiptNumber, notes, vaultType } = req.body;
+    const { branchId, category, description, amount, expenseDate, receiptNumber, notes, vaultId } = req.body;
     const createdBy = req.user.id;
     const amountFloat = parseFloat(amount);
-    const selectedVaultType = vaultType || 'CASH';
 
-    // Determine which vault balance field to use
-    let balanceField = 'vaultBalance';
-    if (selectedVaultType === 'CARD') balanceField = 'cardVaultBalance';
-    if (selectedVaultType === 'WALLET') balanceField = 'walletBalance';
+    // Validate vaultId
+    if (!vaultId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'يرجى اختيار الخزنة' 
+      });
+    }
 
-    // Find the branch
-    const branch = await prisma.branch.findUnique({ where: { id: branchId } });
-    if (!branch) {
-      return res.status(404).json({ success: false, message: 'الفرع غير موجود' });
+    // Find the vault
+    const vault = await prisma.vault.findUnique({ where: { id: vaultId } });
+    if (!vault) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'الخزنة غير موجودة' 
+      });
     }
 
     // Check sufficient balance
-    const currentBalance = branch[balanceField] || 0;
+    const currentBalance = vault.balance || 0;
     if (currentBalance < amountFloat) {
-      const vaultNameMap = { CASH: 'النقدي', CARD: 'الفيزا', WALLET: 'المحفظة' };
       return res.status(400).json({
         success: false,
-        message: `رصيد خزنة ${vaultNameMap[selectedVaultType] || ''} غير كافي. الرصيد المتاح: ${currentBalance.toFixed(2)} ج.م`
+        message: `رصيد خزنة ${vault.name} غير كافي. الرصيد المتاح: ${currentBalance.toFixed(2)} ج.م`
       });
     }
 
@@ -124,27 +128,32 @@ exports.createExpense = async (req, res) => {
           expenseDate: expenseDate ? new Date(expenseDate) : new Date(),
           receiptNumber,
           notes,
+          vaultId,  // Store the vaultId
           createdBy
         },
-        include: { branch: true }
+        include: { 
+          branch: true,
+          vault: true
+        }
       });
 
-      // Deduct from branch vault
+      // Deduct from vault
       const balanceBefore = currentBalance;
       const balanceAfter = balanceBefore - amountFloat;
 
-      await tx.branch.update({
-        where: { id: branchId },
-        data: { [balanceField]: balanceAfter }
+      await tx.vault.update({
+        where: { id: vaultId },
+        data: { balance: balanceAfter }
       });
 
       // Record vault transaction
       await tx.vaultTransaction.create({
         data: {
+          vaultId,
           branchId,
-          type: 'CASH_WITHDRAWAL',
+          type: 'EXPENSE',
           amount: amountFloat,
-          description: `مصروف: ${description || category} (${selectedVaultType})`,
+          description: `مصروف: ${description || category}`,
           notes: notes || `مصروف - ${category}`,
           createdBy,
           balanceBefore,

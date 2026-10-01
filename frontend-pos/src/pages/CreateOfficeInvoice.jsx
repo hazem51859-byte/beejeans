@@ -783,18 +783,32 @@ export default function CreateOfficeInvoice() {
                 <span className="text-gray-600 font-bold">ج.م</span>
               </div>
               
-              <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
+              <div className="grid grid-cols-3 gap-3 pt-2 text-sm">
                 <div className="bg-white p-3 rounded border">
-                  <span className="text-gray-600 block">المدفوع الآن:</span>
+                  <span className="text-gray-600 block text-xs">المدفوع الآن:</span>
                   <span className="text-lg font-bold text-emerald-700">
                     {(parseFloat(creditPaidAmount) || 0).toFixed(2)} ج.م
                   </span>
                 </div>
                 <div className="bg-white p-3 rounded border">
-                  <span className="text-gray-600 block">المتبقي دين على العميل:</span>
+                  <span className="text-gray-600 block text-xs">متبقي هذه الفاتورة:</span>
                   <span className="text-lg font-bold text-red-700">
                     {Math.max(0, total - (parseFloat(creditPaidAmount) || 0)).toFixed(2)} ج.م
                   </span>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border-2 border-blue-300">
+                  <span className="text-blue-700 block text-xs font-bold">إجمالي المبلغ المستحق على العميل:</span>
+                  <span className="text-lg font-black text-blue-800">
+                    {(() => {
+                      const customer = customers.find(c => c.id === customerId);
+                      const currentBalance = customer?.walletBalance || 0; // سالب = دين عليه (لينا)، موجب = دين له (علينا)
+                      const invoiceRemaining = Math.max(0, total - (parseFloat(creditPaidAmount) || 0));
+                      // المبلغ الكلي المستحق = رصيده السابق (سالب=عليه) + الفاتورة الحالية (موجب)
+                      const totalOwed = Math.abs(currentBalance) + invoiceRemaining;
+                      return totalOwed.toFixed(2);
+                    })()} ج.م
+                  </span>
+                  <p className="text-[10px] text-blue-600 mt-1">شامل هذه الفاتورة + الرصيد السابق</p>
                 </div>
               </div>
             </div>

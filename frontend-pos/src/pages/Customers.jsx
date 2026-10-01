@@ -571,9 +571,11 @@ export default function Customers() {
     e.preventDefault();
     
     const totalAllocated = paymentData.invoiceAllocations.reduce((sum, inv) => sum + (parseFloat(inv.allocation) || 0), 0);
+    const directAmount = parseFloat(paymentData.amount) || 0;
     
-    if (totalAllocated <= 0) {
-      toast.error('يرجى توزيع المبلغ على الفواتير');
+    // Allow payment even without invoices (direct wallet payment)
+    if (directAmount <= 0) {
+      toast.error('يرجى إدخال مبلغ الدفعة');
       return;
     }
 
@@ -582,7 +584,7 @@ export default function Customers() {
       return;
     }
     
-    // فلترة وتقسيم الفواتير حسب النوع
+    // فلترة وتقسيم الفواتير حسب النوع (if any invoices exist)
     const salesAllocations = paymentData.invoiceAllocations
       .filter(inv => inv.invoiceType === 'sale' && inv.allocation > 0)
       .map(inv => ({
@@ -600,11 +602,11 @@ export default function Customers() {
     recordPaymentMutation.mutate({
       customerId: selectedCustomer.id,
       data: {
-        amount: totalAllocated,
+        amount: directAmount,  // Use the direct amount entered
         paymentMethod: paymentData.paymentMethod,
-        vaultId: paymentData.vaultId, // إضافة الخزينة
+        vaultId: paymentData.vaultId,
         referenceNumber: paymentData.referenceNumber,
-        notes: paymentData.notes,
+        notes: paymentData.notes || (salesAllocations.length === 0 && officeInvoicesAllocations.length === 0 ? 'دفعة على الحساب' : ''),
         invoiceAllocations: salesAllocations,
         officeInvoicesAllocations: officeInvoicesAllocations,
       },
@@ -1177,11 +1179,37 @@ export default function Customers() {
                 </p>
               </div>
 
+              {/* دفع مباشر أو توزيع على فواتير */}
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-4 rounded-lg border-2 border-blue-200">
+                <label className="block text-sm font-bold text-gray-800 mb-2">💰 مبلغ الدفعة *</label>
+                <input
+                  type="number"
+                  value={paymentData.amount || ''}
+                  onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+                  className="input-field text-lg font-bold text-center"
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+                {paymentData.invoiceAllocations.length === 0 && (
+                  <p className="text-xs text-blue-600 mt-2 bg-blue-100 p-2 rounded">
+                    ℹ️ لا توجد فواتير مستحقة. المبلغ سيضاف على حساب العميل مباشرة
+                  </p>
+                )}
+                {paymentData.invoiceAllocations.length > 0 && (
+                  <p className="text-xs text-purple-600 mt-2">
+                    💡 يمكنك توزيع المبلغ على الفواتير أو الدفع مباشرة على الحساب
+                  </p>
+                )}
+              </div>
+
               {/* الفواتير المستحقة */}
               {paymentData.invoiceAllocations.length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-gray-100 p-3 font-bold">توزيع الدفعة على الفواتير</div>
-                  <div className="max-h-64 overflow-y-auto">
+                <>
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 p-3 font-bold">توزيع الدفعة على الفواتير (اختياري)</div>
+                    <div className="max-h-64 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
@@ -1238,32 +1266,20 @@ export default function Customers() {
                     </span>
                   </div>
                 </div>
-              )}
 
-              {/* توزيع تلقائي */}
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <label className="block text-sm font-medium mb-2">توزيع تلقائي للمبلغ</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    className="input-field flex-1"
-                    placeholder="أدخل المبلغ"
-                    min="0"
-                    step="0.01"
-                  />
+                {/* توزيع تلقائي */}
+                <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      const input = e.target.previousElementSibling;
-                      autoDistributePayment(input.value);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    onClick={() => autoDistributePayment(paymentData.amount)}
+                    className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-bold"
                   >
-                    توزيع تلقائي
+                    🔄 توزيع المبلغ تلقائياً على الفواتير
                   </button>
+                  <p className="text-xs text-amber-700 mt-2 text-center">سيتم توزيع المبلغ على الفواتير حسب الأولوية</p>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">سيتم توزيع المبلغ على الفواتير بالترتيب</p>
-              </div>
+              </>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

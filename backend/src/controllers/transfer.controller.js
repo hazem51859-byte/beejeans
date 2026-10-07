@@ -244,6 +244,8 @@ exports.createTransfer = async (req, res) => {
       const costPrice = product?.costPrice || 0;
       const sellingPrice = product?.sellingPrice || 0;
       const retailPrice = product?.retailPrice || product?.sellingPrice || 0;
+      // transferPrice من الـ frontend، لو مش موجود استخدم sellingPrice
+      const transferPrice = item.transferPrice || sellingPrice;
       
       totalCost += costPrice * item.quantity;
       totalSellingPrice += sellingPrice * item.quantity;
@@ -252,7 +254,8 @@ exports.createTransfer = async (req, res) => {
         ...item,
         costPrice,
         sellingPrice,
-        retailPrice
+        retailPrice,
+        transferPrice
       };
     }));
     
@@ -275,6 +278,7 @@ exports.createTransfer = async (req, res) => {
             costPrice: item.costPrice,
             sellingPrice: item.sellingPrice,
             retailPrice: item.retailPrice,
+            transferPrice: item.transferPrice,
             status: 'PENDING',
             notes: item.notes || ''
           }))
@@ -414,9 +418,10 @@ exports.confirmReceipt = async (req, res) => {
       const costPrice = transferItem.product.costPrice || 0;
       const sellingPrice = transferItem.product.sellingPrice || 0;
       const retailPrice = transferItem.product.retailPrice || transferItem.product.sellingPrice || 0;
+      const transferPrice = transferItem.transferPrice || sellingPrice; // سعر التوريد
       
       totalCost += costPrice * quantityReceived;
-      totalSellingPrice += sellingPrice * quantityReceived;
+      totalSellingPrice += transferPrice * quantityReceived; // استخدام سعر التوريد بدل سعر البيع
     }
     
     // تحديث حالة التوريد مع الفروقات
@@ -564,6 +569,7 @@ exports.confirmReceipt = async (req, res) => {
     }
     
     // ✅ إضافة قيمة التوريد لحساب "محلات Bee" إذا كان من المخزن الرئيسي
+    // استخدام transferPrice (سعر التوريد) بدل sellingPrice
     if (transfer.fromBranch?.code === 'MAIN' && totalSellingPrice > 0) {
       try {
         // البحث عن عميل "محلات Bee"
@@ -582,12 +588,12 @@ exports.confirmReceipt = async (req, res) => {
             where: { id: beeCustomer.id },
             data: {
               walletBalance: {
-                decrement: totalSellingPrice // ننقص عشان نزود الدين علينا
+                decrement: totalSellingPrice // ننقص عشان نزود الدين علينا (totalSellingPrice يحتوي على transferPrice)
               }
             }
           });
           
-          console.log(`✅ Added ${totalSellingPrice} ج.م to محلات Bee account for transfer ${transfer.transferNumber}`);
+          console.log(`✅ Added ${totalSellingPrice} ج.م to محلات Bee account for transfer ${transfer.transferNumber} (based on transferPrice)`);
         } else {
           console.warn('⚠️ Customer "محلات Bee" not found!');
         }

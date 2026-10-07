@@ -166,3 +166,148 @@ exports.adjustInventory = async (req, res, next) => {
     next(error);
   }
 };
+
+// حساب قيمة المخزون في فرع معين بناءً على آخر سعر توريد
+exports.getBranchInventoryValue = async (req, res, next) => {
+  try {
+    const { branchId } = req.params;
+
+    // جلب كل المخزون في الفرع
+    const inventory = await prisma.inventory.findMany({
+      where: { 
+        branchId,
+        quantity: { gt: 0 } // فقط المنتجات الموجودة
+      },
+      include: {
+        product: true
+      }
+    });
+
+    let totalValue = 0;
+    const itemsWithValues = [];
+
+    // لكل منتج، نجيب آخر سعر توريد ليه
+    for (const inv of inventory) {
+      // جلب آخر توريد للمنتج في هذا الفرع
+      const lastTransfer = await prisma.transferItem.findFirst({
+        where: {
+          productId: inv.productId,
+          transfer: {
+            toBranchId: branchId,
+            status: 'DELIVERED'
+          }
+        },
+        include: {
+          transfer: true
+        },
+        orderBy: {
+          transfer: {
+            receivedAt: 'desc'
+          }
+        }
+      });
+
+      // سعر التوريد = آخر transferPrice أو sellingPrice كـ fallback
+      const transferPrice = lastTransfer?.transferPrice || inv.product.sellingPrice || 0;
+      const itemValue = inv.quantity * transferPrice;
+      
+      totalValue += itemValue;
+      
+      itemsWithValues.push({
+        productId: inv.productId,
+        productName: inv.product.name,
+        barcode: inv.product.barcode,
+        quantity: inv.quantity,
+        transferPrice: transferPrice,
+        totalValue: itemValue
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        branchId,
+        totalItems: inventory.length,
+        totalQuantity: inventory.reduce((sum, inv) => sum + inv.quantity, 0),
+        totalValue: totalValue,
+        items: itemsWithValues
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating branch inventory value:', error);
+    next(error);
+  }
+};
+
+// حساب قيمة المخزون لكل الفروع
+exports.getAllBranchesInventoryValue = async (req, res, next) => {
+  try {
+    // جلب كل الفروع
+    const branches = await prisma.branch.findMany({
+      where: { isActive: true }
+    });
+
+    const branchesValues = [];
+
+    for (const branch of branches) {
+      // جلب المخزون في كل فرع
+      const inventory = await prisma.inventory.findMany({
+        where: { 
+          branchId: branch.id,
+          quantity: { gt: 0 }
+        },
+        include: {
+          product: true
+        }
+      });
+
+      let branchTotalValue = 0;
+
+      for (const inv of inventory) {
+        // جلب آخر توريد للمنتج في هذا الفرع
+        const lastTransfer = await prisma.transferItem.findFirst({
+          where: {
+            productId: inv.productId,
+            transfer: {
+              toBranchId: branch.id,
+              status: 'DELIVERED'
+            }
+          },
+          include: {
+            transfer: true
+          },
+          orderBy: {
+            transfer: {
+              receivedAt: 'desc'
+            }
+          }
+        });
+
+        const transferPrice = lastTransfer?.transferPrice || inv.product.sellingPrice || 0;
+        branchTotalValue += inv.quantity * transferPrice;
+      }
+
+      branchesValues.push({
+        branchId: branch.id,
+        branchName: branch.name,
+        branchCode: branch.code,
+        totalItems: inventory.length,
+        totalQuantity: inventory.reduce((sum, inv) => sum + inv.quantity, 0),
+        totalValue: branchTotalValue
+      });
+    }
+
+    const grandTotal = branchesValues.reduce((sum, b) => sum + b.totalValue, 0);
+
+    res.json({
+      success: true,
+      data: {
+        branches: branchesValues,
+        grandTotal: grandTotal
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating all branches inventory value:', error);
+    next(error);
+  }
+};

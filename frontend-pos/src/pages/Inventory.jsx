@@ -49,8 +49,19 @@ export default function Inventory() {
     enabled: !!branchToQuery,
   });
 
+  // Fetch inventory value
+  const { data: inventoryValueData } = useQuery({
+    queryKey: ['inventory-value', branchToQuery],
+    queryFn: async () => {
+      const response = await api.get(`/inventory/branch/${branchToQuery}/value`);
+      return response.data;
+    },
+    enabled: !!branchToQuery && isAdmin, // Only for admin
+  });
+
   const inventory = inventoryData?.data?.data || [];
   const lowStock = lowStockData?.data?.data || [];
+  const inventoryValue = inventoryValueData?.data || null;
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -78,6 +89,38 @@ export default function Inventory() {
           </div>
         )}
       </div>
+
+      {/* Inventory Value Summary - Admin Only */}
+      {isAdmin && inventoryValue && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-blue-800">عدد الأصناف</p>
+              <Package className="text-blue-600" size={20} />
+            </div>
+            <p className="text-2xl font-black text-blue-900">{inventoryValue.totalItems}</p>
+            <p className="text-xs text-blue-600 mt-1">صنف مختلف</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-emerald-800">إجمالي القطع</p>
+              <Package className="text-emerald-600" size={20} />
+            </div>
+            <p className="text-2xl font-black text-emerald-900">{inventoryValue.totalQuantity.toLocaleString()}</p>
+            <p className="text-xs text-emerald-600 mt-1">قطعة في المخزن</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-amber-800">💰 قيمة المخزون</p>
+              <span className="text-amber-600 font-bold">ج.م</span>
+            </div>
+            <p className="text-2xl font-black text-amber-900">{inventoryValue.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="text-xs text-amber-600 mt-1">بناءً على سعر التوريد</p>
+          </div>
+        </div>
+      )}
 
       {/* Low Stock Alert */}
       {lowStock.length > 0 && (

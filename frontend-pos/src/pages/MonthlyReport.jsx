@@ -148,6 +148,15 @@ export default function MonthlyReport() {
     },
   });
 
+  // قيمة المخزون الحالي في كل فرع
+  const { data: branchesInventoryValue } = useQuery({
+    queryKey: ['branches-inventory-value'],
+    queryFn: async () => {
+      const response = await api.get('/inventory/all-branches/value');
+      return response.data;
+    },
+  });
+
   // بيانات الإنتاج - أوامر التصنيع
   const { data: manufacturingOrdersData } = useQuery({
     queryKey: ['manufacturing-orders-report', startDate, endDateString],
@@ -1768,6 +1777,109 @@ export default function MonthlyReport() {
           <p className="text-center text-gray-500 py-8">لا توجد مبيعات أصناف في هذه الفترة</p>
         )}
       </div>
+
+      {/* قسم قيمة المخزون الحالي في الفروع */}
+      {branchesInventoryValue?.data && (
+        <div className="card bg-white border border-purple-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-purple-200">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-100 p-2 rounded-lg">
+                <Package className="text-purple-600" size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-purple-900">قيمة المخزون الحالي في الفروع</h2>
+                <p className="text-sm text-purple-600">بناءً على آخر سعر توريد لكل صنف</p>
+              </div>
+            </div>
+            <div className="bg-purple-50 px-4 py-2 rounded-lg border-2 border-purple-300">
+              <p className="text-xs text-purple-700 font-semibold">الإجمالي الكلي</p>
+              <p className="text-2xl font-black text-purple-900">
+                {branchesInventoryValue.data.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-purple-50">
+                <tr>
+                  <th className="px-4 py-3 text-right text-sm font-bold text-purple-900">الفرع</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-purple-900">عدد الأصناف</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-purple-900">إجمالي القطع</th>
+                  <th className="px-4 py-3 text-right text-sm font-bold text-purple-900">قيمة المخزون</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold text-purple-900">النسبة %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branchesInventoryValue.data.branches
+                  .sort((a, b) => b.totalValue - a.totalValue)
+                  .map((branch) => {
+                    const percentage = branchesInventoryValue.data.grandTotal > 0 
+                      ? (branch.totalValue / branchesInventoryValue.data.grandTotal * 100) 
+                      : 0;
+                    
+                    return (
+                      <tr key={branch.branchId} className="border-b hover:bg-purple-50/30">
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                          {branch.branchName}
+                          {branch.branchCode === 'MAIN' && (
+                            <span className="mr-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                              مخزن رئيسي
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center text-gray-700">
+                          {branch.totalItems}
+                        </td>
+                        <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                          {branch.totalQuantity.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-purple-900">
+                          {branch.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-purple-600 h-2 rounded-full" 
+                                style={{ width: `${percentage}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-semibold text-purple-700">
+                              {percentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+              <tfoot className="bg-purple-100 font-bold">
+                <tr>
+                  <td className="px-4 py-3 text-right text-purple-900">الإجمالي</td>
+                  <td className="px-4 py-3 text-center text-purple-900">
+                    {branchesInventoryValue.data.branches.reduce((sum, b) => sum + b.totalItems, 0)}
+                  </td>
+                  <td className="px-4 py-3 text-center text-purple-900">
+                    {branchesInventoryValue.data.branches.reduce((sum, b) => sum + b.totalQuantity, 0).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-right text-purple-900">
+                    {branchesInventoryValue.data.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+                  </td>
+                  <td className="px-4 py-3 text-center text-purple-900">100%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="mt-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <p className="text-xs text-purple-800">
+              <strong>ملاحظة:</strong> يتم حساب قيمة المخزون بناءً على آخر سعر توريد لكل صنف. 
+              الأرباح الفعلية تُحسب بناءً على الفرق بين سعر البيع (القطاعي) وسعر التكلفة الفعلي للمنتج.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* قسم الجرود والخسائر */}
       <AuditsReportSection auditsData={auditsData} />

@@ -43,7 +43,8 @@ export default function Transfers() {
     productId: '',
     quantity: 1,
     costPrice: 0,
-    sellingPrice: 0
+    sellingPrice: 0,
+    transferPrice: 0
   });
 
   const [receiveForm, setReceiveForm] = useState({
@@ -210,7 +211,8 @@ export default function Transfers() {
           ...currentItem,
           productId: product.id,
           costPrice: product.costPrice || 0,
-          sellingPrice: product.sellingPrice || 0
+          sellingPrice: product.sellingPrice || 0,
+          transferPrice: product.sellingPrice || 0  // Default = سعر الجملة
         });
         toast.success(`تم العثور على: ${product.name}`);
         // Focus on quantity input after finding product
@@ -262,7 +264,8 @@ export default function Transfers() {
           productId: currentItem.productId,
           quantity: parseInt(currentItem.quantity),
           costPrice: parseFloat(currentItem.costPrice || 0),
-          sellingPrice: parseFloat(currentItem.sellingPrice || 0)
+          sellingPrice: parseFloat(currentItem.sellingPrice || 0),
+          transferPrice: parseFloat(currentItem.transferPrice || currentItem.sellingPrice || 0)
         }]
       });
       toast.success(`تم إضافة ${product?.name}`);
@@ -274,7 +277,8 @@ export default function Transfers() {
       productId: '',
       quantity: 1,
       costPrice: 0,
-      sellingPrice: 0
+      sellingPrice: 0,
+      transferPrice: 0
     });
     
     // Focus back on barcode input for next item
@@ -304,6 +308,7 @@ export default function Transfers() {
         quantity: parseInt(item.quantity),
         costPrice: parseFloat(item.costPrice || 0),
         sellingPrice: parseFloat(item.sellingPrice || 0),
+        transferPrice: parseFloat(item.transferPrice || item.sellingPrice || 0)
       }))
     });
   };
@@ -617,10 +622,32 @@ export default function Transfers() {
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            addItemToTransfer();
+                            // Focus on transferPrice input
+                            document.getElementById('transfer-price-input')?.focus();
                           }
                         }}
                         className="w-full border-2 border-emerald-300 rounded-lg px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-amber-700 mb-1">💰 سعر التوريد</label>
+                      <input
+                        id="transfer-price-input"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={currentItem.transferPrice}
+                        onChange={(e) => setCurrentItem({ ...currentItem, transferPrice: e.target.value })}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => e.target.select()}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addItemToTransfer();
+                          }
+                        }}
+                        placeholder="سعر الجملة"
+                        className="w-full border-2 border-amber-300 rounded-lg px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-amber-500 bg-amber-50"
                       />
                     </div>
                   </div>
@@ -646,6 +673,7 @@ export default function Transfers() {
                         </div>
                         <div className="flex justify-between items-center text-xs text-slate-600">
                           <span>التكلفة: <strong>{formatMoney(currentItem.costPrice)}</strong></span>
+                          <span>التوريد: <strong className="text-amber-600">{formatMoney(currentItem.transferPrice)}</strong></span>
                           <span>البيع: <strong className="text-emerald-700">{formatMoney(currentItem.sellingPrice)}</strong></span>
                         </div>
                       </div>
@@ -682,6 +710,7 @@ export default function Transfers() {
                             {isAdmin ? (
                               <>
                                 <p className="text-slate-600">التكلفة: <strong>{formatMoney(item.costPrice)}</strong></p>
+                                <p className="text-amber-600 font-bold">التوريد: {formatMoney(item.transferPrice || item.sellingPrice)}</p>
                                 <p className="text-emerald-700 font-bold">البيع: {formatMoney(item.sellingPrice)}</p>
                               </>
                             ) : (
@@ -720,6 +749,14 @@ export default function Transfers() {
                         </div>
                         {isAdmin && (
                           <>
+                            <div className="col-span-2 border-t border-emerald-300 pt-2 mt-1">
+                              <p className="text-amber-700 text-xs font-bold mb-1">💰 قيمة التوريد</p>
+                              <p className="font-black text-amber-700 text-xl">
+                                {formatMoney(formData.items.reduce((sum, item) => 
+                                  sum + ((item.transferPrice || item.sellingPrice) * item.quantity), 0))}
+                              </p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">السعر الذي ستُحسب به البضاعة في الفرع</p>
+                            </div>
                             <div>
                               <p className="text-slate-600 text-xs mb-1">إجمالي التكلفة</p>
                               <p className="font-bold text-blue-700">

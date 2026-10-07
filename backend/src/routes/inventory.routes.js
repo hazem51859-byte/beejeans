@@ -7,6 +7,8 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/branch/:branchId', inventoryController.getInventoryByBranch);
+router.get('/branch/:branchId/value', inventoryController.getBranchInventoryValue);
+router.get('/all-branches/value', inventoryController.getAllBranchesInventoryValue);
 router.get('/product/:productId', inventoryController.getInventoryByProduct);
 router.get('/low-stock/:branchId', inventoryController.getLowStockItems);
 

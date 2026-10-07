@@ -432,6 +432,20 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
       }
     });
 
+    // Get all customer store returns in the period
+    const storeReturns = await prisma.customerStoreReturn.findMany({
+      where: {
+        createdAt: {
+          gte: start,
+          lte: end
+        },
+        status: 'COMPLETED'
+      },
+      include: {
+        items: true
+      }
+    });
+
     // فصل الفواتير الافتتاحية عن الفواتير الفعلية
     const openingInvoices = invoices.filter(inv => inv.notes?.includes('رصيد افتتاحي'));
     const actualInvoices = invoices.filter(inv => !inv.notes?.includes('رصيد افتتاحي'));
@@ -443,15 +457,21 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
     const returnsDeductedFromDebt = officeReturns.reduce((sum, ret) => sum + (ret.deductedFromDebt || 0), 0);
     const totalReturnsCost = officeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
 
+    // إجماليات مرتجعات المخزن الرئيسي
+    const totalStoreReturnsCount = storeReturns.length;
+    const totalStoreReturnsAmount = storeReturns.reduce((sum, ret) => sum + (ret.totalAmount || 0), 0);
+    const totalStoreReturnsCost = storeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
+    const totalStoreReturnsProfit = storeReturns.reduce((sum, ret) => sum + (ret.totalProfit || 0), 0);
+
     // إجماليات عامة (كل الفواتير)
     const totalInvoices = invoices.length;
     const grossSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalSales = Math.max(0, grossSales - totalReturnsAmount); // صافي المبيعات بعد المرتجعات
+    const totalSales = Math.max(0, grossSales - totalReturnsAmount - totalStoreReturnsAmount); // صافي المبيعات بعد المرتجعات
     
     // التكلفة والربح فقط من الفواتير الفعلية (بدون الافتتاحية)
     const grossCost = actualInvoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
-    const totalCost = Math.max(0, grossCost - totalReturnsCost);
-    const totalProfit = actualInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+    const totalCost = Math.max(0, grossCost - totalReturnsCost - totalStoreReturnsCost);
+    const totalProfit = Math.max(0, actualInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0) - (totalReturnsAmount - totalReturnsCost) - totalStoreReturnsProfit);
     
     const totalCollected = invoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
     const totalRemaining = invoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0);
@@ -499,6 +519,12 @@ exports.getOfficeInvoicesReport = async (req, res, next) => {
         totalReturnsCount,
         returnsDeductedFromPaid,
         returnsDeductedFromDebt,
+        storeReturns: {
+          count: totalStoreReturnsCount,
+          amount: totalStoreReturnsAmount,
+          cost: totalStoreReturnsCost,
+          profit: totalStoreReturnsProfit
+        },
         totalCost, // من الفواتير الفعلية فقط
         totalProfit, // من الفواتير الفعلية فقط
         totalCollected,

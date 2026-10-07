@@ -69,6 +69,7 @@ export default function CustomerStatementPrint() {
   const sales = customer.sales || [];
   const officeInvoices = customer.officeInvoices || [];
   const officeReturns = customer.officeReturns || [];
+  const storeReturns = customer.storeReturns || [];
   const payments = customer.payments || [];
 
   const netSales = sales.reduce((sum, s) => sum + (s.total - (s.refundAmount || 0)), 0);
@@ -77,6 +78,7 @@ export default function CustomerStatementPrint() {
   const totalPaidOnOfficeInvoices = officeInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0);
   const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
   const totalOfficeReturns = officeReturns.reduce((sum, r) => sum + r.totalAmount, 0);
+  const totalStoreReturns = storeReturns.reduce((sum, r) => sum + r.totalAmount, 0);
 
   const grandTotal = netSales + netOfficeInvoices;
   const totalPaid = totalPaidOnSales + totalPaidOnOfficeInvoices + totalPayments;
@@ -356,6 +358,41 @@ export default function CustomerStatementPrint() {
           </>
         )}
 
+        {/* Store Returns */}
+        {storeReturns.length > 0 && (
+          <>
+            <div className="section-title">مرتجعات المخزن الرئيسي ({storeReturns.length})</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم المرتجع</th>
+                  <th>التاريخ</th>
+                  <th>عدد الأصناف</th>
+                  <th>قيمة المرتجع</th>
+                  <th>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {storeReturns.map((ret) => (
+                  <tr key={ret.id}>
+                    <td>{ret.returnNumber}</td>
+                    <td>{dayjs(ret.createdAt).format('DD/MM/YYYY')}</td>
+                    <td>{ret.items?.reduce((s, it) => s + (it.quantity || 0), 0) || ret.items?.length || 0} قطعة</td>
+                    <td style={{ color: '#b45309', fontWeight: 'bold' }}>{ret.totalAmount.toFixed(2)}</td>
+                    <td>{ret.notes || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="3">إجمالي مرتجعات المخزن الرئيسي</td>
+                  <td colSpan="2">{totalStoreReturns.toFixed(2)} ج.م</td>
+                </tr>
+              </tfoot>
+            </table>
+          </>
+        )}
+
         {/* Branch Sales */}
         {sales.length > 0 && (
           <>
@@ -436,6 +473,18 @@ export default function CustomerStatementPrint() {
             <span>إجمالي الفواتير:</span>
             <span>{grandTotal.toFixed(2)} ج.م</span>
           </div>
+          {totalOfficeReturns > 0 && (
+            <div className="total-row">
+              <span>مرتجعات فواتير المكتب:</span>
+              <span>-{totalOfficeReturns.toFixed(2)} ج.م</span>
+            </div>
+          )}
+          {totalStoreReturns > 0 && (
+            <div className="total-row">
+              <span>مرتجعات المخزن الرئيسي:</span>
+              <span>-{totalStoreReturns.toFixed(2)} ج.م</span>
+            </div>
+          )}
           <div className="total-row">
             <span>إجمالي المدفوع:</span>
             <span>{totalPaid.toFixed(2)} ج.م</span>

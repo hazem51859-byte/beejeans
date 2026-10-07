@@ -76,7 +76,7 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       }
     });
 
-    // 5.2 جلب مرتجعات المكتب لطرحها من الأرباح
+    // 5.2 جلب مرتجعات المكتب والمخزن الرئيسي لطرحها من الأرباح
     const officeReturns = await prisma.officeReturn.findMany({
       where: {
         status: 'COMPLETED',
@@ -84,9 +84,23 @@ exports.getPartnersAccountingSummary = async (req, res) => {
       }
     });
 
+    const storeReturns = await prisma.customerStoreReturn.findMany({
+      where: {
+        status: 'COMPLETED',
+        ...(dateFilter.gte || dateFilter.lte ? { createdAt: dateFilter } : {})
+      }
+    });
+
     // المرتجعات: طرح قيمتها من إجمالي الإيرادات والتكلفة
-    const totalReturnsAmount = officeReturns.reduce((sum, ret) => sum + (ret.totalAmount || 0), 0);
-    const totalReturnsCost = officeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
+    const totalOfficeReturnsAmount = officeReturns.reduce((sum, ret) => sum + (ret.totalAmount || 0), 0);
+    const totalOfficeReturnsCost = officeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
+
+    const totalStoreReturnsAmount = storeReturns.reduce((sum, ret) => sum + (ret.totalAmount || 0), 0);
+    const totalStoreReturnsCost = storeReturns.reduce((sum, ret) => sum + (ret.totalCost || 0), 0);
+    const totalStoreReturnsProfit = storeReturns.reduce((sum, ret) => sum + (ret.totalProfit || 0), 0);
+
+    const totalReturnsAmount = totalOfficeReturnsAmount + totalStoreReturnsAmount;
+    const totalReturnsCost = totalOfficeReturnsCost + totalStoreReturnsCost;
 
     // فصل الفواتير الافتتاحية عن الحقيقية
     const actualOfficeInvoices = officeInvoices.filter(inv => !inv.notes?.includes('رصيد افتتاحي'));
@@ -97,7 +111,7 @@ exports.getPartnersAccountingSummary = async (req, res) => {
     const grossOfficeCost = actualOfficeInvoices.reduce((sum, inv) => sum + (inv.totalCost || 0), 0);
     const totalOfficeCost = Math.max(0, grossOfficeCost - totalReturnsCost);
 
-    // صافي ربح المكتب (من الفواتير الفعلية فقط بعد خصم المرتجعات)
+    // صافي ربح المكتب (من الفواتير الفعلية فقط بعد خصم جميع المرتجعات)
     const grossOfficeProfit = actualOfficeInvoices.reduce((sum, inv) => sum + (inv.profit || 0), 0);
     const totalOfficeProfit = Math.max(0, grossOfficeProfit - (totalReturnsAmount - totalReturnsCost));
 
@@ -177,7 +191,9 @@ exports.getPartnersAccountingSummary = async (req, res) => {
         total: parseFloat(totalSales.toFixed(2)),
         cost: parseFloat(totalCOGS.toFixed(2)),
         grossOfficeRevenue: parseFloat(grossOfficeRevenue.toFixed(2)),
-        totalOfficeReturns: parseFloat(totalReturnsAmount.toFixed(2))
+        totalOfficeReturns: parseFloat(totalReturnsAmount.toFixed(2)),
+        totalStoreReturns: parseFloat(totalStoreReturnsAmount.toFixed(2)),
+        totalStoreReturnsProfit: parseFloat(totalStoreReturnsProfit.toFixed(2))
       },
       
       // الأرباح/الخسائر

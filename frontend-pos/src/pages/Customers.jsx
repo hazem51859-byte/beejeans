@@ -1576,6 +1576,67 @@ export default function Customers() {
               </div>
             )}
 
+            {/* مرتجعات المخزن الرئيسي */}
+            {selectedCustomer.storeReturns && selectedCustomer.storeReturns.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-bold mb-3 flex items-center gap-2 text-teal-700">
+                  <RotateCcw size={18} />
+                  مرتجعات المخزن الرئيسي ({selectedCustomer.storeReturns.length})
+                </h3>
+                <div className="space-y-3">
+                  {selectedCustomer.storeReturns.map((ret) => {
+                    const isExpanded = expandedSaleId === ret.id;
+                    const totalPieces = ret.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
+
+                    return (
+                      <div key={ret.id} className="border border-teal-200 rounded-lg overflow-hidden bg-teal-50">
+                        <div 
+                          className="bg-teal-100 p-3 flex items-center justify-between cursor-pointer hover:bg-teal-200"
+                          onClick={() => setExpandedSaleId(isExpanded ? null : ret.id)}
+                        >
+                          <div className="flex-1 grid grid-cols-4 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-600">رقم المرتجع</p>
+                              <p className="font-bold text-sm text-teal-900">{ret.returnNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">التاريخ</p>
+                              <p className="text-sm">{dayjs(ret.createdAt).format('DD/MM/YYYY')}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">عدد القطع</p>
+                              <p className="text-sm font-medium">{totalPieces} قطعة</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">قيمة المرتجع</p>
+                              <p className="text-sm font-bold text-teal-800">{ret.totalAmount.toFixed(2)} ج.م</p>
+                            </div>
+                          </div>
+                          <span className={`text-gray-600 text-xs transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                            ▼
+                          </span>
+                        </div>
+                        {isExpanded && ret.items && ret.items.length > 0 && (
+                          <div className="p-3 bg-white border-t border-teal-200">
+                            <p className="text-xs font-bold text-gray-700 mb-2">الأصناف المرتجعة ({ret.items.length}):</p>
+                            <div className="space-y-1">
+                              {ret.items.map((prod, pIdx) => (
+                                <div key={pIdx} className="flex justify-between items-center text-xs py-1 border-b border-gray-100">
+                                  <span>{prod.product?.name || 'صنف'} {prod.size ? `(مقاس ${prod.size})` : ''} × {prod.quantity}</span>
+                                  <span className="font-bold text-teal-700">{(prod.totalSalePrice || (prod.unitSalePrice * prod.quantity)).toFixed(2)} ج.م</span>
+                                </div>
+                              ))}
+                            </div>
+                            {ret.notes && <p className="text-xs text-gray-500 mt-2">ملاحظات: {ret.notes}</p>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mb-6">
               <h3 className="font-bold mb-3">فواتير التقسيط</h3>
               <div className="space-y-3">
@@ -1821,6 +1882,20 @@ export default function Customers() {
                     returnObj: ret
                   });
                 });
+
+                // إضافة مرتجعات المخزن الرئيسي
+                selectedCustomer.storeReturns?.forEach(ret => {
+                  transactions.push({
+                    type: 'store-return',
+                    date: ret.createdAt,
+                    description: `مرتجع مخزن رئيسي ${ret.returnNumber}`,
+                    amount: ret.totalAmount,
+                    saleId: ret.id,
+                    items: ret.items || [],
+                    notes: ret.notes,
+                    returnObj: ret
+                  });
+                });
                 
                 // إضافة الدفعات
                 selectedCustomer.payments?.forEach(payment => {
@@ -1841,32 +1916,35 @@ export default function Customers() {
                   const bgColor = item.type === 'office-invoice' ? 'bg-purple-50 border-purple-500' :
                                   item.type === 'sale' ? 'bg-red-50 border-red-500' : 
                                   item.type === 'office-return' ? 'bg-amber-50 border-amber-500' :
+                                  item.type === 'store-return' ? 'bg-teal-50 border-teal-500' :
                                   'bg-green-50 border-green-500';
                   const iconColor = item.type === 'office-invoice' ? 'text-purple-600' :
                                    item.type === 'sale' ? 'text-red-600' : 
                                    item.type === 'office-return' ? 'text-amber-600' :
+                                   item.type === 'store-return' ? 'text-teal-600' :
                                    'text-green-600';
                   const textColor = item.type === 'office-invoice' ? 'text-purple-700' :
                                    item.type === 'sale' ? 'text-red-700' : 
                                    item.type === 'office-return' ? 'text-amber-700' :
+                                   item.type === 'store-return' ? 'text-teal-700' :
                                    'text-green-700';
                   
                   return (
                     <div key={`${item.type}-${index}`} className={`rounded-lg border-r-4 overflow-hidden ${bgColor}`}>
                       <div className="p-4 flex justify-between items-start"
-                           onClick={() => (item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') && setExpandedSaleId(isExpanded ? null : item.saleId)}
-                           style={{ cursor: (item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') ? 'pointer' : 'default' }}>
+                           onClick={() => (item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return' || item.type === 'store-return') && setExpandedSaleId(isExpanded ? null : item.saleId)}
+                           style={{ cursor: (item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return' || item.type === 'store-return') ? 'pointer' : 'default' }}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             {item.type === 'payment' ? (
                               <DollarSign className={iconColor} size={18} />
-                            ) : item.type === 'office-return' ? (
+                            ) : (item.type === 'office-return' || item.type === 'store-return') ? (
                               <RotateCcw className={iconColor} size={18} />
                             ) : (
                               <Receipt className={iconColor} size={18} />
                             )}
                             <span className="font-bold">{item.description}</span>
-                            {(item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') && item.items && item.items.length > 0 && (
+                            {(item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return' || item.type === 'store-return') && item.items && item.items.length > 0 && (
                               <span className={`text-gray-500 text-xs transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
                                 ▼
                               </span>
@@ -1907,6 +1985,11 @@ export default function Customers() {
                               )}
                             </div>
                           )}
+                          {item.type === 'store-return' && (
+                            <div className="mt-2 text-xs">
+                              <span className="text-teal-800 font-bold">مرتجع مخزن رئيسي (تم إرجاع البضاعة للمخزن وخصم القيمة)</span>
+                            </div>
+                          )}
                           {item.notes && <p className="text-xs text-gray-600 mt-1">ملاحظات: {item.notes}</p>}
                           {item.paymentMethod && (
                             <p className="text-xs text-gray-600 mt-1">
@@ -1920,12 +2003,14 @@ export default function Customers() {
                         </div>
                         <div className="text-left">
                           <p className={`text-2xl font-bold ${textColor}`}>
-                            {item.type === 'office-return' ? `-${item.amount.toFixed(2)}` : `${item.amount.toFixed(2)}`} ج.م
+                            {(item.type === 'office-return' || item.type === 'store-return') ? `-${item.amount.toFixed(2)}` : `${item.amount.toFixed(2)}`} ج.م
                           </p>
                           {item.type === 'payment' ? (
                             <p className="text-xs text-green-600">تم التحصيل ✓</p>
                           ) : item.type === 'office-return' ? (
-                            <p className="text-xs text-amber-600 font-medium">مرتجع مبيعات ↩</p>
+                            <p className="text-xs text-amber-600 font-medium">مرتجع مكتب ↩</p>
+                          ) : item.type === 'store-return' ? (
+                            <p className="text-xs text-teal-600 font-medium">مرتجع مخزن ↩</p>
                           ) : item.remaining <= 0 ? (
                             <p className="text-xs text-green-600">مسددة بالكامل ✓</p>
                           ) : (
@@ -1956,24 +2041,25 @@ export default function Customers() {
                         </div>
                       </div>
                       
-                      {(item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return') && isExpanded && item.items && item.items.length > 0 && (
+                      {(item.type === 'sale' || item.type === 'office-invoice' || item.type === 'office-return' || item.type === 'store-return') && isExpanded && item.items && item.items.length > 0 && (
                         <div className={`px-4 pb-4 bg-white border-t ${
                           item.type === 'office-invoice' ? 'border-purple-200' : 
-                          item.type === 'office-return' ? 'border-amber-200' : 'border-red-200'
+                          item.type === 'office-return' ? 'border-amber-200' :
+                          item.type === 'store-return' ? 'border-teal-200' : 'border-red-200'
                         }`}>
                           <h4 className="font-bold text-sm mb-2 mt-2">
-                            {item.type === 'office-return' ? 'الأصناف المرتجعة:' : 'المنتجات:'}
+                            {(item.type === 'office-return' || item.type === 'store-return') ? 'الأصناف المرتجعة:' : 'المنتجات:'}
                           </h4>
                           <table className="w-full text-xs">
                             <thead className="bg-gray-100">
                               <tr>
                                 <th className="p-2 text-right">#</th>
                                 <th className="p-2 text-right">المنتج</th>
-                                <th className="p-2 text-right">{item.type === 'office-return' ? 'المقاس' : 'اللون'}</th>
+                                <th className="p-2 text-right">{(item.type === 'office-return' || item.type === 'store-return') ? 'المقاس' : 'اللون'}</th>
                                 <th className="p-2 text-right">الكمية</th>
                                 <th className="p-2 text-right">السعر</th>
                                 <th className="p-2 text-right">الإجمالي</th>
-                                {item.type === 'office-return' && <th className="p-2 text-right">سبب الإرجاع</th>}
+                                {(item.type === 'office-return' || item.type === 'store-return') && <th className="p-2 text-right">سبب الإرجاع</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -1985,7 +2071,7 @@ export default function Customers() {
                                   <td className="p-2">{prod.quantity}</td>
                                   <td className="p-2">{(prod.unitSalePrice || prod.unitPrice || 0).toFixed(2)} ج.م</td>
                                   <td className="p-2 font-bold">{(prod.totalSalePrice || prod.totalPrice || ((prod.unitSalePrice || 0) * prod.quantity)).toFixed(2)} ج.م</td>
-                                  {item.type === 'office-return' && <td className="p-2 text-gray-600">{prod.returnReason || '-'}</td>}
+                                  {(item.type === 'office-return' || item.type === 'store-return') && <td className="p-2 text-gray-600">{prod.returnReason || '-'}</td>}
                                 </tr>
                               ))}
                             </tbody>

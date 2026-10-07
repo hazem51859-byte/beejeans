@@ -123,6 +123,20 @@ exports.getCustomerById = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     
+    // جلب مرتجعات المخزن الرئيسي الخاصة بالعميل
+    const storeReturns = await prisma.customerStoreReturn.findMany({
+      where: { customerId: id },
+      include: {
+        items: {
+          include: { product: true }
+        },
+        createdBy: {
+          select: { id: true, fullName: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
     const payments = await prisma.customerPayment.findMany({
       where: { customerId: id },
       orderBy: { paymentDate: 'desc' }
@@ -150,6 +164,7 @@ exports.getCustomerById = async (req, res) => {
         sales,
         officeInvoices,
         officeReturns, // إضافة مرتجعات المكتب
+        storeReturns, // إضافة مرتجعات المخزن الرئيسي
         payments
       }
     });

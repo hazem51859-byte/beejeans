@@ -26,6 +26,7 @@ model User {
   returnsCreated         Return[]         @relation("ReturnCreator")
   returnsManagerReviewed Return[]         @relation("ReturnManagerReviewer")
   officeReturnsCreated   OfficeReturn[]   @relation("OfficeReturnCreator")
+  storeReturnsCreated    CustomerStoreReturn[] @relation("CustomerStoreReturnCreator")
   sales                  Sale[]
   shifts                 Shift[]
   transfersReceived      Transfer[]       @relation("TransferReceivedBy")
@@ -126,6 +127,7 @@ model Product {
   purchaseItems       PurchaseItem[]
   returnItems         ReturnItem[]
   officeReturnItems   OfficeReturnItem[]
+  storeReturnItems    CustomerStoreReturnItem[]
   saleItems           SaleItem[]
   transferItems       TransferItem[]
 
@@ -555,6 +557,7 @@ model Customer {
   payments       CustomerPayment[]
   officeInvoices OfficeInvoice[]
   officeReturns  OfficeReturn[]
+  storeReturns   CustomerStoreReturn[]
   sales          Sale[]
 
   @@map("customers")
@@ -1052,4 +1055,51 @@ model ManufacturingOrderFabric {
   @@index([fabricTypeId])
   @@index([manufacturingOrderId])
   @@map("manufacturing_order_fabrics")
+}
+
+// =============================================
+// نظام مرتجعات المخزن الرئيسي من العملاء
+// =============================================
+model CustomerStoreReturn {
+  id             String                    @id @default(uuid())
+  returnNumber   String                    @unique
+  customerId     String
+  customerName   String
+  customerPhone  String?
+  totalAmount    Float                     // إجمالي قيمة المرتجع (سعر البيع)
+  totalCost      Float                     // إجمالي التكلفة
+  totalProfit    Float                     @default(0) // الربح الذي سيتم شطبه
+  notes          String?
+  status         String                    @default("COMPLETED")
+  createdById    String
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  items          CustomerStoreReturnItem[]
+  customer       Customer                  @relation(fields: [customerId], references: [id])
+  createdBy      User                      @relation("CustomerStoreReturnCreator", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([returnNumber])
+  @@index([createdAt])
+  @@map("customer_store_returns")
+}
+
+model CustomerStoreReturnItem {
+  id             String              @id @default(uuid())
+  returnId       String
+  productId      String
+  quantity       Int
+  size           String?
+  unitSalePrice  Float               // سعر القطعة عند الإرجاع
+  unitCostPrice  Float               // تكلفة القطعة
+  totalSalePrice Float
+  totalCostPrice Float
+  returnReason   String?
+  createdAt      DateTime            @default(now())
+  product        Product             @relation(fields: [productId], references: [id])
+  storeReturn    CustomerStoreReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId])
+  @@index([productId])
+  @@map("customer_store_return_items")
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Calendar, DollarSign, TrendingUp, TrendingDown, Package, Users, FileText, ArrowDownRight, Wallet } from 'lucide-react';
+import { Calendar, DollarSign, TrendingUp, TrendingDown, Package, Users, FileText, ArrowDownRight, Wallet, RotateCcw } from 'lucide-react';
+import dayjs from 'dayjs';
 import api from '../services/api';
 import AuditsReportSection from '../components/AuditsReportSection';
 
@@ -69,6 +70,15 @@ export default function MonthlyReport() {
     queryKey: ['returns', startDate, endDateString],
     queryFn: async () => {
       const response = await api.get('/returns', { params: { startDate, endDate: endDateString } });
+      return response.data;
+    },
+  });
+
+  // مرتجعات المخزن الرئيسي من العملاء (النظام الجديد)
+  const { data: storeReturnsData } = useQuery({
+    queryKey: ['store-returns-report', startDate, endDateString],
+    queryFn: async () => {
+      const response = await api.get('/store-returns', { params: { startDate, endDate: endDateString } });
       return response.data;
     },
   });
@@ -207,6 +217,7 @@ export default function MonthlyReport() {
   const partnersData = Array.isArray(partners?.data) ? partners.data : (Array.isArray(partners?.data?.data) ? partners.data.data : []);
 
   const returnsData = Array.isArray(returns?.data) ? returns.data : (Array.isArray(returns?.data?.data) ? returns.data.data : []);
+  const storeReturns = Array.isArray(storeReturnsData?.data) ? storeReturnsData.data : (Array.isArray(storeReturnsData?.data?.data) ? storeReturnsData.data.data : []);
   const branchTransfers = branchTransfersData?.data || [];
   const customerSales = Array.isArray(customerSalesData?.data) ? customerSalesData.data : (Array.isArray(customerSalesData?.data?.data) ? customerSalesData.data.data : []);
 
@@ -252,6 +263,12 @@ export default function MonthlyReport() {
   const totalReturns = returnsData.reduce((sum, ret) => sum + (ret.totalSaleAmount || 0), 0);
   const totalReturnsCost = returnsData.reduce((sum, ret) => sum + (ret.totalCostAmount || 0), 0);
   const netSales = totalSales - totalReturns;
+
+  // مرتجعات المخزن الرئيسي
+  const storeReturnsAmount = storeReturns.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
+  const storeReturnsCost = storeReturns.reduce((sum, r) => sum + (r.totalCost || 0), 0);
+  const storeReturnsProfit = storeReturns.reduce((sum, r) => sum + (r.totalProfit || 0), 0);
+  const storeReturnsCount = storeReturns.length;
 
   // تفصيل المبيعات حسب طريقة الدفع
   const salesByPayment = salesData.reduce((acc, sale) => {
@@ -373,15 +390,16 @@ export default function MonthlyReport() {
 
   const officeInvoicesCost = officeInvoices.totalCost || 0;
 
-  const costOfGoodsSold = branchSalesCost + officeInvoicesCost;
+  // تكلفة البضاعة المباعة (بعد خصم تكلفة بضاعة مرتجعات المخزن المستردة)
+  const costOfGoodsSold = branchSalesCost + officeInvoicesCost - storeReturnsCost;
 
   // خسائر الجرود (بسعر التكلفة)
   const auditsLoss = auditsData?.data?.netLoss || 0;
 
   // صافي الربح:
   // - ربح الفروع = سعر القطاعي - سعر التكلفة
-  // - ربح الجملة = مبيعات المكتب المحصلة - تكلفة بضاعة المكتب
-  const wholesaleProfit = officeInvoicesCollected - officeInvoicesCost;
+  // - ربح الجملة = مبيعات المكتب المحصلة - تكلفة بضاعة المكتب - أرباح مرتجعات المخزن الرئيسي المستبعدة
+  const wholesaleProfit = (officeInvoicesCollected - officeInvoicesCost) - storeReturnsProfit;
   const grossProfit = branchSalesProfit + wholesaleProfit;
   const netProfit = grossProfit - totalExpenses - auditsLoss;
   const profitMargin = (branchSalesRetailRevenue + officeInvoicesCollected) > 0
@@ -482,10 +500,13 @@ export default function MonthlyReport() {
               <Users className="text-purple-600" size={24} />
             </div>
             <p className="text-2xl font-bold text-purple-700">{officeInvoicesTotalSales.toFixed(2)} ج.م</p>
-            <div className="flex justify-between text-xs mt-1">
+            <div className="flex flex-wrap justify-between text-xs mt-1 gap-1">
               <span className="text-green-600">محصل: {officeInvoicesCollected.toFixed(2)}</span>
               {officeInvoicesTotalReturns > 0 && (
-                <span className="text-amber-700 font-semibold">مرتجع: {officeInvoicesTotalReturns.toFixed(0)}</span>
+                <span className="text-amber-700 font-semibold">مرتجع مكتب: {officeInvoicesTotalReturns.toFixed(0)}</span>
+              )}
+              {storeReturnsAmount > 0 && (
+                <span className="text-teal-700 font-semibold">مرتجع مخزن: {storeReturnsAmount.toFixed(0)}</span>
               )}
               <span className="text-orange-600">متبقي: {(officeInvoicesTotalSales - officeInvoicesCollected).toFixed(2)}</span>
             </div>
@@ -634,6 +655,13 @@ export default function MonthlyReport() {
                   <span className="font-medium text-red-700">{officeInvoicesCost.toFixed(2)}</span>
                 </div>
 
+                {storeReturnsCost > 0 && (
+                  <div className="flex justify-between items-center pb-2 border-b border-red-200">
+                    <span className="text-sm text-green-700">- استرداد تكلفة بضاعة مرتجعة للمخزن ({storeReturnsCount} عملية)</span>
+                    <span className="font-medium text-green-700">({storeReturnsCost.toFixed(2)})</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center pb-2 border-b border-red-200">
                   <span className="text-sm">تكاليف الإنتاج (قماش + تصنيع + غسيل)</span>
                   <span className="font-medium text-red-700">{totalProductionCost.toFixed(2)}</span>
@@ -751,8 +779,20 @@ export default function MonthlyReport() {
                     </div>
                     {officeInvoicesTotalReturns > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-amber-700">المرتجع ({officeInvoicesReturnsCount} عملية):</span>
+                        <span className="text-amber-700">مرتجعات فواتير المكتب ({officeInvoicesReturnsCount} عملية):</span>
                         <span className="font-medium text-amber-700">-{officeInvoicesTotalReturns.toFixed(2)} ج.م</span>
+                      </div>
+                    )}
+                    {storeReturnsAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-teal-700">مرتجعات المخزن الرئيسي ({storeReturnsCount} عملية):</span>
+                        <span className="font-medium text-teal-700">-{storeReturnsAmount.toFixed(2)} ج.م</span>
+                      </div>
+                    )}
+                    {storeReturnsProfit > 0 && (
+                      <div className="flex justify-between text-xs text-teal-800">
+                        <span>• أرباح مرتجعات المخزن المستبعدة:</span>
+                        <span className="font-semibold">-{storeReturnsProfit.toFixed(2)} ج.م (تكلفة مستردة: {storeReturnsCost.toFixed(2)} ج)</span>
                       </div>
                     )}
                     <div className="flex justify-between">
@@ -1061,6 +1101,83 @@ export default function MonthlyReport() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* قسم مرتجعات المخزن الرئيسي */}
+      <div className="card mt-6 border-r-4 border-teal-500 bg-gradient-to-br from-teal-50/40 via-white to-white">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <RotateCcw className="text-teal-600" size={22} />
+            <h2 className="text-lg font-bold text-teal-900">
+              مرتجعات المخزن الرئيسي (Customer Store Returns)
+            </h2>
+          </div>
+          <span className="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs font-bold">
+            {storeReturnsCount} عملية مرتجع
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="p-3 bg-teal-50 rounded-lg border border-teal-200">
+            <p className="text-xs text-teal-700 mb-1">إجمالي قيمة المرتجعات</p>
+            <p className="text-xl font-bold text-teal-900">{storeReturnsAmount.toFixed(2)} ج.م</p>
+            <p className="text-xs text-gray-500 mt-1">خصمت من حسابات وديون العملاء</p>
+          </div>
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-xs text-blue-700 mb-1">تكلفة البضاعة المرتجعة</p>
+            <p className="text-xl font-bold text-blue-900">{storeReturnsCost.toFixed(2)} ج.م</p>
+            <p className="text-xs text-gray-500 mt-1">أعيدت إلى رصيد المخزن الرئيسي</p>
+          </div>
+          <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+            <p className="text-xs text-amber-700 mb-1">الأرباح المستبعدة من التقارير</p>
+            <p className="text-xl font-bold text-amber-900">{storeReturnsProfit.toFixed(2)} ج.م</p>
+            <p className="text-xs text-gray-500 mt-1">طُرحت من صافي أرباح الفترة</p>
+          </div>
+          <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <p className="text-xs text-purple-700 mb-1">متوسط قيمة العملية</p>
+            <p className="text-xl font-bold text-purple-900">
+              {(storeReturnsCount > 0 ? (storeReturnsAmount / storeReturnsCount) : 0).toFixed(2)} ج.م
+            </p>
+            <p className="text-xs text-gray-500 mt-1">لكل فاتورة مرتجع</p>
+          </div>
+        </div>
+
+        {storeReturns.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-right">
+              <thead className="bg-teal-100/60 text-teal-950 font-bold">
+                <tr>
+                  <th className="p-2">رقم المرتجع</th>
+                  <th className="p-2">العميل</th>
+                  <th className="p-2">التاريخ</th>
+                  <th className="p-2">عدد الأصناف</th>
+                  <th className="p-2">إجمالي القيمة</th>
+                  <th className="p-2">التكلفة المستردة</th>
+                  <th className="p-2">الربح المستبعد</th>
+                  <th className="p-2">ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {storeReturns.slice(0, 10).map((ret) => (
+                  <tr key={ret.id} className="hover:bg-teal-50/30">
+                    <td className="p-2 font-mono font-bold text-teal-900">{ret.returnNumber}</td>
+                    <td className="p-2 font-medium">{ret.customerName || ret.customer?.name || '-'}</td>
+                    <td className="p-2 text-gray-600">{dayjs(ret.createdAt).format('DD/MM/YYYY')}</td>
+                    <td className="p-2 font-medium">
+                      {ret.items?.reduce((s, it) => s + (it.quantity || 0), 0) || ret.items?.length || 0} قطعة
+                    </td>
+                    <td className="p-2 font-bold text-teal-800">{ret.totalAmount?.toFixed(2)} ج.م</td>
+                    <td className="p-2 text-gray-700">{ret.totalCost?.toFixed(2)} ج.م</td>
+                    <td className="p-2 text-amber-700 font-semibold">{ret.totalProfit?.toFixed(2)} ج.م</td>
+                    <td className="p-2 text-gray-500">{ret.notes || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-center text-gray-400 py-3 text-xs">لا توجد مرتجعات مخزن رئيسي مسجلة في هذه الفترة</p>
+        )}
       </div>
 
       {/* بيانات الإنتاج */}

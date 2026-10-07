@@ -169,7 +169,7 @@ exports.createStoreReturn = async (req, res) => {
 // =========================================
 exports.getAllStoreReturns = async (req, res) => {
   try {
-    const { customerId, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const { customerId, startDate, endDate, page = 1, limit = 50, search, query } = req.query;
 
     const where = {};
     if (customerId) where.customerId = customerId;
@@ -177,6 +177,15 @@ exports.getAllStoreReturns = async (req, res) => {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = new Date(startDate);
       if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+
+    const searchTerm = (search || query || '').trim();
+    if (searchTerm) {
+      where.OR = [
+        { returnNumber: { contains: searchTerm, mode: 'insensitive' } },
+        { customer: { name: { contains: searchTerm, mode: 'insensitive' } } },
+        { customer: { phone: { contains: searchTerm } } }
+      ];
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

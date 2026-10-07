@@ -14,16 +14,31 @@ import {
   X,
   FileText,
   Clock,
-  ArrowRight
+  ArrowRight,
+  User,
+  Wallet
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
 
 export default function OfficeReturns() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('DIRECT'); // 'DIRECT' (مرتجع مباشر لعميل) | 'INVOICE' (مرتجع بناءً على فاتورة)
   const [loading, setLoading] = useState(true);
-  const [returns, setReturns] = useState([]);
-  const [stats, setStats] = useState({
+  
+  // بيانات المرتجعات المباشرة
+  const [directReturns, setDirectReturns] = useState([]);
+  const [directStats, setDirectStats] = useState({
+    totalCount: 0,
+    totalAmount: 0,
+    totalPieces: 0,
+    totalDeductedDebt: 0,
+    totalAddedWallet: 0
+  });
+
+  // بيانات مرتجعات الفواتير
+  const [invoiceReturns, setInvoiceReturns] = useState([]);
+  const [invoiceStats, setInvoiceStats] = useState({
     totalReturnsCount: 0,
     totalRefundAmount: 0,
     totalDeductedFromVault: 0,
@@ -39,10 +54,10 @@ export default function OfficeReturns() {
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   useEffect(() => {
-    fetchReturns();
-  }, [startDate, endDate]);
+    fetchData();
+  }, [startDate, endDate, activeTab]);
 
-  const fetchReturns = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -50,18 +65,49 @@ export default function OfficeReturns() {
       if (endDate) params.append('endDate', endDate);
       if (searchQuery) params.append('query', searchQuery);
 
-      const response = await api.get(`/office-returns?${params.toString()}`);
-      const data = response.data?.data || [];
-      const statistics = response.data?.stats || {
-        totalReturnsCount: 0,
-        totalRefundAmount: 0,
-        totalDeductedFromVault: 0,
-        totalDeductedFromDebt: 0,
-        totalItemsReturned: 0
-      };
+      if (activeTab === 'DIRECT') {
+        const response = await api.get(`/store-returns?${params.toString()}`);
+        const data = response.data?.data || [];
+        setDirectReturns(data);
 
-      setReturns(data);
-      setStats(statistics);
+        // حساب إحصائيات المرتجع المباشر
+        const count = data.length;
+        let amount = 0;
+        let pieces = 0;
+        let debt = 0;
+        let wallet = 0;
+
+        data.forEach(ret => {
+          amount += (ret.totalAmount || 0);
+          debt += (ret.deductedFromDebt || 0);
+          wallet += (ret.addedToWallet || 0);
+          (ret.items || []).forEach(it => {
+            pieces += (it.quantity || 0);
+          });
+        });
+
+        setDirectStats({
+          totalCount: count,
+          totalAmount: amount,
+          totalPieces: pieces,
+          totalDeductedDebt: debt,
+          totalAddedWallet: wallet
+        });
+
+      } else {
+        const response = await api.get(`/office-returns?${params.toString()}`);
+        const data = response.data?.data || [];
+        const statistics = response.data?.stats || {
+          totalReturnsCount: 0,
+          totalRefundAmount: 0,
+          totalDeductedFromVault: 0,
+          totalDeductedFromDebt: 0,
+          totalItemsReturned: 0
+        };
+
+        setInvoiceReturns(data);
+        setInvoiceStats(statistics);
+      }
     } catch (error) {
       console.error('Error fetching office returns:', error);
       toast.error('فشل في جلب سجل المرتجعات');
@@ -72,7 +118,7 @@ export default function OfficeReturns() {
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    fetchReturns();
+    fetchData();
   };
 
   const handleResetFilters = () => {
@@ -82,7 +128,10 @@ export default function OfficeReturns() {
   };
 
   const openDetails = (ret) => {
-    setSelectedReturn(ret);
+    setSelectedReturn({
+      ...ret,
+      isDirect: activeTab === 'DIRECT'
+    });
     setShowDetailModal(true);
   };
 
@@ -124,9 +173,9 @@ export default function OfficeReturns() {
               <RotateCcw size={28} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">مرتجعات فواتير المكتب</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">سجل مرتجعات المخزن الرئيسي</h1>
               <p className="text-gray-500 text-sm mt-1">
-                إدارة مرتجعات المخزن الرئيسي، وإعادة البضاعة للمخزن وتوثيق حركة الخزائن
+                إدارة مرتجعات مبيعات الجملة للعملاء وإعادة البضاعة للمخزن وتحديث الحسابات
               </p>
             </div>
           </div>
@@ -140,74 +189,169 @@ export default function OfficeReturns() {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Total Returns */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
-            <span>عدد المرتجعات</span>
-            <span className="p-2 bg-gray-100 rounded-lg text-gray-600">
-              <FileText size={18} />
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-gray-800">{stats.totalReturnsCount}</div>
-          <div className="text-xs text-gray-400 mt-1">عملية إرجاع مسجلة</div>
-        </div>
+      {/* Tabs */}
+      <div className="grid grid-cols-2 gap-3 p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('DIRECT')}
+          className={`py-3 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'DIRECT'
+              ? 'bg-teal-600 text-white shadow'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
+          }`}
+        >
+          <User size={18} />
+          <span>مرتجعات العملاء المباشرة (الجديدة)</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-white/20">
+            {directReturns.length}
+          </span>
+        </button>
 
-        {/* Total Items Restocked */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
-            <span>القطع المسترجعة</span>
-            <span className="p-2 bg-amber-50 rounded-lg text-amber-600">
-              <Package size={18} />
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-amber-600">{stats.totalItemsReturned}</div>
-          <div className="text-xs text-amber-700 mt-1">أعيدت للمخزن الرئيسي</div>
-        </div>
-
-        {/* Total Refund Value */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
-            <span>إجمالي المرتجعات</span>
-            <span className="p-2 bg-red-50 rounded-lg text-red-600">
-              <RotateCcw size={18} />
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-red-600">
-            {stats.totalRefundAmount.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
-          </div>
-          <div className="text-xs text-gray-400 mt-1">إجمالي قيمة البضاعة</div>
-        </div>
-
-        {/* Deducted from Vault */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
-            <span>مسترد من الخزائن</span>
-            <span className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-              <DollarSign size={18} />
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-emerald-700">
-            {stats.totalDeductedFromVault.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
-          </div>
-          <div className="text-xs text-emerald-600 mt-1">تم خصمه نقداً للعملاء</div>
-        </div>
-
-        {/* Deducted from Debt */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
-            <span>مخصوم من الديون</span>
-            <span className="p-2 bg-blue-50 rounded-lg text-blue-600">
-              <TrendingDown size={18} />
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-blue-700">
-            {stats.totalDeductedFromDebt.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
-          </div>
-          <div className="text-xs text-blue-600 mt-1">تقليل مديونية العملاء</div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('INVOICE')}
+          className={`py-3 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'INVOICE'
+              ? 'bg-red-600 text-white shadow'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
+          }`}
+        >
+          <FileText size={18} />
+          <span>مرتجعات فواتير المكتب الأصلية</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-white/20">
+            {invoiceReturns.length}
+          </span>
+        </button>
       </div>
+
+      {/* Stats Cards */}
+      {activeTab === 'DIRECT' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>عدد المرتجعات</span>
+              <span className="p-2 bg-gray-100 rounded-lg text-gray-600">
+                <FileText size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-gray-800">{directStats.totalCount}</div>
+            <div className="text-xs text-gray-400 mt-1">عملية إرجاع مباشرة</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>القطع المسترجعة</span>
+              <span className="p-2 bg-amber-50 rounded-lg text-amber-600">
+                <Package size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-amber-600">{directStats.totalPieces}</div>
+            <div className="text-xs text-amber-700 mt-1">أعيدت لمخزن الرئيسي</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>إجمالي قيمة المرتجعات</span>
+              <span className="p-2 bg-teal-50 rounded-lg text-teal-600">
+                <RotateCcw size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-teal-700">
+              {directStats.totalAmount.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+            </div>
+            <div className="text-xs text-teal-600 mt-1">قيمة البضاعة المسترجعة</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>مخصوم من ديون العملاء</span>
+              <span className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                <TrendingDown size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-blue-700">
+              {directStats.totalDeductedDebt.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+            </div>
+            <div className="text-xs text-blue-600 mt-1">تخفيض مديونيات العملاء</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>مضاف لمحفظة العملاء</span>
+              <span className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                <Wallet size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-purple-700">
+              {directStats.totalAddedWallet.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+            </div>
+            <div className="text-xs text-purple-600 mt-1">رصيد متبقي لصالح العملاء</div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>عدد المرتجعات</span>
+              <span className="p-2 bg-gray-100 rounded-lg text-gray-600">
+                <FileText size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-gray-800">{invoiceStats.totalReturnsCount}</div>
+            <div className="text-xs text-gray-400 mt-1">عملية إرجاع مسجلة</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>القطع المسترجعة</span>
+              <span className="p-2 bg-amber-50 rounded-lg text-amber-600">
+                <Package size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-amber-600">{invoiceStats.totalItemsReturned}</div>
+            <div className="text-xs text-amber-700 mt-1">أعيدت للمخزن الرئيسي</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>إجمالي المرتجعات</span>
+              <span className="p-2 bg-red-50 rounded-lg text-red-600">
+                <RotateCcw size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-red-600">
+              {invoiceStats.totalRefundAmount.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+            </div>
+            <div className="text-xs text-gray-400 mt-1">إجمالي قيمة البضاعة</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>مسترد من الخزائن</span>
+              <span className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                <DollarSign size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-emerald-700">
+              {invoiceStats.totalDeductedFromVault.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+            </div>
+            <div className="text-xs text-emerald-600 mt-1">تم خصمه نقداً للعملاء</div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between text-gray-500 text-sm mb-2">
+              <span>مخصوم من الديون</span>
+              <span className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                <TrendingDown size={18} />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-blue-700">
+              {invoiceStats.totalDeductedFromDebt.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+            </div>
+            <div className="text-xs text-blue-600 mt-1">تقليل مديونية العملاء</div>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -218,8 +362,8 @@ export default function OfficeReturns() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="بحث برقم المرتجع، رقم الفاتورة الأصلية، أو اسم/هاتف العميل..."
-              className="w-full pl-4 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+              placeholder="بحث برقم المرتجع، اسم العميل، أو الهاتف..."
+              className="w-full pl-4 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
             />
           </div>
 
@@ -272,122 +416,227 @@ export default function OfficeReturns() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-red-500 border-t-transparent"></div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-teal-500 border-t-transparent"></div>
             <p className="mt-3 text-gray-500 text-sm">جاري تحميل سجل المرتجعات...</p>
           </div>
-        ) : returns.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <div className="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
-              <RotateCcw size={32} />
+        ) : activeTab === 'DIRECT' ? (
+          /* جدول المرتجعات المباشرة */
+          directReturns.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <div className="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                <RotateCcw size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">لا توجد مرتجعات مباشرة مسجلة</h3>
+              <p className="text-gray-500 text-sm max-w-md mx-auto mb-4">
+                لم يتم تسجيل أي مرتجع مباشر بعد. يمكنك الضغط على زر تسجيل مرتجع جديد واختيار العميل.
+              </p>
+              <button
+                onClick={() => navigate('/office-returns/create')}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-lg hover:bg-teal-700 shadow"
+              >
+                <Plus size={16} />
+                تسجيل مرتجع مباشر الآن
+              </button>
             </div>
-            <h3 className="text-lg font-bold text-gray-800 mb-1">لا توجد مرتجعات مسجلة</h3>
-            <p className="text-gray-500 text-sm max-w-md mx-auto mb-4">
-              لم يتم العثور على أي مرتجعات مطابقة لمعايير البحث الحالية. يمكنك تسجيل مرتجع جديد الآن.
-            </p>
-            <button
-              onClick={() => navigate('/office-returns/create')}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700"
-            >
-              <Plus size={16} />
-              تسجيل أول مرتجع
-            </button>
-          </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="bg-teal-50/50 border-b border-gray-100 text-xs font-bold text-gray-600">
+                    <th className="p-4">رقم المرتجع</th>
+                    <th className="p-4">العميل</th>
+                    <th className="p-4">التاريخ</th>
+                    <th className="p-4">عدد الأصناف / القطع</th>
+                    <th className="p-4">إجمالي قيمة المرتجع</th>
+                    <th className="p-4">التسوية (خصم من الدين / محفظة)</th>
+                    <th className="p-4">المستخدم</th>
+                    <th className="p-4 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {directReturns.map((ret) => {
+                    const totalPieces = (ret.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+                    return (
+                      <tr key={ret.id} className="hover:bg-teal-50/20 transition-colors">
+                        <td className="p-4">
+                          <span className="font-mono font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-md text-xs border border-teal-200">
+                            {ret.returnNumber}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="font-bold text-gray-900">{ret.customer?.name || 'عميل'}</div>
+                          {ret.customer?.phone && (
+                            <div className="text-xs text-gray-500 font-mono">{ret.customer.phone}</div>
+                          )}
+                        </td>
+                        <td className="p-4 text-gray-600 text-xs">
+                          <div className="flex items-center gap-1">
+                            <Clock size={13} className="text-gray-400" />
+                            <span>{new Date(ret.createdAt).toLocaleDateString('ar-EG')}</span>
+                          </div>
+                          <div className="text-gray-400 mt-0.5 text-[11px]">
+                            {new Date(ret.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className="font-bold text-gray-800">{totalPieces} قطعة</span>
+                          <span className="text-xs text-gray-500 block">({ret.items?.length || 0} صنف)</span>
+                        </td>
+                        <td className="p-4 font-bold text-teal-700">
+                          {ret.totalAmount?.toFixed(2)} <span className="text-xs font-normal">ج.م</span>
+                        </td>
+                        <td className="p-4 text-xs">
+                          {ret.deductedFromDebt > 0 && (
+                            <div className="text-blue-700 font-bold">
+                              📉 خصم من الدين: {ret.deductedFromDebt.toFixed(2)} ج.م
+                            </div>
+                          )}
+                          {ret.addedToWallet > 0 && (
+                            <div className="text-purple-700 font-bold">
+                              💼 محفظة: {ret.addedToWallet.toFixed(2)} ج.م
+                            </div>
+                          )}
+                          {ret.deductedFromDebt === 0 && ret.addedToWallet === 0 && (
+                            <span className="text-gray-400">---</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-xs text-gray-600">
+                          {ret.createdBy?.fullName || 'النظام'}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => openDetails(ret)}
+                              className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition"
+                              title="عرض تفاصيل المرتجع"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              onClick={() => window.print()}
+                              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                              title="طباعة"
+                            >
+                              <Printer size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-100 text-xs font-bold text-gray-600">
-                  <th className="p-4">رقم المرتجع</th>
-                  <th className="p-4">الفاتورة الأصلية</th>
-                  <th className="p-4">العميل</th>
-                  <th className="p-4">التاريخ</th>
-                  <th className="p-4">القطع</th>
-                  <th className="p-4">إجمالي المرتجع</th>
-                  <th className="p-4">طريقة التسوية</th>
-                  <th className="p-4">الخزينة المنصرف منها</th>
-                  <th className="p-4 text-center">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
-                {returns.map((ret) => {
-                  const totalPieces = (ret.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
-                  return (
-                    <tr key={ret.id} className="hover:bg-red-50/20 transition-colors">
-                      <td className="p-4">
-                        <span className="font-mono font-bold text-red-700 bg-red-50 px-2.5 py-1 rounded-md text-xs">
-                          {ret.returnNumber}
-                        </span>
-                      </td>
-                      <td className="p-4 font-medium text-gray-800">
-                        {ret.invoice ? (
-                          <div className="flex items-center gap-1.5 font-mono text-xs">
-                            <span className="text-blue-600 font-semibold">{ret.invoice.invoiceNumber}</span>
+          /* جدول مرتجعات الفواتير */
+          invoiceReturns.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <div className="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                <RotateCcw size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">لا توجد مرتجعات فواتير مسجلة</h3>
+              <p className="text-gray-500 text-sm max-w-md mx-auto mb-4">
+                لم يتم العثور على أي مرتجعات فواتير مطابقة للمعايير الحالية.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-gray-100 text-xs font-bold text-gray-600">
+                    <th className="p-4">رقم المرتجع</th>
+                    <th className="p-4">الفاتورة الأصلية</th>
+                    <th className="p-4">العميل</th>
+                    <th className="p-4">التاريخ</th>
+                    <th className="p-4">القطع</th>
+                    <th className="p-4">إجمالي المرتجع</th>
+                    <th className="p-4">طريقة التسوية</th>
+                    <th className="p-4">الخزينة المنصرف منها</th>
+                    <th className="p-4 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {invoiceReturns.map((ret) => {
+                    const totalPieces = (ret.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+                    return (
+                      <tr key={ret.id} className="hover:bg-red-50/20 transition-colors">
+                        <td className="p-4">
+                          <span className="font-mono font-bold text-red-700 bg-red-50 px-2.5 py-1 rounded-md text-xs">
+                            {ret.returnNumber}
+                          </span>
+                        </td>
+                        <td className="p-4 font-medium text-gray-800">
+                          {ret.invoice ? (
+                            <div className="flex items-center gap-1.5 font-mono text-xs">
+                              <span className="text-blue-600 font-semibold">{ret.invoice.invoiceNumber}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">---</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <div className="font-bold text-gray-900">{ret.customerName}</div>
+                          {ret.customerPhone && (
+                            <div className="text-xs text-gray-500 font-mono">{ret.customerPhone}</div>
+                          )}
+                        </td>
+                        <td className="p-4 text-gray-600 text-xs">
+                          <div className="flex items-center gap-1">
+                            <Clock size={13} className="text-gray-400" />
+                            <span>{new Date(ret.createdAt).toLocaleDateString('ar-EG')}</span>
                           </div>
-                        ) : (
-                          <span className="text-gray-400">---</span>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <div className="font-bold text-gray-900">{ret.customerName}</div>
-                        {ret.customerPhone && (
-                          <div className="text-xs text-gray-500 font-mono">{ret.customerPhone}</div>
-                        )}
-                      </td>
-                      <td className="p-4 text-gray-600 text-xs">
-                        <div className="flex items-center gap-1">
-                          <Clock size={13} className="text-gray-400" />
-                          <span>{new Date(ret.createdAt).toLocaleDateString('ar-EG')}</span>
-                        </div>
-                        <div className="text-gray-400 mt-0.5 text-[11px]">
-                          {new Date(ret.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </td>
-                      <td className="p-4 font-bold text-gray-700">
-                        {totalPieces} <span className="text-xs text-gray-400 font-normal">قطعة</span>
-                      </td>
-                      <td className="p-4 font-bold text-red-600">
-                        {ret.totalAmount.toFixed(2)} <span className="text-xs text-gray-500 font-normal">ج.م</span>
-                      </td>
-                      <td className="p-4">
-                        {getMethodBadge(ret)}
-                      </td>
-                      <td className="p-4 text-xs">
-                        {ret.vault ? (
-                          <div className="flex items-center gap-1 font-semibold text-gray-800">
-                            <span>{ret.vault.type === 'CASH' ? '💵' : ret.vault.type === 'VISA' ? '💳' : '📱'}</span>
-                            <span>{ret.vault.name}</span>
-                            <span className="text-emerald-700 font-bold">({ret.deductedFromPaid.toFixed(2)} ج)</span>
+                          <div className="text-gray-400 mt-0.5 text-[11px]">
+                            {new Date(ret.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                           </div>
-                        ) : ret.deductedFromDebt > 0 ? (
-                          <span className="text-blue-700 font-medium">خصم من الدين ({ret.deductedFromDebt.toFixed(2)} ج)</span>
-                        ) : (
-                          <span className="text-gray-400">---</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => openDetails(ret)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="عرض تفاصيل المرتجع"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          <button
-                            onClick={() => window.print()}
-                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-                            title="طباعة"
-                          >
-                            <Printer size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="p-4 font-bold text-gray-700">
+                          {totalPieces} <span className="text-xs text-gray-400 font-normal">قطعة</span>
+                        </td>
+                        <td className="p-4 font-bold text-red-600">
+                          {ret.totalAmount.toFixed(2)} <span className="text-xs text-gray-500 font-normal">ج.م</span>
+                        </td>
+                        <td className="p-4">
+                          {getMethodBadge(ret)}
+                        </td>
+                        <td className="p-4 text-xs">
+                          {ret.vault ? (
+                            <div className="flex items-center gap-1 font-semibold text-gray-800">
+                              <span>{ret.vault.type === 'CASH' ? '💵' : ret.vault.type === 'VISA' ? '💳' : '📱'}</span>
+                              <span>{ret.vault.name}</span>
+                              <span className="text-emerald-700 font-bold">({ret.deductedFromPaid.toFixed(2)} ج)</span>
+                            </div>
+                          ) : ret.deductedFromDebt > 0 ? (
+                            <span className="text-blue-700 font-medium">خصم من الدين ({ret.deductedFromDebt.toFixed(2)} ج)</span>
+                          ) : (
+                            <span className="text-gray-400">---</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => openDetails(ret)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              title="عرض تفاصيل المرتجع"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              onClick={() => window.print()}
+                              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                              title="طباعة"
+                            >
+                              <Printer size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
 
@@ -396,13 +645,22 @@ export default function OfficeReturns() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-3xl shadow-xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-5 bg-gradient-to-r from-red-600 to-rose-700 text-white flex justify-between items-center">
+            <div className={`p-5 text-white flex justify-between items-center ${
+              selectedReturn.isDirect 
+                ? 'bg-gradient-to-r from-teal-600 to-teal-800' 
+                : 'bg-gradient-to-r from-red-600 to-rose-700'
+            }`}>
               <div>
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <RotateCcw size={20} />
                   تفاصيل المرتجع: {selectedReturn.returnNumber}
+                  {selectedReturn.isDirect && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 font-normal">
+                      مرتجع مباشر لعميل
+                    </span>
+                  )}
                 </h2>
-                <p className="text-red-100 text-xs mt-1">
+                <p className="text-white/80 text-xs mt-1">
                   تاريخ المعاملة: {new Date(selectedReturn.createdAt).toLocaleString('ar-EG')}
                 </p>
               </div>
@@ -416,30 +674,52 @@ export default function OfficeReturns() {
 
             {/* Modal Body */}
             <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-              {/* Customer & Invoice Summary Cards */}
+              {/* Customer & Return Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                   <span className="text-xs text-gray-500 block mb-1">العميل</span>
-                  <p className="font-bold text-gray-900">{selectedReturn.customerName}</p>
-                  {selectedReturn.customerPhone && (
-                    <p className="text-xs text-gray-600 font-mono mt-0.5">{selectedReturn.customerPhone}</p>
+                  <p className="font-bold text-gray-900">
+                    {selectedReturn.isDirect ? selectedReturn.customer?.name : selectedReturn.customerName}
+                  </p>
+                  {(selectedReturn.isDirect ? selectedReturn.customer?.phone : selectedReturn.customerPhone) && (
+                    <p className="text-xs text-gray-600 font-mono mt-0.5">
+                      {selectedReturn.isDirect ? selectedReturn.customer?.phone : selectedReturn.customerPhone}
+                    </p>
                   )}
                 </div>
 
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                  <span className="text-xs text-gray-500 block mb-1">الفاتورة الأصلية</span>
-                  <p className="font-mono font-bold text-blue-700">{selectedReturn.invoice?.invoiceNumber}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    إجمالي الفاتورة: {selectedReturn.invoice?.total?.toFixed(2)} ج.م
-                  </p>
+                  <span className="text-xs text-gray-500 block mb-1">
+                    {selectedReturn.isDirect ? 'المسجل' : 'الفاتورة الأصلية'}
+                  </span>
+                  {selectedReturn.isDirect ? (
+                    <p className="font-bold text-gray-800">
+                      {selectedReturn.createdBy?.fullName || 'مدير النظام'}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="font-mono font-bold text-blue-700">{selectedReturn.invoice?.invoiceNumber || '---'}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        إجمالي الفاتورة: {selectedReturn.invoice?.total?.toFixed(2)} ج.م
+                      </p>
+                    </>
+                  )}
                 </div>
 
-                <div className="bg-red-50 p-4 rounded-xl border border-red-200">
-                  <span className="text-xs text-red-600 block mb-1">إجمالي قيمة المرتجع</span>
-                  <p className="text-xl font-bold text-red-700">
+                <div className={`p-4 rounded-xl border ${
+                  selectedReturn.isDirect ? 'bg-teal-50 border-teal-200' : 'bg-red-50 border-red-200'
+                }`}>
+                  <span className={`text-xs block mb-1 ${
+                    selectedReturn.isDirect ? 'text-teal-700' : 'text-red-600'
+                  }`}>
+                    إجمالي قيمة المرتجع
+                  </span>
+                  <p className={`text-xl font-bold ${
+                    selectedReturn.isDirect ? 'text-teal-900' : 'text-red-700'
+                  }`}>
                     {selectedReturn.totalAmount.toFixed(2)} ج.م
                   </p>
-                  <p className="text-xs text-red-600 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     أعيدت البضاعة للمخزن الرئيسي
                   </p>
                 </div>
@@ -448,7 +728,7 @@ export default function OfficeReturns() {
               {/* Returned Items Table */}
               <div>
                 <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <Package size={18} className="text-red-600" />
+                  <Package size={18} className={selectedReturn.isDirect ? 'text-teal-600' : 'text-red-600'} />
                   الأصناف المرتجعة
                 </h3>
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -467,15 +747,17 @@ export default function OfficeReturns() {
                       {selectedReturn.items?.map((item) => (
                         <tr key={item.id} className="hover:bg-gray-50">
                           <td className="p-3">
-                            <div className="font-bold text-gray-900">{item.product?.name}</div>
-                            <div className="text-xs font-mono text-gray-400">{item.product?.sku}</div>
+                            <div className="font-bold text-gray-900">{item.product?.name || item.productName}</div>
+                            <div className="text-xs font-mono text-gray-400">{item.product?.sku || item.productSku}</div>
                           </td>
                           <td className="p-3 font-semibold text-gray-700">{item.size || '---'}</td>
-                          <td className="p-3 text-center font-bold text-red-600 bg-red-50/50">
+                          <td className="p-3 text-center font-bold text-teal-700 bg-teal-50/30">
                             {item.quantity}
                           </td>
-                          <td className="p-3 text-gray-800">{item.unitSalePrice.toFixed(2)} ج</td>
-                          <td className="p-3 font-bold text-gray-900">{item.totalSalePrice.toFixed(2)} ج</td>
+                          <td className="p-3 text-gray-800">{Number(item.unitSalePrice).toFixed(2)} ج</td>
+                          <td className="p-3 font-bold text-gray-900">
+                            {Number(item.totalSalePrice || (item.quantity * item.unitSalePrice)).toFixed(2)} ج
+                          </td>
                           <td className="p-3 text-xs text-gray-600">
                             {item.returnReason || selectedReturn.returnReason || 'غير محدد'}
                           </td>
@@ -487,35 +769,65 @@ export default function OfficeReturns() {
               </div>
 
               {/* Settlement Details */}
-              <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-2">
-                <h3 className="font-bold text-amber-900 flex items-center gap-2 text-sm">
-                  <DollarSign size={16} />
-                  تفاصيل التسوية المالية
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-1">
-                  <div className="bg-white p-3 rounded-lg border border-amber-100">
-                    <span className="text-xs text-gray-500 block">المبلغ المسترد نقداً من الخزينة:</span>
-                    <span className="font-bold text-emerald-700 text-lg">
-                      {selectedReturn.deductedFromPaid.toFixed(2)} ج.م
-                    </span>
-                    {selectedReturn.vault && (
-                      <div className="text-xs text-gray-600 mt-1">
-                        الخزينة: {selectedReturn.vault.name} ({selectedReturn.vault.type})
+              {selectedReturn.isDirect ? (
+                <div className="bg-teal-50 p-4 rounded-xl border border-teal-200 space-y-2">
+                  <h3 className="font-bold text-teal-900 flex items-center gap-2 text-sm">
+                    <DollarSign size={16} />
+                    تفاصيل الخصم من حساب العميل
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-1">
+                    <div className="bg-white p-3 rounded-lg border border-teal-100">
+                      <span className="text-xs text-gray-500 block">المبلغ المخصوم من مديونية العميل:</span>
+                      <span className="font-bold text-blue-700 text-lg">
+                        {(selectedReturn.deductedFromDebt || 0).toFixed(2)} ج.م
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1">
+                        تم تقليل الديون المستحقة على العميل
                       </div>
-                    )}
-                  </div>
+                    </div>
 
-                  <div className="bg-white p-3 rounded-lg border border-amber-100">
-                    <span className="text-xs text-gray-500 block">المبلغ المخصوم من مديونية الفاتورة:</span>
-                    <span className="font-bold text-blue-700 text-lg">
-                      {selectedReturn.deductedFromDebt.toFixed(2)} ج.م
-                    </span>
-                    <div className="text-xs text-gray-600 mt-1">
-                      تم تقليل المتبقي على العميل
+                    <div className="bg-white p-3 rounded-lg border border-teal-100">
+                      <span className="text-xs text-gray-500 block">المبلغ المضاف لمحفظة العميل (إن وجد):</span>
+                      <span className="font-bold text-purple-700 text-lg">
+                        {(selectedReturn.addedToWallet || 0).toFixed(2)} ج.م
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1">
+                        رصيد دائن متاح للاستخدام في مشتريات قادمة
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-2">
+                  <h3 className="font-bold text-amber-900 flex items-center gap-2 text-sm">
+                    <DollarSign size={16} />
+                    تفاصيل التسوية المالية للفاتورة
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-1">
+                    <div className="bg-white p-3 rounded-lg border border-amber-100">
+                      <span className="text-xs text-gray-500 block">المبلغ المسترد نقداً من الخزينة:</span>
+                      <span className="font-bold text-emerald-700 text-lg">
+                        {(selectedReturn.deductedFromPaid || 0).toFixed(2)} ج.م
+                      </span>
+                      {selectedReturn.vault && (
+                        <div className="text-xs text-gray-600 mt-1">
+                          الخزينة: {selectedReturn.vault.name} ({selectedReturn.vault.type})
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-amber-100">
+                      <span className="text-xs text-gray-500 block">المبلغ المخصوم من مديونية الفاتورة:</span>
+                      <span className="font-bold text-blue-700 text-lg">
+                        {(selectedReturn.deductedFromDebt || 0).toFixed(2)} ج.م
+                      </span>
+                      <div className="text-xs text-gray-600 mt-1">
+                        تم تقليل المتبقي على العميل
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notes */}
               {selectedReturn.notes && (

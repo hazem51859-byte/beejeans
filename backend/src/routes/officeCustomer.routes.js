@@ -6,19 +6,19 @@ const { authenticate, authorize } = require('../middleware/auth');
 // All routes require authentication
 router.use(authenticate);
 
-// Get all office customers (admin only)
-router.get('/', authorize(['ADMIN', 'MANAGER']), officeCustomerController.getAll);
+// Get all office customers
+router.get('/', authorize('ADMIN', 'MANAGER', 'CASHIER'), officeCustomerController.getAll);
 
 // Search by phone (for autocomplete)
-router.get('/search', authorize(['ADMIN', 'MANAGER']), officeCustomerController.searchByPhone);
+router.get('/search', authorize('ADMIN', 'MANAGER', 'CASHIER'), officeCustomerController.searchByPhone);
 
 // Get top customers
-router.get('/top', authorize(['ADMIN']), officeCustomerController.getTopCustomers);
+router.get('/top', authorize('ADMIN', 'MANAGER'), officeCustomerController.getTopCustomers);
 
 // Get customer details
-router.get('/:id', authorize(['ADMIN', 'MANAGER']), officeCustomerController.getDetails);
+router.get('/:id', authorize('ADMIN', 'MANAGER', 'CASHIER'), officeCustomerController.getDetails);
 
 // Create or update customer
-router.post('/', authorize(['ADMIN', 'MANAGER']), officeCustomerController.createOrUpdate);
+router.post('/', authorize('ADMIN', 'MANAGER', 'CASHIER'), officeCustomerController.createOrUpdate);
 
 module.exports = router;

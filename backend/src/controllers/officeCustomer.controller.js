@@ -5,6 +5,13 @@ const prisma = require('../config/database');
  */
 exports.getAll = async (req, res, next) => {
   try {
+    if (!prisma.officeCustomer) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
     const { type, search } = req.query;
 
     const where = {
@@ -50,11 +57,24 @@ exports.searchByPhone = async (req, res, next) => {
       });
     }
 
-    const customer = await prisma.officeCustomer.findFirst({
+    if (prisma.officeCustomer) {
+      const customer = await prisma.officeCustomer.findFirst({
+        where: {
+          phone: phone.trim(),
+          isActive: true,
+          ...(type && { type })
+        }
+      });
+      return res.json({
+        success: true,
+        data: customer
+      });
+    }
+
+    const customer = await prisma.customer.findFirst({
       where: {
         phone: phone.trim(),
-        isActive: true,
-        ...(type && { type })
+        isActive: true
       }
     });
 
@@ -75,10 +95,41 @@ exports.createOrUpdate = async (req, res, next) => {
   try {
     const { name, phone, type, shipmentCompany, address, notes } = req.body;
 
-    if (!name || !phone || !type) {
+    if (!name || !phone) {
       return res.status(400).json({
         success: false,
-        message: 'Name, phone, and type are required'
+        message: 'Name and phone are required'
+      });
+    }
+
+    if (!prisma.officeCustomer) {
+      const existing = await prisma.customer.findFirst({
+        where: { phone: phone.trim() }
+      });
+      let customer;
+      if (existing) {
+        customer = await prisma.customer.update({
+          where: { id: existing.id },
+          data: {
+            name: name.trim(),
+            ...(address && { address }),
+            ...(notes && { notes })
+          }
+        });
+      } else {
+        customer = await prisma.customer.create({
+          data: {
+            name: name.trim(),
+            phone: phone.trim(),
+            ...(address && { address }),
+            ...(notes && { notes })
+          }
+        });
+      }
+      return res.json({
+        success: true,
+        data: customer,
+        message: existing ? 'Customer updated' : 'Customer created'
       });
     }
 
@@ -95,7 +146,7 @@ exports.createOrUpdate = async (req, res, next) => {
         where: { id: existing.id },
         data: {
           name: name.trim(),
-          type,
+          type: type || existing.type,
           ...(shipmentCompany && { shipmentCompany }),
           ...(address && { address }),
           ...(notes && { notes }),
@@ -109,7 +160,7 @@ exports.createOrUpdate = async (req, res, next) => {
           id: require('uuid').v4(),
           name: name.trim(),
           phone: phone.trim(),
-          type,
+          type: type || 'REGULAR',
           shipmentCompany,
           address,
           notes
@@ -133,6 +184,7 @@ exports.createOrUpdate = async (req, res, next) => {
  */
 exports.updateStatistics = async (phone, invoiceData) => {
   try {
+    if (!prisma.officeCustomer) return;
     const customer = await prisma.officeCustomer.findFirst({
       where: { phone: phone.trim() }
     });
@@ -161,9 +213,9 @@ exports.getDetails = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const customer = await prisma.officeCustomer.findUnique({
-      where: { id }
-    });
+    const customer = prisma.officeCustomer
+      ? await prisma.officeCustomer.findUnique({ where: { id } })
+      : await prisma.customer.findUnique({ where: { id } });
 
     if (!customer) {
       return res.status(404).json({
@@ -175,7 +227,10 @@ exports.getDetails = async (req, res, next) => {
     // Get recent invoices
     const invoices = await prisma.officeInvoice.findMany({
       where: {
-        customerPhone: customer.phone
+        OR: [
+          ...(customer.phone ? [{ customerPhone: customer.phone }] : []),
+          { customerId: customer.id }
+        ]
       },
       include: {
         items: {
@@ -210,6 +265,13 @@ exports.getDetails = async (req, res, next) => {
  */
 exports.getTopCustomers = async (req, res, next) => {
   try {
+    if (!prisma.officeCustomer) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
     const { type, limit = 10 } = req.query;
 
     const where = {

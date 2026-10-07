@@ -67,6 +67,7 @@ const authenticate = async (req, res, next) => {
  * Check user role authorization
  */
 const authorize = (...allowedRoles) => {
+  const roles = allowedRoles.flat();
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -75,7 +76,7 @@ const authorize = (...allowedRoles) => {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Insufficient permissions'
